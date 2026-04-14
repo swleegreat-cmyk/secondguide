@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2차시 활동 가이드 — 학생용</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg: #fafaf7;
+  --card: #ffffff;
+  --ink: #1a1a1a;
+  --sub: #6b6b6b;
+  --accent: #1a56db;
+  --accent-light: #e8f0fe;
+  --green: #0d7c3e;
+  --green-light: #e6f4ea;
+  --red: #c5221f;
+  --red-light: #fce8e6;
+  --orange: #e37400;
+  --orange-light: #fef7e0;
+  --purple: #7c3aed;
+  --purple-light: #f3e8ff;
+  --border: #e5e5e5;
+  --radius: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.7;
+  padding: 24px 16px 80px;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ===== HERO HEADER ===== */
+.hero {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: white;
+  border-radius: var(--radius);
+  padding: 40px 32px 32px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.hero .label {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+.hero h1 {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+
+.hero p {
+  font-size: 15px;
+  color: rgba(255,255,255,0.8);
+  line-height: 1.7;
+}
+
+.hero .time-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.9);
+}
+
+/* ===== TIMELINE ===== */
+.timeline {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.timeline h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+
+.tl-row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: flex-start;
+}
+
+.tl-row:last-child { border-bottom: none; }
+
+.tl-time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 3px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+.tl-content {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.tl-content b { color: var(--accent); }
+
+/* ===== STEP CARDS ===== */
+.step-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.step-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 900;
+  flex-shrink: 0;
+  color: white;
+}
+
+.step-header-text h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.step-header-text .purpose {
+  font-size: 13px;
+  color: var(--sub);
+}
+
+.step-body {
+  padding: 20px 24px 24px;
+}
+
+/* Action items */
+.action-list {
+  list-style: none;
+  counter-reset: action;
+}
+
+.action-item {
+  counter-increment: action;
+  position: relative;
+  padding: 14px 16px 14px 52px;
+  margin-bottom: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+  font-size: 14px;
+  line-height: 1.6;
+  transition: border-color 0.2s;
+}
+
+.action-item::before {
+  content: counter(action);
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-item b { color: var(--ink); }
+.action-item .how { color: var(--sub); font-size: 13px; display: block; margin-top: 4px; }
+
+/* Color variants for step cards */
+.step-blue .step-num { background: #1a56db; }
+.step-blue .action-item { border-left-color: #1a56db; }
+.step-blue .action-item::before { background: #1a56db; }
+
+.step-green .step-num { background: #0d7c3e; }
+.step-green .action-item { border-left-color: #0d7c3e; }
+.step-green .action-item::before { background: #0d7c3e; }
+
+.step-orange .step-num { background: #e37400; }
+.step-orange .action-item { border-left-color: #e37400; }
+.step-orange .action-item::before { background: #e37400; }
+
+.step-purple .step-num { background: #7c3aed; }
+.step-purple .action-item { border-left-color: #7c3aed; }
+.step-purple .action-item::before { background: #7c3aed; }
+
+.step-red .step-num { background: #c5221f; }
+.step-red .action-item { border-left-color: #c5221f; }
+.step-red .action-item::before { background: #c5221f; }
+
+.step-teal .step-num { background: #0d9488; }
+.step-teal .action-item { border-left-color: #0d9488; }
+.step-teal .action-item::before { background: #0d9488; }
+
+.step-indigo .step-num { background: #4338ca; }
+.step-indigo .action-item { border-left-color: #4338ca; }
+.step-indigo .action-item::before { background: #4338ca; }
+
+.step-pink .step-num { background: #be185d; }
+.step-pink .action-item { border-left-color: #be185d; }
+.step-pink .action-item::before { background: #be185d; }
+
+/* Alert boxes */
+.alert {
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+.alert-warn {
+  background: var(--orange-light);
+  border: 1px solid #fdd;
+  color: #92400e;
+}
+
+.alert-tip {
+  background: var(--green-light);
+  border: 1px solid #c6e9d0;
+  color: #065f25;
+}
+
+.alert-example {
+  background: var(--purple-light);
+  border: 1px solid #ddd6fe;
+  color: #5b21b6;
+}
+
+.alert-bad {
+  background: var(--red-light);
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.alert b { font-weight: 700; }
+
+/* Compare table */
+.compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.compare th {
+  padding: 10px 12px;
+  font-weight: 700;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.compare .th-bad { background: #fce8e6; color: #c5221f; }
+.compare .th-good { background: #e6f4ea; color: #0d7c3e; }
+
+.compare td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.compare .bad { color: #c5221f; text-decoration: line-through; }
+.compare .good { color: #0d7c3e; font-weight: 500; }
+
+/* Checklist */
+.checklist {
+  list-style: none;
+  padding: 0;
+}
+
+.checklist li {
+  padding: 8px 0 8px 32px;
+  position: relative;
+  font-size: 14px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.checklist li::before {
+  content: '☐';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  font-size: 16px;
+}
+
+.footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 12px;
+  color: var(--sub);
+}
+
+@media print {
+  body { padding: 0; background: white; }
+  .step-card { break-inside: avoid; }
+  .hero { background: #1a1a2e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ==================== HERO ==================== -->
+<div class="hero">
+  <div class="label">학생용 활동 가이드</div>
+  <h1>2차시: 자료 비평 & 쟁점 좁히기</h1>
+  <p>이 가이드는 각 단계에서 <b>구체적으로 무엇을 해야 하는지</b> 알려줍니다.<br>설문지(활동지)를 작성하기 전에 먼저 읽고, 단계별로 따라가세요.</p>
+  <div class="time-box">⏱ 총 소요시간: 약 50분 (1교시)</div>
+</div>
+
+<!-- ==================== TIMELINE ==================== -->
+<div class="timeline">
+  <h2>⏱ 시간 배분 가이드</h2>
+  <div class="tl-row">
+    <span class="tl-time">0~5분</span>
+    <div class="tl-content"><b>오리엔테이션</b> — 오늘 할 일 안내, 이 가이드 훑어보기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">5~12분</span>
+    <div class="tl-content"><b>STEP 1</b> — 가져온 자료 정보 정리 + 찬반 구분</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">12~18분</span>
+    <div class="tl-content"><b>STEP 2</b> — 자료의 숨겨진 입장 파악하기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">18~28분</span>
+    <div class="tl-content"><b>STEP 3</b> — 쟁점 질문 좁히기 (가장 중요!)</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">28~33분</span>
+    <div class="tl-content"><b>STEP 4</b> — 내 진로·교과와 연결하기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">33~38분</span>
+    <div class="tl-content"><b>STEP 5</b> — 찬반 핵심 근거 1개씩 뽑기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">38~44분</span>
+    <div class="tl-content"><b>STEP 6</b> — "나만 할 수 있는 탐구" 설계하기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">44~48분</span>
+    <div class="tl-content"><b>STEP 7</b> — 보고서 목차 잡기</div>
+  </div>
+  <div class="tl-row">
+    <span class="tl-time">48~50분</span>
+    <div class="tl-content"><b>STEP 8</b> — 변화 기록 + 자기 점검</div>
+  </div>
+</div>
+
+<!-- ==================== STEP 1 ==================== -->
+<div class="step-card step-blue">
+  <div class="step-header">
+    <div class="step-num">1</div>
+    <div class="step-header-text">
+      <h3>자료 확보 점검</h3>
+      <div class="purpose">내가 가져온 자료의 "신분증"을 만든다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>책상 위에 가져온 자료(출력물/캡처)를 꺼내 놓으세요.</b>
+        <span class="how">→ 스마트폰에만 있으면 핵심 부분을 메모장에 옮겨 적어두세요.</span>
+      </li>
+      <li class="action-item">
+        <b>자료마다 "제목 / 출처 / 저자 / 날짜"를 적으세요.</b>
+        <span class="how">→ 이 4가지가 빠져 있으면 신뢰할 수 없는 자료입니다. 출처가 불분명한 블로그 글은 제외하세요.</span>
+      </li>
+      <li class="action-item">
+        <b>각 자료 옆에 "찬성" 또는 "반대" 라벨을 붙이세요.</b>
+        <span class="how">→ 내 쟁점에 대해 이 자료가 어느 쪽을 지지하는지 판단합니다. 같은 쪽 자료만 있으면 반대쪽 자료를 지금 바로 검색하세요.</span>
+      </li>
+    </ol>
+    <div class="alert alert-warn">
+      <b>⚠️ 자료가 1개뿐이라면?</b> 지금 바로 스마트폰으로 반대 입장 기사를 1개 더 찾으세요. "찬성 1개 + 반대 1개"가 비평의 최소 조건입니다.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STEP 2 ==================== -->
+<div class="step-card step-green">
+  <div class="step-header">
+    <div class="step-num">2</div>
+    <div class="step-header-text">
+      <h3>자료의 입장 파악 (관점 읽기)</h3>
+      <div class="purpose">자료의 "숨겨진 편향"을 찾아낸다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>자료 1개를 골라 처음부터 끝까지 다시 읽으세요.</b>
+        <span class="how">→ 이번에는 "내용"이 아니라 "이 글쓴이는 어느 쪽이지?"라는 눈으로 읽습니다.</span>
+      </li>
+      <li class="action-item">
+        <b>다음 3가지를 체크하며 밑줄을 치세요.</b>
+        <span class="how">
+          ① 찬성/반대 중 어느 쪽 전문가 인터뷰가 더 많은가?<br>
+          ② 감정적인 단어(예: "시급하다", "심각하다", "당연하다")가 어느 쪽에 쓰였는가?<br>
+          ③ 반대 의견을 얼마나 비중 있게 다뤘는가? (한 줄? 한 문단?)
+        </span>
+      </li>
+      <li class="action-item">
+        <b>한 문장으로 정리: "이 자료는 ○○ 쪽에 가깝다. 왜냐하면 ______."</b>
+        <span class="how">→ 이 문장을 설문지 Q7에 그대로 적으면 됩니다.</span>
+      </li>
+    </ol>
+    <div class="alert alert-example">
+      <b>💡 예시:</b> "이 기사는 규제 강화 측에 가깝다. 왜냐하면 '시급하다'는 전문가 인터뷰를 2회 인용했지만, 반대 측 의견은 마지막 문단에 한 줄만 넣었기 때문이다."
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STEP 3 ==================== -->
+<div class="step-card step-orange">
+  <div class="step-header">
+    <div class="step-num">3</div>
+    <div class="step-header-text">
+      <h3>쟁점 질문 좁히기 ⭐ 가장 중요</h3>
+      <div class="purpose">"넓은 주제"를 "답을 확인할 수 있는 질문"으로 바꾼다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>1차시 쟁점 질문을 종이에 적으세요.</b>
+        <span class="how">→ 그리고 옆에 "이 질문에 Yes/No로 답할 수 있는가?" 체크해보세요. 답할 수 없으면 너무 넓은 질문입니다.</span>
+      </li>
+      <li class="action-item">
+        <b>다음 공식에 맞춰 질문을 다시 써보세요.</b>
+        <span class="how">
+          공식: <b>"A가 B에 미치는 C를 D방법으로 확인한다"</b><br>
+          • A = 독립변수 (내가 비교할 조건)<br>
+          • B = 종속변수 (그로 인해 달라지는 결과)<br>
+          • C = 측정 기준 (어떤 수치/기준으로 판단할 것인가)<br>
+          • D = 방법 (자료 분석, 설문, 인터뷰 등)
+        </span>
+      </li>
+      <li class="action-item">
+        <b>새 질문을 짝(또는 팀원)에게 보여주고 피드백을 받으세요.</b>
+        <span class="how">→ "이 질문을 듣고 무엇을 조사해야 할지 바로 떠오르냐?"고 물어보세요. 떠오르지 않으면 아직 넓은 겁니다.</span>
+      </li>
+    </ol>
+
+    <table class="compare">
+      <tr>
+        <th class="th-bad">❌ 이렇게 쓰지 마세요</th>
+        <th class="th-good">✅ 이렇게 좁히세요</th>
+      </tr>
+      <tr>
+        <td class="bad">전쟁은 우리 사회에 필요한가?</td>
+        <td class="good">홍해 선박 공격 이후 국제 해군 개입이 실제 공격 빈도를 줄였는지 데이터로 확인</td>
+      </tr>
+      <tr>
+        <td class="bad">관광객 증가가 지역에 미치는 영향</td>
+        <td class="good">제주도 관광객 수 증가와 주민 1인당 폐기물 배출량 간 상관관계를 5년 통계로 비교</td>
+      </tr>
+      <tr>
+        <td class="bad">AI와 소수 언어의 관계</td>
+        <td class="good">네이버 파파고 vs 구글 번역기의 제주방언 번역 정확도를 10개 문장으로 비교 검증</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== STEP 4 ==================== -->
+<div class="step-card step-purple">
+  <div class="step-header">
+    <div class="step-num">4</div>
+    <div class="step-header-text">
+      <h3>내 진로·교과와 연결하기</h3>
+      <div class="purpose">"왜 내가 이 주제를 탐구하는가"에 대한 답을 만든다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>종이 가운데에 내 쟁점을 쓰고, 왼쪽에 "내 희망 진로", 오른쪽에 "관련 교과"를 쓰세요.</b>
+        <span class="how">→ 마인드맵처럼 연결선을 그어봅니다.</span>
+      </li>
+      <li class="action-item">
+        <b>"내 진로의 전문가라면 이 문제를 어떤 각도에서 볼까?" 한 문장으로 적으세요.</b>
+        <span class="how">
+          예시:<br>
+          • 파일럿 → "중동 분쟁이 항공 항로 변경과 연료비 상승에 미치는 영향"<br>
+          • 화학공학 → "친환경 에너지 기술의 촉매 반응 효율성과 경제성 비교"<br>
+          • 펀드매니저 → "환율 개입 전후 주요 수출기업 주가 변동 패턴 분석"
+        </span>
+      </li>
+      <li class="action-item">
+        <b>수업에서 배운 교과 개념 중 이 주제에 적용할 수 있는 것 1개를 찾으세요.</b>
+        <span class="how">→ 교과서를 펼쳐서 단원명과 핵심 개념을 정확히 적어주세요. "사회 시간에 배운 거" 같은 모호한 표현은 안 됩니다.</span>
+      </li>
+    </ol>
+    <div class="alert alert-tip">
+      <b>✅ 왜 중요한가?</b> 학생부종합전형에서 <b>진로역량</b>은 "전공 관련 활동과 경험"을 봅니다. 같은 '전쟁' 주제도 군인 지망생과 통번역 지망생은 바라보는 각도가 달라야 합니다.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STEP 5 ==================== -->
+<div class="step-card step-red">
+  <div class="step-header">
+    <div class="step-num">5</div>
+    <div class="step-header-text">
+      <h3>상반된 근거 정리</h3>
+      <div class="purpose">찬반 양쪽의 "가장 센 카드"를 1장씩 뽑는다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>찬성 측 자료에서 "이건 반박하기 어렵겠다" 싶은 문장이나 데이터를 1개 찾으세요.</b>
+        <span class="how">→ 숫자(통계, 비율, 금액)가 포함된 근거가 가장 강력합니다.</span>
+      </li>
+      <li class="action-item">
+        <b>반대 측 자료에서도 마찬가지로 가장 강력한 근거 1개를 찾으세요.</b>
+        <span class="how">→ "어떤 자료의 몇 번째 단락에서 가져왔다"까지 적어야 합니다. 출처 없는 근거는 무효입니다.</span>
+      </li>
+      <li class="action-item">
+        <b>두 근거를 나란히 놓고 비교해보세요. 어느 쪽이 더 설득력 있나요?</b>
+        <span class="how">→ 지금 판단할 필요는 없습니다. 이 비교가 보고서 본론의 핵심 뼈대가 됩니다.</span>
+      </li>
+    </ol>
+  </div>
+</div>
+
+<!-- ==================== STEP 6 ==================== -->
+<div class="step-card step-teal">
+  <div class="step-header">
+    <div class="step-num">6</div>
+    <div class="step-header-text">
+      <h3>"나만 할 수 있는 탐구" 설계 ⭐ 차별화 핵심</h3>
+      <div class="purpose">AI가 절대 대신 못하는 "현장 데이터"를 기획한다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>먼저 질문에 답해보세요: "내 자료에서 빠진 관점은 무엇인가?"</b>
+        <span class="how">→ 대부분의 기사는 전문가 의견만 담고 있고, "우리 학교 학생들은 어떻게 생각하는지"는 빠져 있습니다.</span>
+      </li>
+      <li class="action-item">
+        <b>아래 4가지 중 하나를 골라 구체적으로 계획하세요.</b>
+        <span class="how">
+          <b>A. 또래 설문조사</b> — "우리 학교 학생 ○○명에게 ○○에 대해 물어본다"<br>
+          <b>B. 전문가/관계자 인터뷰</b> — "○○ 선생님/대학생/전문가에게 ○○을 질문한다"<br>
+          <b>C. 현장 관찰·측정</b> — "○○ 장소에서 ○○을 직접 관찰/측정한다"<br>
+          <b>D. 매체 비교 분석</b> — "같은 사건에 대한 국내 기사 3개와 해외 기사 3개를 직접 수집해 비교한다"
+        </span>
+      </li>
+      <li class="action-item">
+        <b>선택한 방법의 "누구에게 / 몇 명 / 언제 / 무엇을" 적으세요.</b>
+        <span class="how">→ 예: "다음 주까지 / 우리 반 30명 대상 / 구글폼 5문항 / 이란 전쟁 인지도 조사"</span>
+      </li>
+    </ol>
+    <div class="alert alert-warn">
+      <b>⚠️ 왜 이게 필요한가?</b> AI로 보고서를 쓰면 완성도는 높아지지만, 대학은 <b>"이 학생이 정말 했는가?"</b>를 더 의심합니다. 설문지 원본, 인터뷰 동의서 등이 "내가 직접 했다"는 증거가 됩니다.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STEP 7 ==================== -->
+<div class="step-card step-indigo">
+  <div class="step-header">
+    <div class="step-num">7</div>
+    <div class="step-header-text">
+      <h3>보고서 목차 잡기</h3>
+      <div class="purpose">보고서의 "건물 설계도"를 먼저 그린다</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>아래 7단계 틀에 맞춰 내 보고서의 목차를 적으세요.</b>
+        <span class="how">
+          Ⅰ. 서론 — 왜 이 주제를 탐구하는가? (동기 + 쟁점 질문)<br>
+          Ⅱ. 이론적 배경 — 관련 개념 정리 + 선행 자료 분석<br>
+          Ⅲ. 본론 1 — 찬성 측 주장과 근거<br>
+          Ⅳ. 본론 2 — 반대 측 주장과 근거<br>
+          Ⅴ. 본론 3 — 내가 직접 수집한 데이터 분석 (설문/인터뷰)<br>
+          Ⅵ. 결론 — 나의 입장 + 한계점 + 후속 연구 제안<br>
+          Ⅶ. 성찰 — 과정에서의 변화와 배움
+        </span>
+      </li>
+      <li class="action-item">
+        <b>서술어를 점검하세요: "조사하였다"를 모두 지우고 더 높은 수준의 동사로 바꾸세요.</b>
+        <span class="how">
+          ❌ 조사하다, 정리하다, 알게 되다<br>
+          ✅ <b>비교·분석하다, 교차검증하다, 평가하다, 도출하다, 제안하다</b>
+        </span>
+      </li>
+    </ol>
+    <div class="alert alert-tip">
+      <b>✅ 핵심:</b> 한계점을 쓸 수 있는 학생이 가장 성숙한 연구자입니다. "표본 50명으로 일반화에 한계가 있다", "자기보고식 설문의 정확성 문제" 같은 한계를 솔직히 쓰세요.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STEP 8 ==================== -->
+<div class="step-card step-pink">
+  <div class="step-header">
+    <div class="step-num">8</div>
+    <div class="step-header-text">
+      <h3>변화 기록 & 자기 점검</h3>
+      <div class="purpose">실패와 수정을 기록하는 것이 성장의 증거</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <ol class="action-list">
+      <li class="action-item">
+        <b>"자료를 읽기 전에는 ___라고 생각했다. 읽은 후에는 ___로 바뀌었다(또는 유지했다). 이유는 ___."</b>
+        <span class="how">→ 이 3문장을 설문지 Q20에 그대로 적으면 됩니다. 바뀌지 않았어도 괜찮습니다.</span>
+      </li>
+      <li class="action-item">
+        <b>아래 체크리스트를 점검하세요. 체크 못 하는 항목이 있으면 선생님과 상담하세요.</b>
+      </li>
+    </ol>
+    <ul class="checklist">
+      <li>이 주제에서 내가 직접 수집할 데이터가 있다</li>
+      <li>AI에게 시키면 바로 나오는 결과물이 아니다</li>
+      <li>나의 진로와 연결할 수 있다</li>
+      <li>수업 내용(교과 개념)에서 출발한 의문이다</li>
+      <li>남은 차시 안에 완료할 수 있는 범위이다</li>
+      <li>결과가 어떻게 나올지 '모르는' 상태이다 (열린 질문)</li>
+      <li>윤리적 문제(개인정보, 동의 등)를 확인했다</li>
+    </ul>
+    <div class="alert alert-bad">
+      <b>🚫 체크 못 하는 항목이 3개 이상이면?</b> 주제를 수정하거나 좁혀야 합니다. 선생님께 바로 손을 드세요.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FOOTER ==================== -->
+<div class="footer">
+  글로벌 이슈 비평 동아리 | 2차시 활동 가이드 (학생용)<br>
+  이 가이드를 읽었으면 설문지(활동지)를 작성하세요.
+</div>
+
+</div>
+</body>
+</html>
