@@ -101,6 +101,7 @@ function renderPanel(){
   if (!s){ panel.innerHTML = '<div class="card muted">먼저 학생을 추가하세요.</div>'; return; }
   if (state.tab === '성적') return renderScorePanel(s, panel);
   if (state.tab === '진단') return renderDiagnosePanel(s, panel);
+  if (state.tab === '수시6장') return renderBoardPanel(s, panel);
   panel.innerHTML = '<div class="card muted">준비 중</div>';
 }
 
@@ -148,6 +149,40 @@ function renderDiagnosePanel(s, panel){
       <td>${r.수능최저||'-'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">해당 데이터 없음</td></tr>'}
     </tbody></table>
    </div>`;
+}
+
+function renderBoardPanel(s, panel){
+  const base = s.내신.주요과목;
+  const opts = SusiLogic.합격선DB.map(r =>
+    `<option value="${r.id}">${r.대학} ${r.학과} (${r.전형유형}, ${r.합격선등급})</option>`).join('');
+  const bal = SusiLogic.balanceSummary(s.지원);
+  const R = SusiLogic.RECOMMENDED;
+  panel.innerHTML = `
+   <div class="card"><h2>③ 수시 6장 보드</h2>
+    <p class="muted">권장 균형 — 상향 ${R.상향} / 적정 ${R.적정} / 안정 ${R.안정} · 현재
+      <span class="pill 상향">상향 ${bal.상향}</span>
+      <span class="pill 적정">적정 ${bal.적정}</span>
+      <span class="pill 안정">안정 ${bal.안정}</span>
+      · 빈 슬롯 ${bal.빈슬롯}</p>
+    ${s.지원.map((slot,i)=>{
+      const cur = SusiLogic.getCutoff(slot.합격선id);
+      return `<div class="row" style="margin:8px 0">
+        <b style="width:48px">${slot.slot}지망</b>
+        <select class="slotSel" data-i="${i}" style="min-width:280px">
+          <option value="">— 선택 —</option>
+          ${opts.replace(`value="${slot.합격선id}"`, `value="${slot.합격선id}" selected`)}
+        </select>
+        ${cur && slot.분류 ? `<span class="pill ${slot.분류}">${slot.분류}</span>` : ''}
+      </div>`;
+    }).join('')}
+   </div>`;
+  document.querySelectorAll('.slotSel').forEach(el => el.onchange = () => {
+    const i = +el.dataset.i, id = el.value;
+    s.지원[i].합격선id = id;
+    const cut = SusiLogic.getCutoff(id);
+    s.지원[i].분류 = (cut && base != null) ? SusiLogic.classify(base, cut.합격선등급) : '';
+    saveState(); renderPanel();
+  });
 }
 
 function render(){ renderStudentBar(); renderTabs(); renderPanel(); }
