@@ -76,5 +76,27 @@ test('deserialize: 배열이 아니면 throw', () => {
   assert.throws(() => SusiLogic.deserializeStudents('{"x":1}'));
 });
 
+test('합격선DB: 배열이며 항목은 필수 필드를 가진다', () => {
+  assert.ok(Array.isArray(SusiLogic.합격선DB));
+  for (const row of SusiLogic.합격선DB) {
+    for (const k of ['id','대학','학과','계열','전형유형','모집인원','합격선등급','수능최저','비고']) {
+      assert.ok(k in row, `누락 필드: ${k}`);
+    }
+    assert.equal(typeof row.합격선등급, 'number');
+  }
+});
+
+test('getCutoff: id로 조회, 없으면 null', () => {
+  const first = SusiLogic.합격선DB[0];
+  assert.equal(SusiLogic.getCutoff(first.id), first);
+  assert.equal(SusiLogic.getCutoff('없는id'), null);
+});
+
+test('filterCutoffs: 계열/전형 필터, 빈 인자는 전체', () => {
+  assert.equal(SusiLogic.filterCutoffs().length, SusiLogic.합격선DB.length);
+  const 자연 = SusiLogic.filterCutoffs({ 계열: '자연' });
+  assert.ok(자연.every(r => r.계열 === '자연'));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

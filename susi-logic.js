@@ -7,6 +7,33 @@
 
   const THRESHOLD = 0.3;
 
+  // ── 합격선 DB (사용자가 채울 틀) ─────────────────────────────
+  // 합격선등급: 등급(1.0~9.0, 낮을수록 우수). 예) 50%컷.
+  // 새 항목을 추가할 때 id는 고유해야 합니다.
+  const 합격선DB = [
+    {
+      id: 'sample-1', 대학: '○○대학교', 학과: '컴퓨터공학과', 계열: '자연',
+      전형유형: '학생부교과', 모집인원: 30, 합격선등급: 2.3,
+      수능최저: '3개합 6', 비고: '예시 데이터 — 실제 값으로 교체',
+    },
+    {
+      id: 'sample-2', 대학: '○○대학교', 학과: '경영학과', 계열: '인문',
+      전형유형: '학생부종합', 모집인원: 40, 합격선등급: 2.8,
+      수능최저: '', 비고: '예시 데이터 — 실제 값으로 교체',
+    },
+  ];
+
+  function getCutoff(id) {
+    return 합격선DB.find((r) => r.id === id) || null;
+  }
+
+  function filterCutoffs(opts = {}) {
+    const { 계열, 전형유형 } = opts;
+    return 합격선DB.filter(
+      (r) => (!계열 || r.계열 === 계열) && (!전형유형 || r.전형유형 === 전형유형)
+    );
+  }
+
   // 등급은 낮을수록 우수. diff = 학생 - 합격선.
   function classify(studentGrade, cutoffGrade) {
     // 등급은 0.1 단위 → 부동소수점 잡음 제거 후 비교
@@ -57,5 +84,5 @@
     return data;
   }
 
-  return { THRESHOLD, classify, RECOMMENDED, balanceSummary, makeStudent, serializeStudents, deserializeStudents };
+  return { THRESHOLD, classify, RECOMMENDED, balanceSummary, makeStudent, serializeStudents, deserializeStudents, 합격선DB, getCutoff, filterCutoffs };
 });
