@@ -16,5 +16,21 @@
     return '상향';
   }
 
-  return { THRESHOLD, classify };
+  const RECOMMENDED = { 상향: 2, 적정: 2, 안정: 2 };
+
+  function balanceSummary(slots) {
+    const out = { 상향: 0, 적정: 0, 안정: 0, 배정: 0, 빈슬롯: 0 };
+    for (const s of slots) {
+      const c = s && s.분류;
+      if (c === '상향' || c === '적정' || c === '안정') {
+        out[c]++;
+        out.배정++;
+      } else {
+        out.빈슬롯++;
+      }
+    }
+    return out;
+  }
+
+  return { THRESHOLD, classify, RECOMMENDED, balanceSummary };
 });
