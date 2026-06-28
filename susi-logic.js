@@ -32,5 +32,30 @@
     return out;
   }
 
-  return { THRESHOLD, classify, RECOMMENDED, balanceSummary };
+  function makeStudent(이름, id) {
+    return {
+      id,
+      이름,
+      학년반: '',
+      내신: { 전과목: null, 주요과목: null },
+      모의: { 국: null, 수: null, 영: null, 탐1: null, 탐2: null },
+      희망: { 계열: '', 관심학과: [] },
+      지원: Array.from({ length: 6 }, (_, i) => ({
+        slot: i + 1, 합격선id: '', 분류: '', 메모: '',
+      })),
+      상담: [],
+    };
+  }
+
+  function serializeStudents(students) {
+    return JSON.stringify(students, null, 2);
+  }
+
+  function deserializeStudents(text) {
+    const data = JSON.parse(text); // 잘못된 JSON이면 여기서 throw
+    if (!Array.isArray(data)) throw new Error('학생 데이터는 배열이어야 합니다.');
+    return data;
+  }
+
+  return { THRESHOLD, classify, RECOMMENDED, balanceSummary, makeStudent, serializeStudents, deserializeStudents };
 });

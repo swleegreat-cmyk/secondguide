@@ -52,5 +52,29 @@ test('balanceSummary: 빈 배열', () => {
   });
 });
 
+test('makeStudent: 기본 구조와 빈 슬롯 6개', () => {
+  const s = SusiLogic.makeStudent('홍길동', 'stu-1');
+  assert.equal(s.id, 'stu-1');
+  assert.equal(s.이름, '홍길동');
+  assert.equal(s.지원.length, 6);
+  assert.deepEqual(s.지원[0], { slot: 1, 합격선id: '', 분류: '', 메모: '' });
+  assert.deepEqual(s.상담, []);
+  assert.ok(s.내신 && s.모의 && s.희망);
+});
+
+test('serialize/deserialize 라운드트립', () => {
+  const a = [SusiLogic.makeStudent('A', 'id-a'), SusiLogic.makeStudent('B', 'id-b')];
+  const round = SusiLogic.deserializeStudents(SusiLogic.serializeStudents(a));
+  assert.deepEqual(round, a);
+});
+
+test('deserialize: 잘못된 JSON은 throw', () => {
+  assert.throws(() => SusiLogic.deserializeStudents('{not json'));
+});
+
+test('deserialize: 배열이 아니면 throw', () => {
+  assert.throws(() => SusiLogic.deserializeStudents('{"x":1}'));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
