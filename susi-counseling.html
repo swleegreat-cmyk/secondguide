@@ -100,6 +100,7 @@ function renderPanel(){
   const panel = document.getElementById('panel');
   if (!s){ panel.innerHTML = '<div class="card muted">먼저 학생을 추가하세요.</div>'; return; }
   if (state.tab === '성적') return renderScorePanel(s, panel);
+  if (state.tab === '진단') return renderDiagnosePanel(s, panel);
   panel.innerHTML = '<div class="card muted">준비 중</div>';
 }
 
@@ -127,6 +128,26 @@ function renderScorePanel(s, panel){
     document.querySelectorAll('.f_mo').forEach(el => { s.모의[el.dataset.k] = num(el.value); });
     saveState(); render();
   };
+}
+
+function renderDiagnosePanel(s, panel){
+  const base = s.내신.주요과목;
+  const rows = SusiLogic.filterCutoffs(
+    s.희망.계열 ? { 계열: s.희망.계열 } : {}
+  ).map(r => ({
+    ...r,
+    분류: base == null ? '-' : SusiLogic.classify(base, r.합격선등급),
+  }));
+  panel.innerHTML = `
+   <div class="card"><h2>② 합격 가능성 진단</h2>
+    <p class="muted">기준: 내신 주요과목 ${base ?? '(미입력)'} 등급 · 계열 ${s.희망.계열 || '전체'}</p>
+    <table><thead><tr><th>대학</th><th>학과</th><th>전형</th><th>합격선</th><th>판정</th><th>수능최저</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.대학}</td><td>${r.학과}</td><td>${r.전형유형}</td><td>${r.합격선등급}</td>
+      <td>${r.분류==='-'?'<span class="muted">성적 입력 필요</span>':`<span class="pill ${r.분류}">${r.분류}</span>`}</td>
+      <td>${r.수능최저||'-'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">해당 데이터 없음</td></tr>'}
+    </tbody></table>
+   </div>`;
 }
 
 function render(){ renderStudentBar(); renderTabs(); renderPanel(); }
