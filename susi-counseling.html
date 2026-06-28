@@ -229,6 +229,30 @@ document.getElementById('studentSelect').onchange = (e) => {
   state.currentId = e.target.value; saveState(); render();
 };
 
+document.getElementById('exportBtn').onclick = () => {
+  const blob = new Blob([SusiLogic.serializeStudents(state.students)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'susi-students.json';
+  a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = SusiLogic.deserializeStudents(String(reader.result));
+      state.students = data;
+      state.currentId = data[0] ? data[0].id : null;
+      saveState(); render();
+      alert('불러오기 완료: ' + data.length + '명');
+    } catch (err) { alert('불러오기 실패: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+};
+
 loadState(); render();
 </script>
 </body>
