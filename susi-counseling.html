@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수시 입시 상담 통합 대시보드</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
+:root{ --bg:#fafaf7; --card:#fff; --ink:#1a1a1a; --sub:#6b6b6b; --accent:#1a56db; --accent-light:#e8f0fe;
+  --green:#0d7c3e; --green-light:#e6f4ea; --red:#c5221f; --red-light:#fce8e6; --orange:#e37400; --orange-light:#fef7e0;
+  --border:#e5e5e5; --radius:12px; }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;padding:24px 16px 80px;}
+.container{max-width:860px;margin:0 auto;}
+.hero{background:linear-gradient(135deg,#1a1a2e,#16213e 50%,#0f3460);color:#fff;border-radius:var(--radius);padding:32px;margin-bottom:20px;}
+.hero h1{font-size:24px;font-weight:900;}
+.hero p{font-size:14px;color:rgba(255,255,255,.8);margin-top:6px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:18px;}
+.card h2{font-size:16px;font-weight:700;margin-bottom:14px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+input,select,textarea{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;}
+button{font-family:inherit;font-size:14px;font-weight:600;padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;}
+button.ghost{background:var(--accent-light);color:var(--accent);}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+.tab{padding:8px 14px;border-radius:8px;background:#eee;color:var(--sub);cursor:pointer;font-weight:600;font-size:13px;}
+.tab.active{background:var(--accent);color:#fff;}
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700;}
+.pill.안정{background:var(--green-light);color:var(--green);}
+.pill.적정{background:var(--orange-light);color:var(--orange);}
+.pill.상향{background:var(--red-light);color:var(--red);}
+.muted{color:var(--sub);font-size:13px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:8px;border-bottom:1px solid #f0f0f0;text-align:left;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero"><h1>수시 입시 상담 통합 대시보드</h1><p>성적 입력 → 합격 진단 → 수시 6장 전략 → 상담 기록</p></div>
+
+  <div class="card" id="studentBar">
+    <h2>학생</h2>
+    <div class="row">
+      <select id="studentSelect"></select>
+      <input id="newStudentName" placeholder="새 학생 이름">
+      <button id="addStudentBtn">+ 추가</button>
+      <button class="ghost" id="exportBtn">JSON 내보내기</button>
+      <button class="ghost" id="importBtn">JSON 불러오기</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+    <div class="muted" id="studentSummary" style="margin-top:8px"></div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="panel"></div>
+</div>
+
+<script src="susi-logic.js"></script>
+<script>
+'use strict';
+const KEY_S = 'susi.students', KEY_C = 'susi.currentStudentId';
+const state = { students: [], currentId: null };
+
+function genId(){ return 'stu-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function saveState(){
+  localStorage.setItem(KEY_S, SusiLogic.serializeStudents(state.students));
+  localStorage.setItem(KEY_C, state.currentId || '');
+}
+function loadState(){
+  try { state.students = SusiLogic.deserializeStudents(localStorage.getItem(KEY_S) || '[]'); }
+  catch { state.students = []; }
+  state.currentId = localStorage.getItem(KEY_C) || null;
+  if (!state.students.some(s => s.id === state.currentId))
+    state.currentId = state.students[0] ? state.students[0].id : null;
+}
+function currentStudent(){ return state.students.find(s => s.id === state.currentId) || null; }
+
+function renderStudentBar(){
+  const sel = document.getElementById('studentSelect');
+  sel.innerHTML = state.students.map(s =>
+    `<option value="${s.id}" ${s.id===state.currentId?'selected':''}>${s.이름}</option>`).join('')
+    || '<option value="">학생 없음</option>';
+  const s = currentStudent();
+  document.getElementById('studentSummary').textContent = s
+    ? `현재: ${s.이름} · 내신 주요 ${s.내신.주요과목 ?? '-'} / 전과목 ${s.내신.전과목 ?? '-'}`
+    : '학생을 추가하세요.';
+}
+
+function render(){ renderStudentBar(); /* 이후 태스크에서 탭/패널 추가 */ }
+
+document.getElementById('addStudentBtn').onclick = () => {
+  const name = document.getElementById('newStudentName').value.trim();
+  if (!name) return;
+  const stu = SusiLogic.makeStudent(name, genId());
+  state.students.push(stu); state.currentId = stu.id;
+  document.getElementById('newStudentName').value = '';
+  saveState(); render();
+};
+document.getElementById('studentSelect').onchange = (e) => {
+  state.currentId = e.target.value; saveState(); render();
+};
+
+loadState(); render();
+</script>
+</body>
+</html>
