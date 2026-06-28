@@ -77,7 +77,7 @@ function currentStudent(){ return state.students.find(s => s.id === state.curren
 function renderStudentBar(){
   const sel = document.getElementById('studentSelect');
   sel.innerHTML = state.students.map(s =>
-    `<option value="${s.id}" ${s.id===state.currentId?'selected':''}>${s.이름}</option>`).join('')
+    `<option value="${s.id}" ${s.id===state.currentId?'selected':''}>${esc(s.이름)}</option>`).join('')
     || '<option value="">학생 없음</option>';
   const s = currentStudent();
   document.getElementById('studentSummary').textContent = s
@@ -107,6 +107,8 @@ function renderPanel(){
 }
 
 function num(v){ return v === '' || v == null ? null : Number(v); }
+function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function renderScorePanel(s, panel){
   panel.innerHTML = `
@@ -142,21 +144,25 @@ function renderDiagnosePanel(s, panel){
   }));
   panel.innerHTML = `
    <div class="card"><h2>② 합격 가능성 진단</h2>
-    <p class="muted">기준: 내신 주요과목 ${base ?? '(미입력)'} 등급 · 계열 ${s.희망.계열 || '전체'}</p>
+    <p class="muted">기준: 내신 주요과목 ${base ?? '(미입력)'} 등급 · 계열 ${esc(s.희망.계열) || '전체'}</p>
     <table><thead><tr><th>대학</th><th>학과</th><th>전형</th><th>합격선</th><th>판정</th><th>수능최저</th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
-      <td>${r.대학}</td><td>${r.학과}</td><td>${r.전형유형}</td><td>${r.합격선등급}</td>
+      <td>${esc(r.대학)}</td><td>${esc(r.학과)}</td><td>${esc(r.전형유형)}</td><td>${r.합격선등급}</td>
       <td>${r.분류==='-'?'<span class="muted">성적 입력 필요</span>':`<span class="pill ${r.분류}">${r.분류}</span>`}</td>
-      <td>${r.수능최저||'-'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">해당 데이터 없음</td></tr>'}
+      <td>${esc(r.수능최저)||'-'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">해당 데이터 없음</td></tr>'}
     </tbody></table>
    </div>`;
 }
 
 function renderBoardPanel(s, panel){
   const base = s.내신.주요과목;
-  const opts = SusiLogic.합격선DB.map(r =>
-    `<option value="${r.id}">${r.대학} ${r.학과} (${r.전형유형}, ${r.합격선등급})</option>`).join('');
-  const bal = SusiLogic.balanceSummary(s.지원);
+  const optsFor = (selId) => ['<option value="">— 선택 —</option>'].concat(
+    SusiLogic.합격선DB.map(r =>
+      `<option value="${esc(r.id)}"${r.id === selId ? ' selected' : ''}>${esc(r.대학)} ${esc(r.학과)} (${esc(r.전형유형)}, ${r.합격선등급})</option>`)
+  ).join('');
+  const liveSlots = s.지원.map(slot =>
+    (slot.합격선id && !SusiLogic.getCutoff(slot.합격선id)) ? { ...slot, 분류: '' } : slot);
+  const bal = SusiLogic.balanceSummary(liveSlots);
   const R = SusiLogic.RECOMMENDED;
   panel.innerHTML = `
    <div class="card"><h2>③ 수시 6장 보드</h2>
@@ -167,17 +173,15 @@ function renderBoardPanel(s, panel){
       · 빈 슬롯 ${bal.빈슬롯}</p>
     ${s.지원.map((slot,i)=>{
       const cur = SusiLogic.getCutoff(slot.합격선id);
+      const stale = slot.합격선id && !cur;
       return `<div class="row" style="margin:8px 0">
         <b style="width:48px">${slot.slot}지망</b>
-        <select class="slotSel" data-i="${i}" style="min-width:280px">
-          <option value="">— 선택 —</option>
-          ${opts.replace(`value="${slot.합격선id}"`, `value="${slot.합격선id}" selected`)}
-        </select>
-        ${cur && slot.분류 ? `<span class="pill ${slot.분류}">${slot.분류}</span>` : ''}
+        <select class="slotSel" data-i="${i}" style="min-width:280px">${optsFor(slot.합격선id)}</select>
+        ${stale ? '<span class="muted">삭제된 항목</span>' : (cur && slot.분류 ? `<span class="pill ${slot.분류}">${slot.분류}</span>` : '')}
       </div>`;
     }).join('')}
    </div>`;
-  document.querySelectorAll('.slotSel').forEach(el => el.onchange = () => {
+  panel.querySelectorAll('.slotSel').forEach(el => el.onchange = () => {
     const i = +el.dataset.i, id = el.value;
     s.지원[i].합격선id = id;
     const cut = SusiLogic.getCutoff(id);
@@ -196,7 +200,7 @@ function renderCounselPanel(s, panel){
       <button id="c_add">기록 추가</button>
     </div>
     <table style="margin-top:12px"><thead><tr><th>날짜</th><th>내용</th><th>결정</th><th></th></tr></thead>
-    <tbody>${s.상담.map((c,i)=>`<tr><td>${c.날짜||'-'}</td><td>${c.내용||''}</td><td>${c.결정||''}</td>
+    <tbody>${s.상담.map((c,i)=>`<tr><td>${esc(c.날짜)||'-'}</td><td>${esc(c.내용)||''}</td><td>${esc(c.결정)||''}</td>
       <td><button class="ghost c_del" data-i="${i}">삭제</button></td></tr>`).join('')
       || '<tr><td colspan="4" class="muted">기록 없음</td></tr>'}</tbody></table>
    </div>`;
@@ -210,7 +214,7 @@ function renderCounselPanel(s, panel){
     });
     saveState(); renderPanel();
   };
-  document.querySelectorAll('.c_del').forEach(el => el.onclick = () => {
+  panel.querySelectorAll('.c_del').forEach(el => el.onclick = () => {
     s.상담.splice(+el.dataset.i, 1); saveState(); renderPanel();
   });
 }
@@ -243,6 +247,7 @@ document.getElementById('importFile').onchange = (e) => {
   reader.onload = () => {
     try {
       const data = SusiLogic.deserializeStudents(String(reader.result));
+      if (state.students.length > 0 && !confirm('현재 데이터를 불러온 데이터로 교체합니다. 계속할까요?')) return;
       state.students = data;
       state.currentId = data[0] ? data[0].id : null;
       saveState(); render();
