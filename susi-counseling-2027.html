@@ -4199,7 +4199,7 @@ function calcCompositeScore(univResult, student, analysis) {
     const recentWeight = is종합 ? 0.7 : 0.6;
     const overallWeight = 1 - recentWeight;
     const combinedDiff = recentDiff * recentWeight + overallDiff * overallWeight;
-    const trendMult = is종합 ? 1.3 : is논술 ? 0.5 : 0.6;
+    const trendMult = is종합 ? 1.3 : is논술 ? 0.5 : 0.45;
     const comboBoost = trendIsCombo ? 1.15 : 1.0;
     if (combinedDiff < -0.6) trendBonus = Math.round(9 * trendMult * comboBoost);
     else if (combinedDiff < -0.3) trendBonus = Math.round(6 * trendMult * comboBoost);
@@ -4208,12 +4208,15 @@ function calcCompositeScore(univResult, student, analysis) {
     else if (combinedDiff > 0.3) trendBonus = Math.round(-4 * trendMult * comboBoost);
     else if (combinedDiff > 0.1) trendBonus = Math.round(-2 * trendMult * comboBoost);
   } else if (trend.length === 2) {
+    const trendMult2 = is종합 ? 1.3 : is논술 ? 0.5 : 0.45;
     const diff = trend[1].avg - trend[0].avg;
-    if (diff < -0.5) trendBonus = 6;
-    else if (diff < -0.2) trendBonus = 3;
-    else if (diff > 0.5) trendBonus = -5;
-    else if (diff > 0.2) trendBonus = -2;
+    if (diff < -0.5) trendBonus = Math.round(6 * trendMult2);
+    else if (diff < -0.2) trendBonus = Math.round(3 * trendMult2);
+    else if (diff > 0.5) trendBonus = Math.round(-5 * trendMult2);
+    else if (diff > 0.2) trendBonus = Math.round(-2 * trendMult2);
   }
+  if (trendBonus > 0) trendBonus = Math.round(trendBonus * Math.min(1, base / 35));
+  else if (trendBonus < 0) trendBonus = Math.round(trendBonus * Math.min(1, (100 - base) / 35));
 
   // Competition ratio: more granular
   let ratioAdj = 0;
