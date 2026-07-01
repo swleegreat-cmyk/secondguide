@@ -659,15 +659,39 @@ body {
   font-size:10px; cursor:pointer; margin-left:8px;
 }
 
+/* Mobile toggle button */
+.menu-toggle {
+  display:none; position:fixed; top:12px; left:12px; z-index:200;
+  width:40px; height:40px; border-radius:12px; border:none;
+  background:var(--teal); color:#fff; font-size:20px;
+  cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.3);
+}
+.sidebar-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99;
+}
+
 /* Mobile */
 @media (max-width:768px) {
-  .sidebar { width:100%; position:relative; max-height:50vh; }
+  .menu-toggle { display:flex; align-items:center; justify-content:center; }
+  .sidebar {
+    position:fixed; left:-280px; width:270px; transition:left .25s ease;
+    z-index:150;
+  }
+  .sidebar.open { left:0; }
+  .sidebar-overlay.open { display:block; }
   .main { margin-left:0; max-width:100%; padding:16px 12px 60px; }
   .app-layout { flex-direction:column; }
-  .profile-header { flex-direction:column; align-items:flex-start; }
+  .profile-header { flex-direction:column; align-items:flex-start; gap:8px; }
   .profile-chips { margin-left:0; }
-  .match-row { flex-direction:column; align-items:flex-start; }
+  .match-row { flex-direction:column; align-items:flex-start; gap:6px; }
   .match-num { text-align:left; }
+  .stat-grid { grid-template-columns:1fr 1fr; }
+  .analysis-grid { grid-template-columns:1fr; }
+  .combo-bar .clbl { min-width:70px; font-size:10px; }
+  .g-table { font-size:11px; }
+  .scroll-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tab-bar { gap:0; }
+  .tab-btn { padding:10px 8px; font-size:12px; }
 }
 
 /* Memo toggle */
@@ -694,6 +718,9 @@ body {
 </style>
 </head>
 <body>
+<button class="menu-toggle" id="menuToggle" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('open')">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('open')"></div>
+
 <div class="app-layout">
 
   <!-- Sidebar -->
@@ -702,6 +729,9 @@ body {
       <div class="badge">2027 수시</div>
       <h1>수시 상담</h1>
       <p>병점고 3학년 4반 &middot; 34명</p>
+    </div>
+    <div style="padding:8px 16px 0">
+      <button id="homeBtn" onclick="goHome()" style="width:100%;padding:7px;border:1px solid rgba(255,255,255,0.15);border-radius:10px;background:rgba(255,255,255,0.08);color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;display:none">◁ 학급 현황</button>
     </div>
     <div class="sidebar-search">
       <input type="text" id="rosterSearch" placeholder="학생 검색..." autocomplete="off">
@@ -3308,6 +3338,18 @@ function selectStudent(idx) {
   const analysis = ANALYSIS[student.seat] || {};
   renderMain(student, analysis);
   localStorage.setItem('susi27_last', idx);
+  document.getElementById('homeBtn').style.display = 'block';
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
+
+function goHome() {
+  selectedIdx = null;
+  buildRoster(searchEl.value);
+  document.getElementById('contentArea').innerHTML = '<div id="classDashboard"></div>';
+  renderDashboard();
+  document.getElementById('homeBtn').style.display = 'none';
+  localStorage.removeItem('susi27_last');
 }
 
 // ── Render Main Content ──
@@ -3594,21 +3636,58 @@ function renderMain(student, analysis) {
         }
       });
       html += `<div class="glass" style="border-left:3px solid var(--copper)">
-        <h3 style="color:var(--copper)">관심 대학 포트폴리오 <span style="color:var(--muted);font-weight:400">(${favResults.length}개)</span></h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">`;
+        <h3 style="color:var(--copper)">지원 전략 포트폴리오 <span style="color:var(--muted);font-weight:400">(${favResults.length}/6개)</span></h3>`;
+
+      // Strategic analysis
+      const total = favResults.length;
+      const bandColors2 = { 안정: 'var(--green)', 적정: 'var(--blue)', 소신: 'var(--orange)', 상향: 'var(--red)' };
+      const bandBgs = { 안정: 'var(--green-light)', 적정: 'var(--blue-light)', 소신: 'var(--orange-light)', 상향: 'var(--red-light)' };
+
+      // Portfolio balance bar
+      if (total > 0) {
+        html += `<div style="display:flex;height:20px;border-radius:6px;overflow:hidden;margin-bottom:8px">`;
+        for (const [label, count] of Object.entries(favStab)) {
+          if (count === 0) continue;
+          const pct = (count / total * 100).toFixed(1);
+          html += `<div style="width:${pct}%;background:${bandColors2[label]};display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700">${label} ${count}</div>`;
+        }
+        html += `</div>`;
+      }
+
+      // Each favorited university card
+      favResults.sort((a, b) => a.score - b.score);
       favResults.forEach(r => {
-        html += `<div style="padding:6px 12px;background:var(--copper-light);border-radius:8px;font-size:12px">
-          <span style="font-weight:600">${esc(r.univ)}</span>
-          <span class="mono" style="color:${gradeColor(r.score)};margin-left:6px;font-weight:700">${r.score.toFixed(2)}</span>
+        const cut = cutlineMap[r.univ];
+        let bandInfo = { label: '-', color: 'var(--muted)' };
+        if (cut) {
+          const diff = r.score - cut.cutline;
+          bandInfo = judgeBand(diff, cut.source);
+        }
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:${bandBgs[bandInfo.label] || 'var(--cream)'};border-radius:8px;margin-bottom:6px;font-size:12px">
+          <span style="min-width:36px;text-align:center;padding:2px 6px;border-radius:6px;background:${bandInfo.color};color:#fff;font-size:10px;font-weight:700">${bandInfo.label}</span>
+          <span style="flex:1;font-weight:600">${esc(r.univ)}</span>
+          <span class="mono" style="font-weight:700;color:${gradeColor(r.score)}">${r.score.toFixed(2)}</span>
+          <button class="fav-btn on" onclick="doFav(${student.seat},'${r.univKey}',this);selectStudent(${STUDENTS.indexOf(student)})" style="font-size:14px">★</button>
         </div>`;
       });
-      html += `</div>
-        <div style="display:flex;gap:10px;font-size:10px">`;
-      const bandColors2 = { 안정: 'var(--green)', 적정: 'var(--blue)', 소신: 'var(--orange)', 상향: 'var(--red)' };
-      for (const [label, count] of Object.entries(favStab)) {
-        if (count > 0) html += `<span style="color:${bandColors2[label]}">${label} ${count}</span>`;
+
+      // Strategic advice
+      const advice = [];
+      if (total > 6) advice.push('수시 지원은 최대 6개입니다. ' + (total - 6) + '개를 제외해야 합니다.');
+      if (total >= 3 && total <= 6) {
+        if (!favStab['안정'] && !favStab['적정']) advice.push('안정/적정권 대학이 없습니다. 안전한 선택지를 추가하세요.');
+        if (favStab['상향'] >= 3) advice.push('상향 지원이 많습니다. 현실적인 조정을 권합니다.');
+        if (favStab['안정'] >= 1 && favStab['소신'] >= 1) advice.push('안정 + 도전 조합이 잘 구성되어 있습니다.');
+        if (total === 6 && favStab['안정'] >= 2 && favStab['적정'] >= 1) advice.push('균형 잡힌 포트폴리오입니다.');
       }
-      html += `</div></div>`;
+      if (total > 0 && total < 3) advice.push('더 많은 대학을 검토해 보세요. 아래 등급컷 비교에서 ☆를 클릭하여 추가할 수 있습니다.');
+
+      if (advice.length > 0) {
+        html += `<div style="margin-top:8px;padding:8px 12px;background:var(--cream);border-radius:8px;font-size:11px;color:var(--sub)">`;
+        advice.forEach(a => { html += `<div style="padding:2px 0">💡 ${esc(a)}</div>`; });
+        html += `</div>`;
+      }
+      html += `</div>`;
     }
   }
 
