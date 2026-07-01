@@ -4728,6 +4728,18 @@ function renderSusiTab(student, analysis) {
 
   html += '</div>';
 
+  // What-if grade simulation
+  html += '<div class="glass"><h3>성적 변화 시뮬레이션</h3>';
+  html += '<p style="font-size:11px;color:var(--sub);margin-bottom:10px">남은 학기에 성적이 변화하면 합격 확률이 어떻게 달라지는지 시뮬레이션합니다.</p>';
+  html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <label style="font-size:12px;font-weight:600;white-space:nowrap">등급 변화:</label>
+    <input type="range" id="whatifSlider" min="-15" max="15" value="0" step="1"
+      style="flex:1;accent-color:var(--teal)" oninput="runWhatIf(this.value)">
+    <span id="whatifLabel" class="mono" style="font-size:14px;font-weight:700;color:var(--teal);min-width:60px;text-align:center">현재</span>
+  </div>`;
+  html += '<div id="whatifResult" style="display:none;padding:10px;background:var(--cream);border-radius:10px;font-size:12px;line-height:1.6"></div>';
+  html += '</div>';
+
   // All results table with probability column
   html += '<div class="glass" id="allUnivSection"><h3>전체 대학 환산 결과 (<span id="univCount">' + results.length + '</span>개)</h3>';
   html += '<div class="scroll-table"><table class="g-table" id="univTable"><thead><tr>';
@@ -4841,6 +4853,97 @@ function updateUnivCount() {
   const visible = document.querySelectorAll('.univ-row:not([style*="display: none"])').length;
   const el = document.getElementById('univCount');
   if (el) el.textContent = visible;
+}
+
+// ═══════════════════════════════════════════════
+// WHAT-IF GRADE SIMULATION
+// ═══════════════════════════════════════════════
+function runWhatIf(sliderVal) {
+  const delta = parseInt(sliderVal) / 10;
+  const label = document.getElementById('whatifLabel');
+  const resultDiv = document.getElementById('whatifResult');
+  if (!label || !resultDiv) return;
+
+  if (delta === 0) {
+    label.textContent = '현재';
+    label.style.color = 'var(--teal)';
+    resultDiv.style.display = 'none';
+    return;
+  }
+
+  const sign = delta > 0 ? '+' : '';
+  label.textContent = sign + delta.toFixed(1) + '등급';
+  label.style.color = delta < 0 ? 'var(--green)' : 'var(--red)';
+
+  const student = STUDENTS[selectedIdx];
+  const analysis = ANALYSIS[student.seat] || {};
+  const results = runAllUniversities(student);
+
+  const currentComps = results.map(r => {
+    const comp = calcCompositeScore(r, student, analysis);
+    return { univ: r.univ, jeonType: r.jeonType, prob: comp.probability, score: r.score, cutline: r.cutline, comp, r };
+  }).sort((a, b) => b.prob - a.prob);
+
+  const simComps = results.map(r => {
+    const simScore = r.score + delta;
+    const simResult = { ...r, score: simScore };
+    if (r.cutline) {
+      simResult.diff = simScore - r.cutline.cut;
+    }
+    const comp = calcCompositeScore(simResult, student, analysis);
+    return { univ: r.univ, jeonType: r.jeonType, prob: comp.probability, score: simScore, comp };
+  }).sort((a, b) => b.prob - a.prob);
+
+  const currentSafe = currentComps.filter(r => r.prob >= 65).length;
+  const simSafe = simComps.filter(r => r.prob >= 65).length;
+  const currentFit = currentComps.filter(r => r.prob >= 40 && r.prob < 65).length;
+  const simFit = simComps.filter(r => r.prob >= 40 && r.prob < 65).length;
+
+  let currentPort = null, simPort = null;
+  if (currentComps.length >= 6) {
+    currentPort = calcOptimalPortfolio(currentComps, 6);
+    simPort = calcOptimalPortfolio(simComps, 6);
+  }
+
+  let html = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">';
+  html += `<div style="padding:8px;background:var(--card);border-radius:8px;text-align:center">
+    <div style="font-size:10px;color:var(--muted)">안정권 (65%+)</div>
+    <div class="mono" style="font-size:14px">${currentSafe} → <strong style="color:${simSafe > currentSafe ? 'var(--green)' : simSafe < currentSafe ? 'var(--red)' : 'var(--sub)'}">${simSafe}교</strong></div>
+  </div>`;
+  html += `<div style="padding:8px;background:var(--card);border-radius:8px;text-align:center">
+    <div style="font-size:10px;color:var(--muted)">적정 (40~64%)</div>
+    <div class="mono" style="font-size:14px">${currentFit} → <strong style="color:${simFit > currentFit ? 'var(--green)' : simFit < currentFit ? 'var(--red)' : 'var(--sub)'}">${simFit}교</strong></div>
+  </div>`;
+  html += '</div>';
+
+  if (currentPort && simPort) {
+    const diffAtLeast = simPort.atLeastOne - currentPort.atLeastOne;
+    const diffLabel = diffAtLeast > 0 ? '+' + diffAtLeast : '' + diffAtLeast;
+    html += `<div style="text-align:center;margin-bottom:8px">
+      포트폴리오 합격 확률: <span class="mono">${currentPort.atLeastOne}%</span> → <strong class="mono" style="color:${diffAtLeast > 0 ? 'var(--green)' : diffAtLeast < 0 ? 'var(--red)' : 'var(--sub)'}">${simPort.atLeastOne}% (${diffLabel}%p)</strong>
+    </div>`;
+  }
+
+  // Top changed universities
+  const changes = currentComps.map(c => {
+    const sim = simComps.find(s => s.univ === c.univ);
+    return { univ: c.univ, jeon: c.jeonType, current: c.prob, sim: sim ? sim.prob : c.prob, diff: sim ? sim.prob - c.prob : 0 };
+  }).filter(c => Math.abs(c.diff) >= 3).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 5);
+
+  if (changes.length > 0) {
+    html += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">주요 변화 대학</div>';
+    changes.forEach(c => {
+      const color = c.diff > 0 ? 'var(--green)' : 'var(--red)';
+      const sign = c.diff > 0 ? '+' : '';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px">${esc(c.univ)} <span style="color:var(--muted);font-size:10px">${esc((c.jeon||'').substring(0,4))}</span></span>
+        <span class="mono" style="font-size:11px">${c.current}% → <strong style="color:${color}">${c.sim}% (${sign}${c.diff}%p)</strong></span>
+      </div>`;
+    });
+  }
+
+  resultDiv.innerHTML = html;
+  resultDiv.style.display = 'block';
 }
 
 // ═══════════════════════════════════════════════
