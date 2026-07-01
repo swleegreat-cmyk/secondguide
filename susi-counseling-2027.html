@@ -263,9 +263,11 @@ body {
 .combo-bar .cval { width:50px; text-align:right; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; }
 
 /* Scrollable table */
-.scroll-table { max-height:600px; overflow-y:auto; }
-.scroll-table::-webkit-scrollbar { width:4px; }
+.scroll-table { max-height:600px; overflow-y:auto; overflow-x:auto; }
+.scroll-table::-webkit-scrollbar { width:4px; height:4px; }
 .scroll-table::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+#studentRankTable th { position:sticky; top:0; background:var(--card-solid); z-index:1; }
+#studentRankTable tbody tr:hover { background:var(--teal-light); }
 
 /* Detail modal */
 .modal-overlay {
@@ -347,6 +349,8 @@ body {
   .tab-btn { padding:10px 8px; font-size:12px; }
   .combo-bar, .subj-bar { font-size:11px; }
   .dash-grid { grid-template-columns:1fr 1fr !important; }
+  #studentRankTable { font-size:10px; }
+  #studentRankTable th, #studentRankTable td { padding:4px 5px; }
 }
 @media (max-width:480px) {
   .stat-grid { grid-template-columns:1fr; }
@@ -2895,7 +2899,7 @@ let univResults = [];
 let favorites = JSON.parse(localStorage.getItem('susi27_favs') || '{}');
 let memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
 const _cache = { record: {}, fit: {}, combo: {}, avg: {}, trend: {} };
-function clearCache() { Object.keys(_cache).forEach(k => { if (typeof _cache[k] === 'object') _cache[k] = {}; else delete _cache[k]; }); _cache.heatmap = null; _cache.classPortfolio = null; _cache.studentUnivProbs = null; }
+function clearCache() { Object.keys(_cache).forEach(k => { if (typeof _cache[k] === 'object') _cache[k] = {}; else delete _cache[k]; }); _cache.heatmap = null; _cache.classPortfolio = null; _cache.studentUnivProbs = null; _cache.studentRanking = null; }
 
 // ═══════════════════════════════════════════════
 // CORE CALCULATIONS
@@ -4190,21 +4194,80 @@ function renderDashboard() {
     html += '<div style="font-size:12px;color:var(--muted)">특별히 우선 상담이 필요한 학생이 없습니다.</div>';
   }
 
-  // Student grid with fit scores + compare feature
-  html += '<h3 style="margin-top:20px">전체 학생 <button id="compareBtn" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--teal)" onclick="toggleCompareMode()">비교 모드</button></h3>';
+  // Sortable student ranking table
+  html += '<h3 style="margin-top:20px">전체 학생 순위표 <button id="compareBtn" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--teal)" onclick="toggleCompareMode()">비교 모드</button></h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">열 제목을 클릭하면 정렬합니다. 학생 이름을 클릭하면 상세 분석 화면으로 이동합니다.</p>';
   html += '<div id="compareSel" style="display:none;margin-bottom:8px;padding:8px 12px;background:var(--blue-light);border-radius:8px;font-size:12px">학생을 2~3명 선택하세요. <button style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid var(--teal);background:var(--teal);color:#fff;cursor:pointer;font-size:11px" onclick="runCompare()">비교하기</button> <span id="compareCount">0</span>명 선택됨</div>';
-  html += '<div class="dash-grid">';
-  STUDENTS.forEach((s, i) => {
-    const avg = calcWeightedAvg(s);
-    const a = ANALYSIS[s.seat] || {};
-    const fit = calcFitScore(s, a, null);
-    const fitC = fit.score >= 60 ? 'var(--green)' : fit.score >= 35 ? 'var(--blue)' : 'var(--orange)';
-    html += `<div class="dash-student" data-idx="${i}">
-      <div class="ds-name">${s.seat}번 ${esc(s.name)}</div>
-      <div class="ds-grade" style="color:${gradeColor(avg)}">${avg.toFixed(2)} <span style="font-size:10px;color:${fitC}">적합${fit.score}</span></div>
-    </div>`;
+
+  if (!_cache.studentRanking) {
+    _cache.studentRanking = STUDENTS.map((s, i) => {
+      const avg = calcWeightedAvg(s);
+      const a = ANALYSIS[s.seat] || {};
+      const ra = analyzeRecord(s, a);
+      const fit = calcFitScore(s, a, ra.concept);
+      const trend = calcYearlyTrend(s);
+      const combos = calcComboScores(s);
+      const results = runAllUniversities(s);
+      const allC = results.map(r => {
+        const comp = calcCompositeScore(r, s, a);
+        return { univ: r.univ, prob: comp.probability };
+      }).sort((a, b) => b.prob - a.prob);
+
+      let bestCombo = '', bestComboScore = 99;
+      COMBO_ORDER.forEach(c => { if (combos[c] && combos[c].avg < bestComboScore) { bestComboScore = combos[c].avg; bestCombo = c; } });
+
+      let trendDir = 0;
+      if (trend.length >= 2) trendDir = trend[trend.length-1].avg - trend[0].avg;
+
+      const safeCount = allC.filter(r => r.prob >= 65).length;
+      const topUniv = allC[0] || { univ: '-', prob: 0 };
+
+      return {
+        idx: i, name: s.name, seat: s.seat, avg, fit: fit.score,
+        concept: ra.concept || '', bestCombo, bestComboScore,
+        trendDir, safeCount, topUniv: topUniv.univ, topProb: topUniv.prob
+      };
+    });
+  }
+  const ranking = _cache.studentRanking;
+
+  html += '<div class="scroll-table" style="max-height:700px"><table class="g-table" id="studentRankTable">';
+  html += '<thead><tr>';
+  const cols = [
+    {key:'seat', label:'번호', w:'42px'},
+    {key:'name', label:'이름', w:'70px'},
+    {key:'avg', label:'평균', w:'55px'},
+    {key:'bestComboScore', label:'최적조합', w:'90px'},
+    {key:'trendDir', label:'추세', w:'55px'},
+    {key:'fit', label:'적합성', w:'50px'},
+    {key:'concept', label:'진로', w:'55px'},
+    {key:'safeCount', label:'안정권', w:'45px'},
+    {key:'topProb', label:'1순위 대학', w:'auto'}
+  ];
+  cols.forEach(c => {
+    html += `<th style="cursor:pointer;white-space:nowrap;width:${c.w};user-select:none" onclick="sortStudentRank('${c.key}')">${c.label} <span class="rank-sort-arrow" data-col="${c.key}" style="font-size:10px;color:var(--muted)"></span></th>`;
   });
-  html += '</div></div>';
+  html += '</tr></thead><tbody id="studentRankBody">';
+
+  const sorted = [...ranking].sort((a, b) => a.avg - b.avg);
+  sorted.forEach((r, rank) => {
+    const tArrow = r.trendDir < -0.3 ? '↑' : r.trendDir > 0.3 ? '↓' : '→';
+    const tColor = r.trendDir < -0.3 ? 'var(--green)' : r.trendDir > 0.3 ? 'var(--red)' : 'var(--muted)';
+    const fitC = r.fit >= 60 ? 'var(--green)' : r.fit >= 35 ? 'var(--blue)' : 'var(--orange)';
+    const pColor = r.topProb >= 65 ? 'var(--green)' : r.topProb >= 40 ? 'var(--blue)' : r.topProb >= 15 ? 'var(--orange)' : 'var(--red)';
+    html += `<tr class="dash-student" data-idx="${r.idx}" style="cursor:pointer" data-seat="${r.seat}" data-avg="${r.avg}" data-bestcomboscore="${r.bestComboScore}" data-trenddir="${r.trendDir}" data-fit="${r.fit}" data-concept="${esc(r.concept)}" data-safecount="${r.safeCount}" data-topprob="${r.topProb}">
+      <td style="text-align:center;font-weight:600">${r.seat}</td>
+      <td style="font-weight:600;color:var(--teal)">${esc(r.name)}</td>
+      <td class="mono" style="font-weight:700;color:${gradeColor(r.avg)}">${r.avg.toFixed(2)}</td>
+      <td style="font-size:11px"><span class="mono" style="font-weight:600;color:${gradeColor(r.bestComboScore)}">${r.bestComboScore < 99 ? r.bestComboScore.toFixed(2) : '-'}</span> <span style="color:var(--muted);font-size:9px">${r.bestCombo ? esc(r.bestCombo.substring(0,4)) : ''}</span></td>
+      <td style="text-align:center;color:${tColor};font-weight:700">${tArrow}${Math.abs(r.trendDir) >= 0.3 ? Math.abs(r.trendDir).toFixed(1) : ''}</td>
+      <td style="text-align:center;font-weight:700;color:${fitC}">${r.fit}</td>
+      <td style="font-size:11px;color:var(--sub)">${r.concept ? esc(r.concept) : '<span style="color:var(--muted)">-</span>'}</td>
+      <td style="text-align:center;font-weight:700;color:${r.safeCount >= 3 ? 'var(--green)' : r.safeCount >= 1 ? 'var(--blue)' : 'var(--red)'}">${r.safeCount}</td>
+      <td style="font-size:11px"><span style="font-weight:600">${esc(r.topUniv.length > 6 ? r.topUniv.substring(0,6) + '..' : r.topUniv)}</span> <span class="mono" style="font-weight:700;color:${pColor}">${r.topProb}%</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div></div>';
 
   el.innerHTML = html;
 
@@ -5066,6 +5129,37 @@ function updateUnivCount() {
 }
 
 // ═══════════════════════════════════════════════
+// STUDENT RANKING TABLE SORT
+// ═══════════════════════════════════════════════
+let _rankSortCol = null, _rankSortAsc = true;
+function sortStudentRank(col) {
+  const tbody = document.getElementById('studentRankBody');
+  if (!tbody) return;
+  if (_rankSortCol === col) _rankSortAsc = !_rankSortAsc;
+  else { _rankSortCol = col; _rankSortAsc = true; }
+
+  document.querySelectorAll('.rank-sort-arrow').forEach(el => {
+    el.textContent = el.dataset.col === col ? (_rankSortAsc ? '▲' : '▼') : '';
+  });
+
+  const rows = [...tbody.querySelectorAll('tr')];
+  rows.sort((a, b) => {
+    let va, vb;
+    if (col === 'name' || col === 'concept') {
+      va = a.dataset[col] || ''; vb = b.dataset[col] || '';
+      return _rankSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    va = parseFloat(a.dataset[col.toLowerCase()] || 0);
+    vb = parseFloat(b.dataset[col.toLowerCase()] || 0);
+    if (col === 'avg' || col === 'bestcomboscore' || col === 'trenddir' || col === 'seat') {
+      return _rankSortAsc ? va - vb : vb - va;
+    }
+    return _rankSortAsc ? vb - va : va - vb;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+// ═══════════════════════════════════════════════
 // WHAT-IF GRADE SIMULATION
 // ═══════════════════════════════════════════════
 function runWhatIf(sliderVal) {
@@ -5507,6 +5601,7 @@ function toggleCompareMode() {
     compareList = [];
     document.querySelectorAll('.dash-student').forEach(el => {
       el.style.outline = '';
+      el.style.background = '';
       el.onclick = () => selectStudent(parseInt(el.dataset.idx));
     });
   }
@@ -5517,7 +5612,9 @@ function toggleCompareStudent(idx) {
   else if (compareList.length < 3) { compareList.push(idx); }
   document.querySelectorAll('.dash-student').forEach(el => {
     const elIdx = parseInt(el.dataset.idx);
-    el.style.outline = compareList.includes(elIdx) ? '2px solid var(--teal)' : '';
+    const selected = compareList.includes(elIdx);
+    el.style.outline = selected ? '2px solid var(--teal)' : '';
+    el.style.background = selected ? 'var(--teal-light)' : '';
   });
   updateCompareCount();
 }
@@ -6205,18 +6302,22 @@ th{background:#f5f5f0;font-weight:700}
     <div class="box"><strong>도전 (15%↓):</strong> ${allComps.length - safeCount - fitCount - reachCount}교</div>
   </div>`;
 
-  // Optimal 6-university portfolio
+  // Optimal 6-university portfolio with risk analysis
   if (allComps.length >= 6) {
     const optPort = calcOptimalPortfolio(allComps, 6);
     report += '<div style="padding:10px;background:#e8f5f0;border-radius:6px;margin-bottom:8px;border:1px solid #c8e0d8">';
-    report += `<div style="font-weight:700;margin-bottom:4px">AI 최적 6지원 포트폴리오 (최소 1개 합격 확률: ${optPort.atLeastOne}%)</div>`;
+    report += `<div style="font-weight:700;margin-bottom:4px">AI 최적 6지원 포트폴리오</div>`;
+    report += `<div style="font-size:11px;margin-bottom:6px">최소 1개 합격 확률: <strong>${optPort.atLeastOne}%</strong> · 기대 합격 수: <strong>${optPort.expectedCount.toFixed(1)}교</strong> · 위험도: <strong>${optPort.riskLevel}</strong> (안정${optPort.safeCount}/적정${optPort.fitCount}/소신${optPort.reachCount})</div>`;
     report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>합격확률</th><th>분류</th></tr>';
     optPort.picks.forEach((r, i) => {
       const cls = r.prob >= 65 ? 'safe' : r.prob >= 40 ? 'fit' : r.prob >= 15 ? 'reach' : '';
       const label = r.prob >= 65 ? '안정' : r.prob >= 40 ? '적정' : r.prob >= 15 ? '소신' : '도전';
       report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td class="${cls}">${r.prob}%</td><td>${label}</td></tr>`;
     });
-    report += '</table></div>';
+    report += '</table>';
+    if (optPort.dupUnivs.length > 0) report += `<div style="font-size:10px;color:#C77B3C">동일 대학 중복 지원: ${optPort.dupUnivs.join(', ')}</div>`;
+    report += `<div style="font-size:10px;margin-top:4px;color:#666">${optPort.riskAdvice}</div>`;
+    report += '</div>';
   }
 
   report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>모델</th><th>티어</th></tr>';
