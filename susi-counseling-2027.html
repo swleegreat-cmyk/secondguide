@@ -1019,6 +1019,9 @@ select { cursor: pointer; }
           <input type="checkbox" value="career">진로 체험
         </label>
       </div>
+      <div class="alert alert-warn" style="margin-top:12px">
+        <b>참고:</b> 2024학년도부터 <b>수상경력</b>과 <b>독서활동</b>은 대입에 반영되지 않습니다. 위 항목 중 '교내 대회'와 '독서 활동'은 학생부 비교과 영역의 경험 유무를 파악하기 위한 참고용이며, 실제 대입 평가에는 반영되지 않습니다.
+      </div>
     </div>
 
     <div class="btn-group">
@@ -1345,7 +1348,7 @@ select { cursor: pointer; }
     </div>
 
     <div class="alert alert-tip">
-      <b>전략 팁:</b> 같은 대학에 교과 + 종합 두 전형을 동시에 쓰지 마세요. 서로 다른 대학에 분산 지원해야 합격 확률을 높일 수 있습니다. 또한, 수시 면접 일정이 겹치지 않는지 반드시 확인하세요.
+      <b>전략 팁:</b> 같은 대학에 교과 + 종합을 동시에 지원할 수 있는 대학도 있습니다. 대학별 복수 지원 가능 여부를 반드시 확인하세요. 서로 다른 대학에 분산 지원하면 합격 확률을 높일 수 있으며, 수시 면접 일정이 겹치지 않는지도 반드시 확인하세요.
     </div>
 
     <div class="btn-group">
@@ -1522,7 +1525,7 @@ select { cursor: pointer; }
       </div>
       <div class="tl-item">
         <div class="tl-month">2026년 9~10월</div>
-        <div class="tl-title">논술 시험 & 적성 시험</div>
+        <div class="tl-title">논술 시험</div>
         <div class="tl-desc">대학별 논술 시험 일정 확인 및 응시. 일정 중복 시 우선순위 결정</div>
       </div>
       <div class="tl-item">
@@ -1774,8 +1777,60 @@ function showTab(tabId, btn) {
   document.getElementById(tabId).classList.add('active');
 }
 
+// ===== LOCAL STORAGE =====
+function saveToStorage() {
+  try {
+    var formData = {
+      name: document.getElementById('studentName').value,
+      grade: document.getElementById('studentGrade').value,
+      major: document.getElementById('desiredMajor').value,
+      gradeKor: document.getElementById('gradeKor').value,
+      gradeMath: document.getElementById('gradeMath').value,
+      gradeEng: document.getElementById('gradeEng').value,
+      gradeExplore: document.getElementById('gradeExplore').value,
+      studentData: studentData,
+      completedSteps: Array.from(completedSteps)
+    };
+    localStorage.setItem('susi2027', JSON.stringify(formData));
+  } catch (e) {}
+}
+
+function loadFromStorage() {
+  try {
+    var saved = localStorage.getItem('susi2027');
+    if (!saved) return;
+    var data = JSON.parse(saved);
+    if (data.name) document.getElementById('studentName').value = data.name;
+    if (data.grade) document.getElementById('studentGrade').value = data.grade;
+    if (data.major) document.getElementById('desiredMajor').value = data.major;
+    if (data.gradeKor) { document.getElementById('gradeKor').value = data.gradeKor; }
+    if (data.gradeMath) { document.getElementById('gradeMath').value = data.gradeMath; }
+    if (data.gradeEng) { document.getElementById('gradeEng').value = data.gradeEng; }
+    if (data.gradeExplore) { document.getElementById('gradeExplore').value = data.gradeExplore; }
+    if (data.studentData) {
+      Object.assign(studentData, data.studentData);
+    }
+    if (data.completedSteps) {
+      data.completedSteps.forEach(function(s) { completedSteps.add(s); });
+      updateProgress();
+    }
+    calcAvgGrade();
+  } catch (e) {}
+}
+
 // ===== STEP COMPLETIONS =====
 function completeStep1() {
+  var gradeCount = 0;
+  if (document.getElementById('gradeKor').value) gradeCount++;
+  if (document.getElementById('gradeMath').value) gradeCount++;
+  if (document.getElementById('gradeEng').value) gradeCount++;
+  if (document.getElementById('gradeExplore').value) gradeCount++;
+
+  if (gradeCount < 2) {
+    alert('내신 등급을 2개 이상 입력해주세요.');
+    return;
+  }
+
   studentData.name = document.getElementById('studentName').value || '미입력';
   studentData.grade = document.getElementById('studentGrade').value || '';
   studentData.major = document.getElementById('desiredMajor').value || '';
@@ -1791,42 +1846,49 @@ function completeStep1() {
   completedSteps.add(1);
   updateProgress();
   generateRecommendation();
+  saveToStorage();
   openStep(2);
 }
 
 function completeStep2() {
   completedSteps.add(2);
   updateProgress();
+  saveToStorage();
   openStep(3);
 }
 
 function completeStep3() {
   completedSteps.add(3);
   updateProgress();
+  saveToStorage();
   openStep(4);
 }
 
 function completeStep4() {
   completedSteps.add(4);
   updateProgress();
+  saveToStorage();
   openStep(5);
 }
 
 function completeStep5() {
   completedSteps.add(5);
   updateProgress();
+  saveToStorage();
   openStep(6);
 }
 
 function completeStep6() {
   completedSteps.add(6);
   updateProgress();
+  saveToStorage();
   openStep(7);
 }
 
 function completeStep7() {
   completedSteps.add(7);
   updateProgress();
+  saveToStorage();
   openStep(8);
   generateSummary();
 }
@@ -1845,31 +1907,42 @@ function generateRecommendation() {
   var hasSubjectSpecial = activities.indexOf('subject-special') !== -1;
   var hasLeadership = activities.indexOf('leadership') !== -1;
 
-  // 학생부종합
+  // 학생부종합 (max 12)
   var jonghapScore = 0;
-  if (avg <= 3.0) jonghapScore += 3;
+  if (avg <= 2.0) jonghapScore += 4;
+  else if (avg <= 3.0) jonghapScore += 3;
   else if (avg <= 4.0) jonghapScore += 2;
   else jonghapScore += 1;
 
-  if (activityScore >= 4) jonghapScore += 3;
-  else if (activityScore >= 2) jonghapScore += 2;
-  else jonghapScore += 1;
+  if (activityScore >= 5) jonghapScore += 3;
+  else if (activityScore >= 3) jonghapScore += 2;
+  else if (activityScore >= 1) jonghapScore += 1;
 
   if (hasResearch || hasSubjectSpecial) jonghapScore += 2;
+  if (hasLeadership) jonghapScore += 1;
   if (trend === 'up') jonghapScore += 1;
+  if (trend === 'down') jonghapScore -= 1;
 
-  // 학생부교과
+  // 의약학 계열: 내신 기준이 훨씬 높음
+  if (track === 'medical' && avg > 1.5) jonghapScore -= 1;
+
+  // 학생부교과 (max 6)
   var gyogwaScore = 0;
-  if (avg <= 2.0) gyogwaScore += 4;
+  if (avg <= 1.5) gyogwaScore += 5;
+  else if (avg <= 2.0) gyogwaScore += 4;
   else if (avg <= 3.0) gyogwaScore += 3;
   else if (avg <= 4.0) gyogwaScore += 1;
   else gyogwaScore += 0;
 
-  // 논술
+  if (track === 'medical' && avg <= 1.5) gyogwaScore += 1;
+
+  // 논술 (max 5)
   var nonsulScore = 0;
-  if (avg > 3.0) nonsulScore += 2;
-  if (avg > 2.0 && avg <= 4.0) nonsulScore += 1;
+  if (avg > 3.0) nonsulScore += 3;
+  else if (avg > 2.0) nonsulScore += 2;
+  else nonsulScore += 1;
   if (hasResearch) nonsulScore += 1;
+  if (hasSubjectSpecial) nonsulScore += 1;
 
   // 실기
   var silgiScore = 0;
@@ -1877,10 +1950,10 @@ function generateRecommendation() {
 
   var grid = document.getElementById('recGrid');
   var items = [
-    { name: '학생부종합전형', score: jonghapScore, max: 9 },
-    { name: '학생부교과전형', score: gyogwaScore, max: 4 },
-    { name: '논술전형', score: nonsulScore, max: 4 },
-    { name: '실기/특기전형', score: silgiScore, max: 4 }
+    { name: '학생부종합전형', score: Math.max(0, jonghapScore), max: 12 },
+    { name: '학생부교과전형', score: Math.max(0, gyogwaScore), max: 6 },
+    { name: '논술전형', score: Math.max(0, nonsulScore), max: 5 },
+    { name: '실기/특기전형', score: Math.max(0, silgiScore), max: 4 }
   ];
 
   items.sort(function(a, b) { return (b.score / b.max) - (a.score / a.max); });
@@ -2014,6 +2087,7 @@ document.querySelectorAll('.progress-dot').forEach(function(dot) {
 });
 
 // ===== INIT =====
+loadFromStorage();
 updateProgress();
 </script>
 </body>
