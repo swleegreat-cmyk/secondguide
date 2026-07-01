@@ -3410,13 +3410,14 @@ function interpolateAnchors(val, anchors, fallback) {
   return fallback;
 }
 
-function parseMinRequirement(minText, studentAvg) {
+function parseMinRequirement(minText, studentAvg, student) {
   if (!minText) return { penalty: 0, detail: '', meetRate: 100 };
   const text = String(minText);
   const avg = studentAvg || 5.0;
 
   let difficulty = 0;
   let detail = '';
+  let subjectDetail = '';
 
   const m = text.match(/(\d)개\s*합?\s*(\d+)/);
   if (m) {
@@ -3436,7 +3437,36 @@ function parseMinRequirement(minText, studentAvg) {
     }
   }
 
-  const gap = avg - difficulty;
+  let gap = avg - difficulty;
+  if (student && m) {
+    const count = parseInt(m[1]), total = parseInt(m[2]);
+    const subjAvgs = calcSubjectAvgs(student);
+    const coreSubjs = ['국어','수학','영어','사회','과학'].map(name => {
+      const found = subjAvgs.find(s => s.name === name);
+      return found ? { name, avg: found.avg } : null;
+    }).filter(Boolean).sort((a,b) => a.avg - b.avg);
+    if (coreSubjs.length >= count) {
+      const bestN = coreSubjs.slice(0, count);
+      const bestSum = bestN.reduce((s,v) => s + v.avg, 0);
+      const bestAvg = bestSum / count;
+      gap = bestAvg - (total / count);
+      subjectDetail = bestN.map(s => s.name[0] + s.avg.toFixed(1)).join('+');
+    }
+  } else if (student && !m) {
+    const m2 = text.match(/(\d)등급/);
+    if (m2) {
+      const subjAvgs = calcSubjectAvgs(student);
+      const coreSubjs = ['국어','수학','영어','사회','과학'].map(name => {
+        const found = subjAvgs.find(s => s.name === name);
+        return found ? { name, avg: found.avg } : null;
+      }).filter(Boolean).sort((a,b) => a.avg - b.avg);
+      if (coreSubjs.length > 0) {
+        gap = coreSubjs[0].avg - parseInt(m2[1]);
+        subjectDetail = coreSubjs[0].name[0] + coreSubjs[0].avg.toFixed(1);
+      }
+    }
+  }
+
   let meetRate;
   if (gap <= -2.0) meetRate = 95;
   else if (gap <= -1.0) meetRate = 88;
@@ -3451,7 +3481,7 @@ function parseMinRequirement(minText, studentAvg) {
 
   const penalty = -Math.round((100 - meetRate) * 0.15);
 
-  return { penalty, detail, meetRate, difficulty };
+  return { penalty, detail: subjectDetail ? detail + ' [' + subjectDetail + ']' : detail, meetRate, difficulty };
 }
 
 function calcOptimalPortfolio(allComps, count) {
@@ -3948,7 +3978,7 @@ function calcCompositeScore(univResult, student, analysis) {
 
   // 수능최저: parse actual requirements
   const studentAvg = calcWeightedAvg(student);
-  const minReq = parseMinRequirement(univResult.cutline?.min, studentAvg);
+  const minReq = parseMinRequirement(univResult.cutline?.min, studentAvg, student);
   const minAdj = minReq.penalty;
 
   // Reliability discount
