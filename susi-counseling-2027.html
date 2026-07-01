@@ -351,6 +351,7 @@ body {
 @media (max-width:480px) {
   .stat-grid { grid-template-columns:1fr; }
   .dash-grid { grid-template-columns:1fr !important; }
+  .tier-grid { grid-template-columns:repeat(2,1fr) !important; }
 }
 @media print {
   .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn { display:none !important; }
@@ -391,6 +392,7 @@ body {
 
 /* Dashboard specific */
 .dash-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
+.tier-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
 .dash-student {
   padding:10px; border-radius:10px; background:var(--card-solid);
   border:1px solid var(--border); text-align:center; cursor:pointer;
@@ -4005,7 +4007,8 @@ function renderSusiTab(student, analysis) {
     <input class="search-input" id="univSearch" placeholder="대학명 검색..." oninput="filterUnivResults()">
   </div>`;
   html += `<div class="sort-controls">
-    <button class="sort-btn active" data-sort="score" onclick="sortUnivResults(this,'score')">환산등급순</button>
+    <button class="sort-btn active" data-sort="prob" onclick="sortUnivResults(this,'prob')">합격확률순</button>
+    <button class="sort-btn" data-sort="score" onclick="sortUnivResults(this,'score')">환산등급순</button>
     <button class="sort-btn" data-sort="name" onclick="sortUnivResults(this,'name')">이름순</button>
     <button class="sort-btn" data-sort="reliability" onclick="sortUnivResults(this,'reliability')">신뢰도순</button>
   </div>`;
@@ -4043,19 +4046,104 @@ function renderSusiTab(student, analysis) {
   }
 
   // All results table
+  // Strategic portfolio recommendation (auto-analysis for all students)
+  const allComps = results.map(r => {
+    const comp = calcCompositeScore(r, student, analysis);
+    return { ...r, prob: comp.probability, comp };
+  }).sort((a, b) => b.prob - a.prob);
+
+  const safeUnis = allComps.filter(r => r.prob >= 65);
+  const fitUnis = allComps.filter(r => r.prob >= 40 && r.prob < 65);
+  const reachUnis = allComps.filter(r => r.prob >= 15 && r.prob < 40);
+  const hardUnis = allComps.filter(r => r.prob < 15);
+
+  html += '<div class="glass"><h3>전략적 지원 추천</h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">합격 확률, 전공적합성, 전형 유형을 종합하여 안정-적정-상향 포트폴리오를 자동 분석합니다.</p>';
+
+  html += '<div class="tier-grid">';
+  html += `<div style="padding:10px;background:var(--green-light);border-radius:8px;text-align:center">
+    <div style="font-size:22px;font-weight:800;color:var(--green)">${safeUnis.length}</div>
+    <div style="font-size:11px;color:var(--muted)">안정권 (65%+)</div></div>`;
+  html += `<div style="padding:10px;background:var(--blue-light);border-radius:8px;text-align:center">
+    <div style="font-size:22px;font-weight:800;color:var(--blue)">${fitUnis.length}</div>
+    <div style="font-size:11px;color:var(--muted)">적정 (40~64%)</div></div>`;
+  html += `<div style="padding:10px;background:var(--orange-light);border-radius:8px;text-align:center">
+    <div style="font-size:22px;font-weight:800;color:var(--orange)">${reachUnis.length}</div>
+    <div style="font-size:11px;color:var(--muted)">소신 (15~39%)</div></div>`;
+  html += `<div style="padding:10px;background:var(--red-light);border-radius:8px;text-align:center">
+    <div style="font-size:22px;font-weight:800;color:var(--red)">${hardUnis.length}</div>
+    <div style="font-size:11px;color:var(--muted)">도전 (15%↓)</div></div>`;
+  html += '</div>';
+
+  // Top recommendations per tier
+  const recommend = [];
+  const topSafe = safeUnis.slice(0, 3);
+  const topFit = fitUnis.slice(0, 3);
+  const topReach = reachUnis.slice(0, 2);
+
+  const buildRec = (items, tier, tierColor) => {
+    items.forEach(r => {
+      const fitLabel = (r.comp.fitData && r.comp.fitData.score != null) ? `적합${r.comp.fitData.score}점` : '';
+      const jeonShort = (r.jeonType || '').substring(0, 6);
+      html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')" style="border-left:3px solid ${tierColor}">
+        <span class="match-badge" style="background:${tierColor};color:#fff;min-width:32px">${tier}</span>
+        <div class="match-body">
+          <div class="univ">${esc(r.univ)}</div>
+          <div class="jeon">${esc(jeonShort)} · ${r.score.toFixed(2)}등급${fitLabel ? ' · ' + fitLabel : ''}</div>
+        </div>
+        <div class="match-num">
+          <div class="big" style="color:${tierColor}">${r.prob}%</div>
+          <div class="unit">합격 확률</div>
+        </div>
+      </div>`;
+    });
+  };
+
+  if (topSafe.length + topFit.length + topReach.length > 0) {
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:8px">추천 포트폴리오 (6지망 기준)</div>';
+    buildRec(topSafe, '안정', 'var(--green)');
+    buildRec(topFit, '적정', 'var(--blue)');
+    buildRec(topReach, '소신', 'var(--orange)');
+  }
+
+  // Strategy advice (always shown)
+  const avgWeighted = calcWeightedAvg(student);
+  let advice = '';
+  if (safeUnis.length >= 5) {
+    advice = '상위권 성적으로 주요 대학 지원이 가능합니다. 소신 지원으로 상위 대학 도전을 추천합니다.';
+  } else if (fitUnis.length >= 3) {
+    advice = '적정 범위 대학이 충분합니다. 안정 2~3교 + 적정 2교 + 소신 1교로 균형 잡힌 포트폴리오를 구성하세요.';
+  } else if (reachUnis.length >= 3) {
+    advice = '소신 지원 범위가 넓습니다. 안정권 확보를 최우선으로 하고 전공적합성이 높은 대학에 소신 지원하세요.';
+  } else {
+    advice = '안정권 확보가 중요합니다. 교과전형 위주로 안정 3~4교를 확보하고 종합전형 1~2교를 병행하세요.';
+  }
+
+  if (avgWeighted > 5.5) {
+    advice += ' 내신 평균이 높으므로 학생부종합전형에서 생기부 강점을 적극 활용하는 전략이 유효합니다.';
+  }
+
+  html += `<div style="margin-top:10px;padding:10px 14px;background:var(--cream);border-radius:10px;font-size:12px;line-height:1.6">
+    <strong>상담 포인트:</strong> ${advice}
+  </div>`;
+  html += '</div>';
+
+  // All results table with probability column
   html += '<div class="glass" id="allUnivSection"><h3>전체 대학 환산 결과 (<span id="univCount">' + results.length + '</span>개)</h3>';
   html += '<div class="scroll-table"><table class="g-table" id="univTable"><thead><tr>';
-  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
+  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
   html += '</tr></thead><tbody id="univTableBody">';
 
-  results.forEach((r, i) => {
+  allComps.forEach((r, i) => {
     const c = gradeColor(r.score);
     const relCls = r.reliability === 'high' ? 'rel-high' : r.reliability === 'medium' ? 'rel-medium' : r.reliability === 'low' ? 'rel-low' : 'rel-none';
     const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '불가';
-    html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}">
+    const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
+    html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}" data-prob="${r.prob}">
       <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
       <td style="font-size:12px">${esc(r.jeonType)}</td>
       <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
+      <td><span class="mono" style="font-weight:700;color:${pColor}">${r.prob}%</span></td>
       <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
       <td><button style="background:none;border:none;color:var(--teal-mid);cursor:pointer;font-family:inherit;font-size:12px" onclick="showUnivDetail('${esc(r.univ)}')">상세보기</button></td>
@@ -4125,6 +4213,7 @@ function sortUnivResults(btn, sortBy) {
   const tbody = document.getElementById('univTableBody');
   const rows = [...tbody.querySelectorAll('.univ-row')];
   rows.sort((a, b) => {
+    if (sortBy === 'prob') return parseFloat(b.dataset.prob||0) - parseFloat(a.dataset.prob||0);
     if (sortBy === 'score') return parseFloat(a.dataset.score) - parseFloat(b.dataset.score);
     if (sortBy === 'name') return a.dataset.univ.localeCompare(b.dataset.univ);
     if (sortBy === 'reliability') {
