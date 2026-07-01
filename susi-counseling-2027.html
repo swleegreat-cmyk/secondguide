@@ -3922,8 +3922,20 @@ function calcCompositeScore(univResult, student, analysis) {
   }
 
   const raw = Math.max(3, Math.min(99, base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus + comboBonus));
+
+  // Confidence interval: width depends on data quality and admission type
+  let ciHalf = 8;
+  if (is종합) ciHalf = 12;
+  else if (is논술) ciHalf = 14;
+  if (!univResult.cutline) ciHalf += 5;
+  if (univResult.reliability === 'none') ciHalf += 4;
+  else if (univResult.reliability === 'low') ciHalf += 2;
+  if (univResult.count && univResult.count < 10) ciHalf += 2;
+  const probLow = Math.max(1, raw - ciHalf);
+  const probHigh = Math.min(99, raw + ciHalf);
+
   return {
-    probability: raw,
+    probability: raw, probLow, probHigh,
     comboScore, comboUsed, comboAvgRef,
     trendBonus, ratioAdj, minAdj, fitBonus, comboBonus,
     reliabilityAdj, countAdj,
@@ -4724,6 +4736,7 @@ function renderSusiTab(student, analysis) {
         <div class="match-num">
           <div class="big" style="color:${pColor}">${comp.probability}%</div>
           <div class="unit">${r.score.toFixed(2)}등급 (컷 ${r.cutline.cut})</div>
+          <div style="font-size:9px;color:var(--muted)">${comp.probLow}~${comp.probHigh}%</div>
         </div>
       </div>`;
     });
@@ -5067,6 +5080,7 @@ function renderSusiTab(student, analysis) {
           <div class="match-num">
             <div class="big" style="color:${pColor}">${comp.probability}%</div>
             <div class="unit">합격 확률</div>
+            <div style="font-size:9px;color:var(--muted)">${comp.probLow}~${comp.probHigh}%</div>
           </div>
         </div>`;
       });
@@ -5306,7 +5320,7 @@ function showUnivDetail(univName) {
   html += `<h3>${esc(student.name)} 학생의 환산 결과</h3>`;
   html += `<div class="stat-grid">`;
   html += `<div class="stat-box"><div class="num" style="color:${gradeColor(result.score)}">${result.score.toFixed(2)}</div><div class="label">환산등급</div></div>`;
-  html += `<div class="stat-box"><div class="num" style="color:${pColor};font-size:28px">${comp.probability}%</div><div class="label">종합 합격 확률</div></div>`;
+  html += `<div class="stat-box"><div class="num" style="color:${pColor};font-size:28px">${comp.probability}%</div><div class="label">종합 합격 확률</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${comp.probLow}~${comp.probHigh}% 범위</div></div>`;
   html += `<div class="stat-box"><div class="num">${result.count}</div><div class="label">반영과목수</div></div>`;
 
   if (result.cutline) {
@@ -5362,7 +5376,7 @@ function showUnivDetail(univName) {
     </div>`;
   });
   html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700">
-    <span>종합 합격 확률</span><span style="color:${pColor}">${comp.probability}%</span>
+    <span>종합 합격 확률</span><span style="color:${pColor}">${comp.probability}% <span style="font-size:10px;font-weight:400;color:var(--muted)">(${comp.probLow}~${comp.probHigh}%)</span></span>
   </div>`;
   html += '</div>';
 
@@ -6320,12 +6334,12 @@ th{background:#f5f5f0;font-weight:700}
     report += '</div>';
   }
 
-  report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>모델</th><th>티어</th></tr>';
+  report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>신뢰범위</th><th>모델</th><th>티어</th></tr>';
   const tierLabel = {1:'최상위',2:'상위',3:'중상위',4:'중위'};
   allComps.slice(0, 20).forEach((r, i) => {
     const cls = r.prob >= 65 ? 'safe' : r.prob >= 40 ? 'fit' : r.prob >= 15 ? 'reach' : '';
     const modelLabel = r.comp.is종합 ? '종합' : r.comp.is논술 ? '논술' : '교과';
-    report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td>${r.score.toFixed(2)}</td><td class="${cls}">${r.prob}%</td><td style="font-size:10px">${modelLabel}</td><td style="font-size:10px">${tierLabel[r.comp.tier]||'중위'}</td></tr>`;
+    report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td>${r.score.toFixed(2)}</td><td class="${cls}">${r.prob}%</td><td style="font-size:10px;color:#999">${r.comp.probLow}~${r.comp.probHigh}%</td><td style="font-size:10px">${modelLabel}</td><td style="font-size:10px">${tierLabel[r.comp.tier]||'중위'}</td></tr>`;
   });
   report += '</table>';
 
