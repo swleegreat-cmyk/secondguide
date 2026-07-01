@@ -6158,8 +6158,29 @@ function renderMemoTab(student) {
   const memoKey = `memo_${student.seat}`;
   const studentMemos = memos[memoKey] || [];
 
+  const analysis = ANALYSIS[student.seat] || {};
+  const avg = calcWeightedAvg(student);
+  const ra = analyzeRecord(student, analysis);
+  const trend = calcYearlyTrend(student);
+  const trendDir = trend.length >= 2 ? trend[trend.length-1].avg - trend[0].avg : 0;
+
   let html = '<div class="glass"><h3>상담 메모</h3>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">이 학생에 대한 상담 메모를 기록하세요. 데이터는 브라우저에만 저장됩니다.</p>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:8px">이 학생에 대한 상담 메모를 기록하세요. 데이터는 브라우저에만 저장됩니다.</p>';
+
+  // Quick template buttons
+  const templates = [
+    { label: '진로 상담', text: `[진로 상담] ${student.name} - 현재 진로: ${ra.concept || '미정'}. 진로 방향에 대해 논의함. ` },
+    { label: '성적 상담', text: `[성적 상담] ${student.name} - 평균 ${avg.toFixed(2)}등급${trendDir < -0.3 ? ' (상승세)' : trendDir > 0.3 ? ' (하락세, 원인 파악 필요)' : ''}. ` },
+    { label: '수시 전략', text: `[수시 전략] ${student.name} - 안정/적정/소신 배분 논의. 추천 전형: ${calcAdmissionStrategy(student, analysis).strategy}. ` },
+    { label: '면접 준비', text: `[면접 준비] ${student.name} - ${ra.concept || '진로'} 관련 면접 예상 질문 점검. ` },
+    { label: '학부모 상담', text: `[학부모 상담] ${student.name} 학부모 - 평균 ${avg.toFixed(2)}등급, 학급 내 위치 설명. ` }
+  ];
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">';
+  templates.forEach((t, i) => {
+    html += `<button onclick="document.getElementById('memoInput').value=decodeURIComponent('${encodeURIComponent(t.text)}');document.getElementById('memoInput').focus()" style="padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);font-size:10px;cursor:pointer;font-family:inherit;color:var(--sub)">${esc(t.label)}</button>`;
+  });
+  html += '</div>';
+
   html += `<textarea class="memo-input" id="memoInput" placeholder="상담 내용을 입력하세요..."></textarea>`;
   html += `<button class="memo-save" onclick="saveMemo()">메모 저장</button>`;
   html += '</div>';
@@ -6177,8 +6198,6 @@ function renderMemoTab(student) {
   }
 
   // Quick summary card
-  const analysis = ANALYSIS[student.seat] || {};
-  const avg = calcWeightedAvg(student);
   html += '<div class="glass"><h3>상담 요약 카드</h3>';
   html += '<div style="font-size:13px;line-height:2">';
   html += `<div><strong>학생:</strong> ${student.seat}번 ${esc(student.name)}</div>`;
