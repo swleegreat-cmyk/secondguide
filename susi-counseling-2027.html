@@ -2961,7 +2961,8 @@ function runAllUniversities(student) {
           count: result.반영과목수 || 0,
           note: result.note || '',
           cutline, diff, band, hasInterviews,
-          warnings: result.warnings || []
+          warnings: result.warnings || [],
+          reflect: cutline ? cutline.reflect : null
         });
       }
     } catch(e) {}
@@ -3156,9 +3157,6 @@ function analyzeRecord(student, analysis) {
 
 // 전공적합성 vs 학업역량 tagging
 function getUnivCharacter(univName, ruleType) {
-  const 종합전형키워드 = ['종합','서류','면접','잠재','발전','인재'];
-  const 교과전형키워드 = ['교과','성적','등급','상위N'];
-
   let character = '학업역량 중심';
   if (ruleType.includes('전과목') || ruleType.includes('가중평균')) {
     character = '학업역량 중심 (전과목 반영)';
@@ -3168,6 +3166,163 @@ function getUnivCharacter(univName, ruleType) {
     character = '복합 평가 (세부규칙 확인 필요)';
   }
   return character;
+}
+
+function matchReflectCombo(reflectStr) {
+  if (!reflectStr) return null;
+  const r = reflectStr.replace(/\s/g,'');
+  for (const combo of COMBO_ORDER) {
+    if (r === combo) return combo;
+  }
+  const partial = {
+    '전교과': '전교과',
+    '국수영사과': '국수영사과', '국수영사': '국수영사', '국수영과': '국수영과',
+    '국수영': '국수영', '국영사': '국영사', '수영과': '수영과', '수과': '수과'
+  };
+  for (const [k, v] of Object.entries(partial)) {
+    if (r.includes(k)) return v;
+  }
+  return null;
+}
+
+function calcRecordDensity(student) {
+  const domains = {};
+  let total = 0;
+  student.records.forEach(r => {
+    if (r.t !== '세부능력및특기사항' || !r.b) return;
+    const len = r.b.length;
+    total += len;
+    const key = r.c || '기타';
+    if (!domains[key]) domains[key] = { chars: 0, count: 0 };
+    domains[key].chars += len;
+    domains[key].count++;
+  });
+  const sorted = Object.entries(domains)
+    .map(([k, v]) => ({ subject: k, chars: v.chars, count: v.count }))
+    .sort((a, b) => b.chars - a.chars);
+  return { total, bySubject: sorted, avgPerRecord: total / Math.max(1, sorted.reduce((s,d)=>s+d.count,0)) };
+}
+
+function calcFitScore(student, analysis, concept) {
+  let score = 0;
+  let factors = [];
+
+  if (analysis && analysis.career_flow && analysis.career_flow.length > 0) {
+    const careers = analysis.career_flow.map(([y,c]) => c);
+    const allSame = careers.every(c => c === careers[0]);
+    if (allSame) { score += 25; factors.push({label:'진로 일관성', val:25, note:'3년 동일'}); }
+    else if (careers.length >= 2 && careers[careers.length-1] === careers[careers.length-2]) {
+      score += 15; factors.push({label:'진로 일관성', val:15, note:'최근 2년 동일'});
+    } else { score += 5; factors.push({label:'진로 일관성', val:5, note:'진로 변화 있음'}); }
+  }
+
+  const density = calcRecordDensity(student);
+  if (density.avgPerRecord >= 300) { score += 20; factors.push({label:'기록 충실도', val:20, note:'풍부 (평균 '+Math.round(density.avgPerRecord)+'자)'}); }
+  else if (density.avgPerRecord >= 150) { score += 12; factors.push({label:'기록 충실도', val:12, note:'보통 (평균 '+Math.round(density.avgPerRecord)+'자)'}); }
+  else { score += 5; factors.push({label:'기록 충실도', val:5, note:'부족 (평균 '+Math.round(density.avgPerRecord)+'자)'}); }
+
+  if (analysis && analysis.str && analysis.str.length > 0) {
+    const strScore = Math.min(20, analysis.str.length * 7);
+    score += strScore;
+    factors.push({label:'강점 교과', val:strScore, note:analysis.str.length+'개'});
+  }
+
+  let activityScore = 0;
+  const actTypes = new Set();
+  student.records.forEach(r => {
+    if (!r.b) return;
+    if (r.b.includes('탐구') || r.b.includes('연구') || r.b.includes('실험')) actTypes.add('탐구');
+    if (r.b.includes('발표') || r.b.includes('프레젠테이션')) actTypes.add('발표');
+    if (r.b.includes('토론') || r.b.includes('토의')) actTypes.add('토론');
+    if (r.b.match(/['「《][^'」》]{2,}/)) actTypes.add('독서');
+    if (r.b.includes('봉사') || r.b.includes('멘토링')) actTypes.add('봉사');
+    if (r.b.includes('프로젝트') || r.b.includes('과제연구')) actTypes.add('프로젝트');
+  });
+  activityScore = Math.min(20, actTypes.size * 4);
+  score += activityScore;
+  factors.push({label:'활동 다양성', val:activityScore, note:actTypes.size+'종류 ('+[...actTypes].join(', ')+')'});
+
+  if (student.opinions.length > 0) {
+    let opScore = 0;
+    student.opinions.forEach(o => {
+      if (o.b.length >= 400) opScore += 5;
+      else if (o.b.length >= 200) opScore += 3;
+      else opScore += 1;
+    });
+    opScore = Math.min(15, opScore);
+    score += opScore;
+    factors.push({label:'행특 기록', val:opScore, note:student.opinions.length+'개 학년'});
+  }
+
+  return { score: Math.min(100, score), factors };
+}
+
+function calcCompositeScore(univResult, student, analysis) {
+  if (!univResult) return null;
+  const combo = matchReflectCombo(univResult.cutline?.reflect || '');
+  const combos = calcComboScores(student);
+
+  let comboScore = univResult.score;
+  let comboUsed = null;
+  if (combo && combos[combo]) {
+    comboScore = combos[combo].avg;
+    comboUsed = combo;
+  }
+
+  let base = 0;
+  if (univResult.cutline) {
+    const diff = comboScore - univResult.cutline.cut;
+    if (diff <= -1.5) base = 95;
+    else if (diff <= -0.8) base = 85;
+    else if (diff <= -0.3) base = 70;
+    else if (diff <= 0) base = 55;
+    else if (diff <= 0.5) base = 40;
+    else if (diff <= 1.0) base = 25;
+    else base = 10;
+  } else {
+    if (comboScore <= 2.0) base = 65;
+    else if (comboScore <= 3.0) base = 50;
+    else if (comboScore <= 4.0) base = 35;
+    else if (comboScore <= 5.0) base = 25;
+    else base = 15;
+  }
+
+  const trend = calcYearlyTrend(student);
+  let trendBonus = 0;
+  if (trend.length >= 2) {
+    const first = trend[0].avg, last = trend[trend.length-1].avg;
+    const diff = last - first;
+    if (diff < -0.5) trendBonus = 5;
+    else if (diff > 0.5) trendBonus = -5;
+  }
+
+  let ratioAdj = 0;
+  if (univResult.cutline && univResult.cutline.ratio) {
+    const r = parseFloat(univResult.cutline.ratio);
+    if (!isNaN(r)) {
+      if (r > 10) ratioAdj = -3;
+      else if (r > 7) ratioAdj = -1;
+      else if (r < 4) ratioAdj = 2;
+    }
+  }
+
+  let minAdj = 0;
+  if (univResult.cutline && univResult.cutline.min) minAdj = -5;
+
+  const concept = analyzeRecord(student, analysis || {}).concept;
+  const fitData = calcFitScore(student, analysis || {}, concept);
+  const jeonType = univResult.jeonType || '';
+  const is종합 = jeonType.includes('종합') || jeonType.includes('서류') || jeonType.includes('면접');
+  const fitBonus = is종합 ? Math.round(fitData.score * 0.1) : Math.round(fitData.score * 0.03);
+
+  const raw = Math.max(5, Math.min(99, base + trendBonus + ratioAdj + minAdj + fitBonus));
+  return {
+    probability: raw,
+    comboScore, comboUsed,
+    trendBonus, ratioAdj, minAdj, fitBonus,
+    fitData,
+    is종합
+  };
 }
 
 // ═══════════════════════════════════════════════
@@ -3320,6 +3475,8 @@ function renderProfileHeader(student, analysis) {
   let chips = `<span class="chip chip-teal">평균 ${avg.toFixed(2)}등급</span>`;
   if (analysis.str && analysis.str.length) chips += `<span class="chip chip-green">강점: ${esc(analysis.str.join(', '))}</span>`;
   if (latestCareer) chips += `<span class="chip chip-copper">${esc(latestCareer)}</span>`;
+  const fitData = calcFitScore(student, analysis, null);
+  chips += `<span class="chip" style="background:${fitData.score >= 60 ? 'var(--green-light)' : fitData.score >= 35 ? 'var(--blue-light)' : 'var(--orange-light)'};color:${fitData.score >= 60 ? 'var(--green)' : fitData.score >= 35 ? 'var(--blue)' : 'var(--orange)'}">전공적합성 ${fitData.score}점</span>`;
 
   el.innerHTML = `<div class="profile-header">
     <div class="profile-avatar">${student.seat}</div>
@@ -3488,21 +3645,25 @@ function renderSusiTab(student, analysis) {
   </div>`;
   html += '</div>';
 
-  // Cutline matches (top section)
+  // Cutline matches (top section) with composite probability
   const cutlineResults = results.filter(r => r.cutline);
   if (cutlineResults.length > 0) {
     html += '<div class="glass"><h3>합격 가능성 분석 (컷라인 비교)</h3>';
+    html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">내신 환산, 경쟁률, 성적 추세, 전공적합성을 종합한 합격 확률 예측입니다.</p>';
     cutlineResults.forEach(r => {
       const b = r.band;
+      const comp = calcCompositeScore(r, student, analysis);
+      const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
+      const comboLabel = comp.comboUsed ? ` · 반영: ${comp.comboUsed}` : '';
       html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')">
         <span class="match-badge ${b.cls}">${b.label}</span>
         <div class="match-body">
           <div class="univ">${esc(r.univ)}</div>
-          <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}</div>
+          <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}${comboLabel}</div>
         </div>
         <div class="match-num">
-          <div class="big" style="color:${b.color}">${r.score.toFixed(2)}</div>
-          <div class="unit">컷 ${r.cutline.cut} (차이 ${r.diff > 0 ? '+' : ''}${r.diff.toFixed(2)})</div>
+          <div class="big" style="color:${pColor}">${comp.probability}%</div>
+          <div class="unit">${r.score.toFixed(2)}등급 (컷 ${r.cutline.cut})</div>
         </div>
       </div>`;
     });
@@ -3546,6 +3707,29 @@ function renderSusiTab(student, analysis) {
       html += `<div style="padding:12px;background:var(--cream);border-radius:10px;font-size:13px;margin-bottom:10px">
         포트폴리오 구성: 안정 ${safe}교 / 적정 ${fit}교 / 소신·상향 ${bold}교 —
         ${safe >= 1 && fit >= 1 ? '균형 잡힌 구성입니다.' : '안정권 대학 추가를 권장합니다.'}
+      </div>`;
+
+      favResults.forEach(r => {
+        const comp = calcCompositeScore(r, student, analysis);
+        const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
+        const b = r.band || { label: '-', color: 'var(--muted)' };
+        html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')">
+          <span class="match-badge ${b.cls || ''}">${b.label}</span>
+          <div class="match-body">
+            <div class="univ">${esc(r.univ)}</div>
+            <div class="jeon">${esc(r.jeonType)} · ${r.score.toFixed(2)}등급${comp.comboUsed ? ' · 반영: ' + comp.comboUsed : ''}</div>
+          </div>
+          <div class="match-num">
+            <div class="big" style="color:${pColor}">${comp.probability}%</div>
+            <div class="unit">합격 확률</div>
+          </div>
+        </div>`;
+      });
+
+      const avgProb = Math.round(favResults.reduce((s, r) => s + calcCompositeScore(r, student, analysis).probability, 0) / favResults.length);
+      html += `<div style="margin-top:10px;padding:10px 14px;background:var(--teal-light);border-radius:10px;font-size:13px;text-align:center">
+        포트폴리오 평균 합격 확률: <strong style="color:var(--teal);font-size:18px">${avgProb}%</strong>
+        ${avgProb >= 55 ? ' — 긍정적 전망' : avgProb >= 35 ? ' — 보통 전망 (안정권 추가 권장)' : ' — 도전적 구성 (안정권 추가 필수)'}
       </div>`;
     }
     html += '</div>';
@@ -3626,19 +3810,34 @@ function showUnivDetail(univName) {
   }
   html += '</div>';
 
+  // Composite score calculation
+  const comp = calcCompositeScore(result, student, analysis);
+  const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
+
   // Student's converted score
   html += '<div class="glass" style="box-shadow:none;margin-bottom:12px">';
   html += `<h3>${esc(student.name)} 학생의 환산 결과</h3>`;
   html += `<div class="stat-grid">`;
   html += `<div class="stat-box"><div class="num" style="color:${gradeColor(result.score)}">${result.score.toFixed(2)}</div><div class="label">환산등급</div></div>`;
+  html += `<div class="stat-box"><div class="num" style="color:${pColor};font-size:28px">${comp.probability}%</div><div class="label">종합 합격 확률</div></div>`;
   html += `<div class="stat-box"><div class="num">${result.count}</div><div class="label">반영과목수</div></div>`;
 
   if (result.cutline) {
     const b = result.band;
     html += `<div class="stat-box"><div class="num" style="color:${b.color}">${b.label}</div><div class="label">합격 판정</div></div>`;
-    html += `<div class="stat-box"><div class="num">${result.cutline.ratio}</div><div class="label">경쟁률</div></div>`;
   }
   html += '</div>';
+
+  // Combo-matched score
+  if (comp.comboUsed) {
+    const comboAvg = comp.comboScore;
+    const comboColor = gradeColor(comboAvg);
+    html += `<div style="padding:12px;background:var(--blue-light);border-radius:10px;font-size:13px;margin-top:8px">
+      <strong>반영 교과 조합:</strong> <span style="font-weight:700;color:var(--blue)">${esc(comp.comboUsed)}</span> →
+      <strong>조합 평균:</strong> <span class="mono" style="font-weight:700;color:${comboColor}">${comboAvg.toFixed(2)}등급</span>
+      ${result.score !== comboAvg ? ` (엔진 환산: ${result.score.toFixed(2)})` : ''}
+    </div>`;
+  }
 
   // Cutline comparison
   if (result.cutline) {
@@ -3646,8 +3845,32 @@ function showUnivDetail(univName) {
       <strong>등급컷:</strong> ${result.cutline.cut}등급 (${esc(result.cutline.source)}) ·
       <strong>차이:</strong> ${result.diff > 0 ? '+' : ''}${result.diff.toFixed(2)}등급
       ${result.cutline.min ? ' · <strong>수능최저:</strong> ' + esc(result.cutline.min) : ''}
+      ${result.cutline.ratio ? ' · <strong>경쟁률:</strong> ' + esc(result.cutline.ratio) : ''}
     </div>`;
   }
+
+  // Probability breakdown
+  html += '<div style="margin-top:10px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px">';
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--sub)">합격 확률 산출 근거</div>';
+  const factors = [
+    {label:'내신 환산 기반', val: result.cutline ? (comp.probability - comp.trendBonus - comp.ratioAdj - comp.minAdj - comp.fitBonus) : comp.probability - comp.trendBonus - comp.fitBonus},
+  ];
+  if (comp.trendBonus !== 0) factors.push({label:'성적 추세', val:comp.trendBonus, note: comp.trendBonus>0?'상승세':'하락세'});
+  if (comp.ratioAdj !== 0) factors.push({label:'경쟁률 보정', val:comp.ratioAdj, note: comp.ratioAdj>0?'낮은 경쟁':'높은 경쟁'});
+  if (comp.minAdj !== 0) factors.push({label:'수능최저 감점', val:comp.minAdj, note:'수능최저 충족 필요'});
+  if (comp.fitBonus !== 0) factors.push({label: comp.is종합 ? '전공적합성(종합전형)' : '전공적합성(교과전형)', val:comp.fitBonus});
+  factors.forEach(f => {
+    const sign = f.val > 0 ? '+' : '';
+    const fc = f.val > 0 ? 'var(--green)' : f.val < 0 ? 'var(--red)' : 'var(--sub)';
+    html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+      <span>${esc(f.label)}${f.note ? ' <span style="color:var(--muted)">(' + esc(f.note) + ')</span>' : ''}</span>
+      <span style="color:${fc};font-weight:600">${typeof f.val === 'number' && f.label !== '내신 환산 기반' ? sign + f.val + '%p' : f.val + '%p'}</span>
+    </div>`;
+  });
+  html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700">
+    <span>종합 합격 확률</span><span style="color:${pColor}">${comp.probability}%</span>
+  </div>`;
+  html += '</div>';
 
   // Warnings
   if (result.warnings && result.warnings.length > 0) {
@@ -3661,20 +3884,77 @@ function showUnivDetail(univName) {
 
   // 전공적합성 vs 학업역량 analysis
   html += '<div class="glass" style="box-shadow:none;margin-bottom:12px">';
-  html += '<h3>전공적합성 vs 학업역량 분석</h3>';
   const character = getUnivCharacter(univName, result.ruleType);
   const recordAnalysis = analyzeRecord(student, analysis);
 
-  if (character.includes('전과목')) {
-    html += `<div class="insight-item">이 대학은 <strong>전과목을 반영</strong>하므로 학업역량(전체 성적)이 중요합니다.
-      ${student.name} 학생의 전교과 평균은 ${calcWeightedAvg(student).toFixed(2)}등급입니다.</div>`;
-  } else if (character.includes('선택형')) {
-    html += `<div class="insight-item">이 대학은 <strong>유리한 과목을 선택</strong>하여 반영하므로, 강점 교과가 명확한 학생에게 유리합니다.
-      ${analysis.str ? esc(student.name) + ' 학생의 강점: ' + esc(analysis.str.join(', ')) : ''}</div>`;
+  if (comp.is종합) {
+    html += '<h3>전공적합성 분석 (종합전형)</h3>';
+    html += `<p style="font-size:11px;color:var(--muted);margin-bottom:10px">이 대학은 서류/면접 전형으로, 전공적합성이 합격에 큰 영향을 미칩니다.</p>`;
+
+    // Fit score visualization
+    const fitData = comp.fitData;
+    html += `<div style="text-align:center;margin:12px 0">
+      <div style="display:inline-block;position:relative;width:100px;height:100px">
+        <svg viewBox="0 0 100 100" style="transform:rotate(-90deg);width:100px;height:100px">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" stroke-width="8"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}" stroke-width="8" stroke-dasharray="${fitData.score * 2.64} 264" stroke-linecap="round"/>
+        </svg>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:800;color:${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}">${fitData.score}</div>
+      </div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px">전공적합성 점수 (100점 만점)</div>
+    </div>`;
+
+    fitData.factors.forEach(f => {
+      const barW = Math.max(5, f.val / (f.label.includes('일관성') ? 25 : 20) * 100);
+      const fc = f.val >= 15 ? 'var(--green)' : f.val >= 8 ? 'var(--blue)' : 'var(--orange)';
+      html += `<div style="margin:4px 0;font-size:12px">
+        <div style="display:flex;justify-content:space-between"><span>${esc(f.label)}</span><span style="color:var(--muted)">${esc(f.note || '')}</span></div>
+        <div style="height:6px;background:var(--border);border-radius:3px;margin-top:2px"><div style="height:100%;width:${barW}%;background:${fc};border-radius:3px"></div></div>
+      </div>`;
+    });
+  } else {
+    html += '<h3>학업역량 분석 (교과전형)</h3>';
+    if (character.includes('전과목')) {
+      html += `<div class="insight-item">이 대학은 <strong>전과목을 반영</strong>하므로 학업역량(전체 성적)이 중요합니다.
+        ${student.name} 학생의 전교과 평균은 ${calcWeightedAvg(student).toFixed(2)}등급입니다.</div>`;
+    } else if (character.includes('선택형')) {
+      html += `<div class="insight-item">이 대학은 <strong>유리한 과목을 선택</strong>하여 반영하므로, 강점 교과가 명확한 학생에게 유리합니다.
+        ${analysis.str ? esc(student.name) + ' 학생의 강점: ' + esc(analysis.str.join(', ')) : ''}</div>`;
+    }
+  }
+
+  // Student advantage/disadvantage bullets
+  html += '<h4 style="margin-top:12px;font-size:13px;font-weight:700">유리·불리 분석</h4>';
+  const advantages = [], disadvantages = [];
+  if (result.cutline) {
+    if (result.diff <= -0.5) advantages.push(`등급컷 대비 ${Math.abs(result.diff).toFixed(2)}등급 우위 — 안정적 합격 가능`);
+    else if (result.diff > 0.5) disadvantages.push(`등급컷 대비 ${result.diff.toFixed(2)}등급 부족 — 성적 보완 필요`);
+  }
+  if (comp.trendBonus > 0) advantages.push('성적 상승 추세 — 잠재력 어필 가능');
+  else if (comp.trendBonus < 0) disadvantages.push('성적 하락 추세 — 면접에서 변명 준비 필요');
+  if (analysis.str && analysis.str.length >= 2) advantages.push('강점 교과 ' + analysis.str.length + '개 — 교과 세특에서 전문성 어필 가능');
+  if (analysis.wk && analysis.wk.length >= 2) disadvantages.push('약점 교과 ' + analysis.wk.length + '개 — 약점 보완 노력 설명 준비 필요');
+  if (recordAnalysis.concept) advantages.push(`진로 분야 '${recordAnalysis.concept}' 명확 — 학과 선택 근거 확보`);
+  if (result.cutline && result.cutline.min) disadvantages.push('수능최저 충족 필요 — 수능 대비도 병행해야 함');
+  if (comp.is종합 && comp.fitData.score >= 60) advantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 경쟁력 양호`);
+  else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 보완 필요`);
+
+  if (advantages.length) {
+    advantages.forEach(a => {
+      html += `<div style="padding:6px 12px;margin:4px 0;background:var(--green-light);border-radius:6px;font-size:12px;color:var(--green)">▲ ${esc(a)}</div>`;
+    });
+  }
+  if (disadvantages.length) {
+    disadvantages.forEach(d => {
+      html += `<div style="padding:6px 12px;margin:4px 0;background:var(--red-light);border-radius:6px;font-size:12px;color:var(--red)">▼ ${esc(d)}</div>`;
+    });
+  }
+  if (!advantages.length && !disadvantages.length) {
+    html += '<div style="font-size:12px;color:var(--muted)">추가 분석 데이터가 부족합니다.</div>';
   }
 
   if (recordAnalysis.concept) {
-    html += `<div class="insight-item">학생의 주요 관심 분야: <strong>${esc(recordAnalysis.concept)}</strong>
+    html += `<div class="insight-item" style="margin-top:8px">학생의 주요 관심 분야: <strong>${esc(recordAnalysis.concept)}</strong>
       ${recordAnalysis.themes.length > 1 ? ' (부차: ' + recordAnalysis.themes.slice(1).map(t => esc(t)).join(', ') + ')' : ''}</div>`;
   }
   html += '</div>';
@@ -3975,9 +4255,13 @@ function renderMemoTab(student) {
   if (top5.length > 0) {
     html += '<div style="margin-top:12px"><strong>상위 5개 대학 매칭:</strong></div>';
     top5.forEach(r => {
-      html += `<div style="padding:4px 0">· ${esc(r.univ)} — ${r.score.toFixed(2)}등급${r.band ? ' (' + r.band.label + ')' : ''}</div>`;
+      const comp = calcCompositeScore(r, student, analysis);
+      html += `<div style="padding:4px 0">· ${esc(r.univ)} — ${r.score.toFixed(2)}등급${r.band ? ' (' + r.band.label + ')' : ''} · <strong>${comp.probability}%</strong></div>`;
     });
   }
+  // Fit score for print
+  const printFit = calcFitScore(student, analysis, null);
+  html += `<div style="margin-top:8px"><strong>전공적합성:</strong> ${printFit.score}점/100점</div>`;
   html += '</div>';
   html += `<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;border:none;border-radius:8px;background:var(--teal);color:#fff;font-family:inherit;font-size:13px;cursor:pointer">인쇄</button>`;
   html += '</div>';
