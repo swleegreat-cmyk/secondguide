@@ -2895,7 +2895,7 @@ let univResults = [];
 let favorites = JSON.parse(localStorage.getItem('susi27_favs') || '{}');
 let memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
 const _cache = { record: {}, fit: {}, combo: {}, avg: {}, trend: {} };
-function clearCache() { Object.keys(_cache).forEach(k => _cache[k] = {}); }
+function clearCache() { Object.keys(_cache).forEach(k => { if (typeof _cache[k] === 'object') _cache[k] = {}; else delete _cache[k]; }); _cache.heatmap = null; _cache.classPortfolio = null; _cache.studentUnivProbs = null; }
 
 // ═══════════════════════════════════════════════
 // CORE CALCULATIONS
@@ -3376,26 +3376,48 @@ function interpolateAnchors(val, anchors, fallback) {
   return fallback;
 }
 
-function parseMinRequirement(minText) {
-  if (!minText) return { penalty: 0, detail: '' };
+function parseMinRequirement(minText, studentAvg) {
+  if (!minText) return { penalty: 0, detail: '', meetRate: 100 };
   const text = String(minText);
+  const avg = studentAvg || 5.0;
+
+  let difficulty = 0;
+  let detail = '';
+
   const m = text.match(/(\d)개\s*합?\s*(\d+)/);
   if (m) {
     const count = parseInt(m[1]), total = parseInt(m[2]);
     const avgRequired = total / count;
-    if (avgRequired <= 2.5) return { penalty: -7, detail: `${count}개합${total} (평균 ${avgRequired.toFixed(1)}등급)` };
-    if (avgRequired <= 3.5) return { penalty: -5, detail: `${count}개합${total} (평균 ${avgRequired.toFixed(1)}등급)` };
-    if (avgRequired <= 4.5) return { penalty: -3, detail: `${count}개합${total} (평균 ${avgRequired.toFixed(1)}등급)` };
-    return { penalty: -2, detail: `${count}개합${total} (평균 ${avgRequired.toFixed(1)}등급)` };
+    detail = `${count}개합${total} (평균 ${avgRequired.toFixed(1)}등급)`;
+    difficulty = avgRequired;
+  } else {
+    const m2 = text.match(/(\d)등급/);
+    if (m2) {
+      const grade = parseInt(m2[1]);
+      detail = `${grade}등급 이내`;
+      difficulty = grade;
+    } else {
+      difficulty = 3.5;
+      detail = text;
+    }
   }
-  const m2 = text.match(/(\d)등급/);
-  if (m2) {
-    const grade = parseInt(m2[1]);
-    if (grade <= 2) return { penalty: -6, detail: `${grade}등급 이내` };
-    if (grade <= 3) return { penalty: -4, detail: `${grade}등급 이내` };
-    return { penalty: -2, detail: `${grade}등급 이내` };
-  }
-  return { penalty: -4, detail: text };
+
+  const gap = avg - difficulty;
+  let meetRate;
+  if (gap <= -2.0) meetRate = 95;
+  else if (gap <= -1.0) meetRate = 88;
+  else if (gap <= -0.5) meetRate = 80;
+  else if (gap <= 0) meetRate = 70;
+  else if (gap <= 0.5) meetRate = 55;
+  else if (gap <= 1.0) meetRate = 40;
+  else if (gap <= 1.5) meetRate = 28;
+  else if (gap <= 2.0) meetRate = 18;
+  else if (gap <= 3.0) meetRate = 10;
+  else meetRate = 5;
+
+  const penalty = -Math.round((100 - meetRate) * 0.15);
+
+  return { penalty, detail, meetRate, difficulty };
 }
 
 function calcOptimalPortfolio(allComps, count) {
@@ -3856,7 +3878,8 @@ function calcCompositeScore(univResult, student, analysis) {
   }
 
   // 수능최저: parse actual requirements
-  const minReq = parseMinRequirement(univResult.cutline?.min);
+  const studentAvg = calcWeightedAvg(student);
+  const minReq = parseMinRequirement(univResult.cutline?.min, studentAvg);
   const minAdj = minReq.penalty;
 
   // Reliability discount
@@ -3900,7 +3923,7 @@ function calcCompositeScore(univResult, student, analysis) {
     comboScore, comboUsed, comboAvgRef,
     trendBonus, ratioAdj, minAdj, fitBonus, comboBonus,
     reliabilityAdj, countAdj,
-    fitData,
+    fitData, minReq,
     is종합, is논술, tier
   };
 }
@@ -4870,6 +4893,46 @@ function renderSusiTab(student, analysis) {
       ${optPortfolio.riskAdvice}
     </div>`;
 
+    // Classmate competition: use heatmap cache to avoid recalculating for all students
+    const portUnivs = optPortfolio.picks.map(p => p.univ);
+    if (!_cache.studentUnivProbs) {
+      _cache.studentUnivProbs = {};
+      STUDENTS.forEach((s2, idx2) => {
+        const a2 = ANALYSIS[s2.seat] || {};
+        const r2 = runAllUniversities(s2);
+        const probs = {};
+        r2.forEach(r => {
+          const c2 = calcCompositeScore(r, s2, a2);
+          if (c2.probability >= 30) probs[r.univ] = c2.probability;
+        });
+        _cache.studentUnivProbs[idx2] = probs;
+      });
+    }
+    const competitors = [];
+    STUDENTS.forEach((s2, idx2) => {
+      if (idx2 === selectedIdx) return;
+      const probs = _cache.studentUnivProbs[idx2] || {};
+      const overlaps = [];
+      portUnivs.forEach(u => {
+        if (probs[u]) overlaps.push({ univ: u, prob: probs[u] });
+      });
+      if (overlaps.length >= 2) competitors.push({ name: s2.name, seat: s2.seat, idx: idx2, overlaps });
+    });
+
+    if (competitors.length > 0) {
+      competitors.sort((a, b) => b.overlaps.length - a.overlaps.length);
+      html += `<div style="margin-top:8px;padding:8px 10px;background:var(--purple-light);border-radius:6px;font-size:11px">
+        <div style="font-weight:700;color:var(--purple);margin-bottom:4px">학급 내 지원 경합 (${competitors.length}명)</div>`;
+      competitors.slice(0, 5).forEach(c => {
+        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;cursor:pointer" onclick="selectStudent(${c.idx})">
+          <span>${c.seat}번 ${esc(c.name)}</span>
+          <span style="color:var(--muted)">${c.overlaps.map(o => esc(o.univ) + '(' + o.prob + '%)').join(', ')}</span>
+        </div>`;
+      });
+      if (competitors.length > 5) html += `<div style="color:var(--muted)">+${competitors.length - 5}명 더</div>`;
+      html += '</div>';
+    }
+
     html += '</div>';
   }
 
@@ -5191,7 +5254,7 @@ function showUnivDetail(univName) {
   ];
   if (comp.trendBonus !== 0) factors.push({label:'성적 추세', val:comp.trendBonus, note: comp.trendBonus>0?'상승세 (최근 학기 가중)':'하락세 (최근 학기 가중)'});
   if (comp.ratioAdj !== 0) factors.push({label:'경쟁률 보정', val:comp.ratioAdj, note: comp.ratioAdj>0?'낮은 경쟁':'높은 경쟁'});
-  if (comp.minAdj !== 0) factors.push({label:'수능최저 감점', val:comp.minAdj, note:'수능최저 충족 필요'});
+  if (comp.minAdj !== 0) factors.push({label:'수능최저 충족률', val:comp.minAdj, note: comp.minReq ? `충족 예상 ${comp.minReq.meetRate}% (${comp.minReq.detail})` : '수능최저 충족 필요'});
   if (comp.reliabilityAdj) factors.push({label:'환산 신뢰도', val:comp.reliabilityAdj, note:'환산 정확도 낮음'});
   if (comp.countAdj) factors.push({label:'반영과목 부족', val:comp.countAdj, note:'과목 수 부족'});
   if (comp.comboBonus) factors.push({label:'반영교과 보정', val:comp.comboBonus, note: comp.comboBonus>0?'반영교과 유리':'반영교과 불리'});
