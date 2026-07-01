@@ -4022,14 +4022,14 @@ function getCounselingRecommendation(comp, univResult) {
   else { category = '도전 지원'; categoryColor = 'var(--red)'; emoji = '도전'; }
 
   const adjs = [
-    { key: 'trendBonus', val: comp.trendBonus, posNote: '성적 상승세가 강점', negNote: '성적 하락세가 약점' },
-    { key: 'fitBonus', val: comp.fitBonus, posNote: '전공적합성 우수', negNote: '' },
-    { key: 'comboBonus', val: comp.comboBonus, posNote: '반영교과가 유리', negNote: '반영교과가 불리' },
+    { key: 'trendBonus', val: comp.trendBonus, posNote: '성적 상승세', negNote: '성적 하락세' },
+    { key: 'fitBonus', val: comp.fitBonus, posNote: '전공적합성', negNote: '' },
+    { key: 'comboBonus', val: comp.comboBonus, posNote: '반영교과 유리', negNote: '반영교과 불리' },
     { key: 'minAdj', val: comp.minAdj, posNote: '', negNote: '수능최저 미충족 위험' },
-    { key: 'classAdj', val: comp.classAdj, posNote: '학급 내 상위 환산', negNote: '학급 내 하위 환산' },
-    { key: 'consistencyAdj', val: comp.consistencyAdj, posNote: '성적 안정적', negNote: '성적 변동 큼' },
-    { key: 'interviewAdj', val: comp.interviewAdj, posNote: '면접 대비 양호', negNote: '면접 대비 보완 필요' },
-    { key: 'ratioAdj', val: comp.ratioAdj, posNote: '낮은 경쟁률 유리', negNote: '높은 경쟁률 불리' },
+    { key: 'classAdj', val: comp.classAdj, posNote: '학급 상위 환산', negNote: '학급 하위 환산' },
+    { key: 'consistencyAdj', val: comp.consistencyAdj, posNote: '성적 안정성', negNote: '성적 변동' },
+    { key: 'interviewAdj', val: comp.interviewAdj, posNote: '면접 대비 양호', negNote: '면접 대비 보완' },
+    { key: 'ratioAdj', val: comp.ratioAdj, posNote: '낮은 경쟁률', negNote: '높은 경쟁률' },
   ];
 
   const strengths = adjs.filter(a => a.val > 0 && a.posNote).map(a => a.posNote);
@@ -4037,14 +4037,36 @@ function getCounselingRecommendation(comp, univResult) {
   const topStrength = strengths[0] || (p >= 45 ? '내신 환산 유리' : '');
   const topWeakness = weaknesses[0] || '';
 
-  let advice = '';
-  if (p >= 65) advice = '합격 가능성이 높습니다. 안정 지원으로 적합합니다.';
-  else if (p >= 45) advice = '합격 가능성이 있습니다. 적정 지원으로 고려할 만합니다.';
-  else if (p >= 30) advice = '합격 가능성은 보통입니다. 소신 지원으로 도전해볼 수 있습니다.';
-  else if (p >= 15) advice = '합격이 쉽지 않습니다. 상향 지원으로 도전적인 선택입니다.';
-  else advice = '합격 가능성이 낮습니다. 포트폴리오의 도전 대학으로만 고려하세요.';
+  const hasCutline = !!univResult.cutline;
+  const ciWidth = comp.probHigh - comp.probLow;
+  const isWideCI = ciWidth >= 25;
 
-  if (topWeakness) advice += ' (' + topWeakness + ' 주의)';
+  let advice = '';
+  if (p >= 65) {
+    advice = '합격 가능성이 높습니다.';
+    if (strengths.length > 1) advice += ' ' + strengths.slice(0, 2).join(' · ') + ' 등이 유리합니다.';
+    else if (topStrength) advice += ' ' + topStrength + '이(가) 유리합니다.';
+    if (isWideCI && !hasCutline) advice += ' (컷라인 자료 부족으로 신뢰구간 넓음)';
+  } else if (p >= 45) {
+    advice = '적정 범위입니다.';
+    if (topStrength && topWeakness) advice += ' ' + topStrength + '이(가) 강점이지만 ' + topWeakness + '에 유의하세요.';
+    else if (topStrength) advice += ' ' + topStrength + '이(가) 강점입니다.';
+    if (comp.is종합 && comp.fitBonus >= 8) advice += ' 서류평가에서 유리할 수 있습니다.';
+  } else if (p >= 30) {
+    advice = '소신 지원 범위입니다.';
+    if (topWeakness) advice += ' ' + topWeakness + '이(가) 주된 감점 요인입니다.';
+    if (comp.trendBonus >= 6) advice += ' 상승세가 긍정적입니다.';
+    else if (comp.trendBonus <= -5) advice += ' 최근 성적 하락에 유의하세요.';
+  } else if (p >= 15) {
+    advice = '상향 지원입니다.';
+    if (weaknesses.length >= 2) advice += ' ' + weaknesses.slice(0, 2).join(' · ') + ' 등이 약점입니다.';
+    else if (topWeakness) advice += ' ' + topWeakness + '이(가) 주요 약점입니다.';
+    if (comp.is종합) advice += ' 서류·면접에서 역전 가능성이 있습니다.';
+  } else {
+    advice = '도전 지원입니다.';
+    if (topWeakness) advice += ' ' + topWeakness + '이(가) 핵심 불리 요인입니다.';
+    advice += ' 포트폴리오 내 도전 대학으로만 고려하세요.';
+  }
 
   return { category, categoryColor, emoji, topStrength, topWeakness, strengths, weaknesses, advice };
 }
