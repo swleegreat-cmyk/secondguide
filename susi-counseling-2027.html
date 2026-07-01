@@ -3979,7 +3979,7 @@ function renderDashboard() {
   const dist = [0,0,0,0,0,0,0,0,0];
   avgs.forEach(a => { const g = Math.min(9, Math.max(1, Math.round(a))); dist[g-1]++; });
 
-  let html = '<div class="glass"><h3>학급 현황 대시보드</h3>';
+  let html = '<div class="glass"><h3>학급 현황 대시보드 <button onclick="exportClassReport()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--copper);background:none;color:var(--copper);cursor:pointer;font-family:inherit">학급 종합 보고서</button></h3>';
   html += '<div class="stat-grid">';
   html += `<div class="stat-box"><div class="num">${classAvg.toFixed(2)}</div><div class="label">학급 평균등급</div></div>`;
   html += `<div class="stat-box"><div class="num">${STUDENTS.length}</div><div class="label">총 학생 수</div></div>`;
@@ -6380,6 +6380,152 @@ th{background:#f5f5f0;font-weight:700}
 
   const w = window.open('', '_blank');
   w.document.write(report);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 500);
+}
+
+// ═══════════════════════════════════════════════
+// CLASS-WIDE SUMMARY REPORT
+// ═══════════════════════════════════════════════
+function exportClassReport() {
+  const avgs = STUDENTS.map(s => calcWeightedAvg(s));
+  const classAvg = avgs.reduce((a,b) => a+b, 0) / avgs.length;
+
+  const rows = STUDENTS.map((s, i) => {
+    const avg = avgs[i];
+    const a = ANALYSIS[s.seat] || {};
+    const ra = analyzeRecord(s, a);
+    const fit = calcFitScore(s, a, ra.concept);
+    const trend = calcYearlyTrend(s);
+    const combos = calcComboScores(s);
+    const results = runAllUniversities(s);
+    const allC = results.map(r => {
+      const comp = calcCompositeScore(r, s, a);
+      return { univ: r.univ, jeonType: r.jeonType, prob: comp.probability };
+    }).sort((a, b) => b.prob - a.prob);
+
+    let bestCombo = '', bestScore = 99;
+    COMBO_ORDER.forEach(c => { if (combos[c] && combos[c].avg < bestScore) { bestScore = combos[c].avg; bestCombo = c; } });
+
+    let trendDir = 0;
+    if (trend.length >= 2) trendDir = trend[trend.length-1].avg - trend[0].avg;
+
+    const safeCount = allC.filter(r => r.prob >= 65).length;
+    const fitCount = allC.filter(r => r.prob >= 40 && r.prob < 65).length;
+    const top3 = allC.slice(0, 3);
+
+    let port = null;
+    if (allC.length >= 6) port = calcOptimalPortfolio(allC.map(r => ({...r, comp: {probability: r.prob}})), 6);
+
+    const strat = calcAdmissionStrategy(s, a);
+
+    return {
+      seat: s.seat, name: s.name, avg, fit: fit.score,
+      concept: ra.concept || '-', bestCombo, bestScore,
+      trendDir, safeCount, fitCount, top3,
+      riskLevel: port ? port.riskLevel : '-',
+      atLeastOne: port ? port.atLeastOne : 0,
+      expectedCount: port ? port.expectedCount : 0,
+      bestType: strat.sorted[0][0],
+      deptMatch: ra.deptMatch.slice(0, 3),
+      counselingPoints: ra.counselingPoints.slice(0, 2)
+    };
+  }).sort((a, b) => a.avg - b.avg);
+
+  let r = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>3학년 4반 학급 종합 보고서</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;font-size:11px;line-height:1.5;color:#333;padding:15px;max-width:1100px;margin:0 auto}
+h1{font-size:16px;border-bottom:2px solid #143A40;padding-bottom:6px;margin-bottom:10px;color:#143A40}
+h2{font-size:13px;color:#1C5A60;margin:12px 0 6px;border-left:3px solid #C77B3C;padding-left:8px}
+table{width:100%;border-collapse:collapse;font-size:10px}
+th,td{border:1px solid #ddd;padding:3px 5px;text-align:left}
+th{background:#f5f5f0;font-weight:700;white-space:nowrap}
+.safe{color:#2E7D4A;font-weight:700}.fit{color:#3C6E71;font-weight:700}.reach{color:#C77B3C;font-weight:700}
+.mono{font-family:'IBM Plex Mono',monospace}
+.footer{margin-top:15px;padding-top:6px;border-top:1px solid #ddd;font-size:9px;color:#999;text-align:center}
+.stat-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.stat-card{flex:1;min-width:120px;padding:8px 12px;background:#f9f7f2;border-radius:6px;text-align:center}
+.stat-card .num{font-size:18px;font-weight:700;color:#143A40;font-family:'IBM Plex Mono',monospace}
+.stat-card .lbl{font-size:10px;color:#999}
+.risk-safe{color:#2E7D4A}.risk-ok{color:#3C6E71}.risk-warn{color:#C77B3C}.risk-danger{color:#c62828}
+.trend-up{color:#2E7D4A}.trend-down{color:#c62828}.trend-flat{color:#999}
+@media print{body{padding:5px;font-size:9px}th,td{padding:2px 3px;font-size:9px}h1{font-size:14px}.stat-row{gap:6px}}
+</style></head><body>
+<h1>병점고등학교 3학년 4반 — 2027학년도 수시 상담 종합 보고서</h1>
+<div style="font-size:10px;color:#666;margin-bottom:10px">작성일: ${new Date().toLocaleDateString('ko-KR')} · 담임교사용 · 학생 데이터는 브라우저 내에서만 처리되며 외부로 전송되지 않습니다</div>`;
+
+  const avgAll = classAvg;
+  const safeTotal = rows.reduce((s,x) => s + x.safeCount, 0);
+  const warnStudents = rows.filter(x => x.atLeastOne < 60).length;
+  const highStudents = rows.filter(x => x.atLeastOne >= 95).length;
+
+  r += `<div class="stat-row">
+<div class="stat-card"><div class="num">${avgAll.toFixed(2)}</div><div class="lbl">학급 평균등급</div></div>
+<div class="stat-card"><div class="num">${STUDENTS.length}</div><div class="lbl">총 학생 수</div></div>
+<div class="stat-card"><div class="num">${safeTotal}</div><div class="lbl">안정권 지원 총합</div></div>
+<div class="stat-card"><div class="num risk-safe">${highStudents}</div><div class="lbl">안정 학생 (95%+)</div></div>
+<div class="stat-card"><div class="num risk-warn">${warnStudents}</div><div class="lbl">주의 학생 (<60%)</div></div>
+</div>`;
+
+  r += `<h2>전체 학생 종합 현황</h2>
+<table>
+<tr><th>번호</th><th>이름</th><th>평균</th><th>최적조합</th><th>추세</th><th>적합성</th><th>진로</th><th>추천전형</th><th>안정/적정</th><th>위험도</th><th>합격률</th><th>TOP 3 대학</th></tr>`;
+
+  rows.forEach(s => {
+    const gc = s.avg <= 2 ? '#143A40' : s.avg <= 3 ? '#2E7D4A' : s.avg <= 4 ? '#3C6E71' : s.avg <= 5 ? '#C77B3C' : '#c62828';
+    const tArrow = s.trendDir < -0.3 ? '↑' + Math.abs(s.trendDir).toFixed(1) : s.trendDir > 0.3 ? '↓' + s.trendDir.toFixed(1) : '→';
+    const tCls = s.trendDir < -0.3 ? 'trend-up' : s.trendDir > 0.3 ? 'trend-down' : 'trend-flat';
+    const fitC = s.fit >= 60 ? '#2E7D4A' : s.fit >= 35 ? '#3C6E71' : '#C77B3C';
+    const riskCls = s.riskLevel === '안정적' ? 'risk-safe' : s.riskLevel === '균형' || s.riskLevel === '보통' ? 'risk-ok' : s.riskLevel === '주의' ? 'risk-warn' : 'risk-danger';
+    const top3Str = s.top3.map(t => `${t.univ.length > 5 ? t.univ.substring(0,5)+'..' : t.univ}(${t.prob}%)`).join(', ');
+
+    r += `<tr>
+<td style="text-align:center;font-weight:600">${s.seat}</td>
+<td style="font-weight:600">${s.name}</td>
+<td class="mono" style="font-weight:700;color:${gc}">${s.avg.toFixed(2)}</td>
+<td style="font-size:9px"><span class="mono" style="font-weight:600">${s.bestScore < 99 ? s.bestScore.toFixed(2) : '-'}</span> ${s.bestCombo ? s.bestCombo.substring(0,4) : ''}</td>
+<td class="${tCls}" style="text-align:center;font-weight:700">${tArrow}</td>
+<td style="text-align:center;font-weight:700;color:${fitC}">${s.fit}</td>
+<td>${s.concept}</td>
+<td style="font-size:9px">${s.bestType}전형</td>
+<td style="text-align:center"><span class="safe">${s.safeCount}</span>/<span class="fit">${s.fitCount}</span></td>
+<td class="${riskCls}" style="font-weight:700">${s.riskLevel}</td>
+<td class="mono" style="font-weight:700">${s.atLeastOne}%</td>
+<td style="font-size:9px">${top3Str}</td>
+</tr>`;
+  });
+  r += '</table>';
+
+  r += '<h2>상담 우선 학생 목록</h2>';
+  const priority = [];
+  rows.forEach(s => {
+    const reasons = [];
+    if (s.trendDir > 1.0) reasons.push('성적 하락 ' + s.trendDir.toFixed(1) + '등급');
+    if (s.fit < 30) reasons.push('적합성 낮음 ' + s.fit + '점');
+    if (s.concept === '-') reasons.push('진로 미설정');
+    if (s.atLeastOne < 60) reasons.push('합격률 주의 ' + s.atLeastOne + '%');
+    if (s.safeCount === 0) reasons.push('안정권 없음');
+    if (reasons.length > 0) priority.push({...s, reasons});
+  });
+  if (priority.length > 0) {
+    r += '<table><tr><th>번호</th><th>이름</th><th>평균</th><th>주의 사유</th><th>권장 조치</th></tr>';
+    priority.forEach(s => {
+      const action = s.safeCount === 0 ? '안정권 대학 추가 검토' : s.concept === '-' ? '진로 탐색 상담' : s.fit < 30 ? '전공적합성 보완 방안 상담' : '추이 관찰 및 면담';
+      r += `<tr><td style="text-align:center">${s.seat}</td><td style="font-weight:600">${s.name}</td><td class="mono">${s.avg.toFixed(2)}</td><td style="color:#C77B3C">${s.reasons.join(', ')}</td><td style="font-size:9px">${action}</td></tr>`;
+    });
+    r += '</table>';
+  } else {
+    r += '<div style="font-size:11px;color:#999;margin:8px 0">특별히 우선 상담이 필요한 학생이 없습니다.</div>';
+  }
+
+  r += `<div class="footer">2027학년도 수시 상담 프로그램 · 병점고등학교 3학년 4반 · 학생 데이터는 브라우저 내에서만 처리되며 외부로 전송되지 않습니다</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(r);
   w.document.close();
   w.focus();
   setTimeout(() => w.print(), 500);
