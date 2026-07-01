@@ -4012,6 +4012,43 @@ function getClassPercentile(score, univName) {
   return Math.round(rank / scores.length * 100);
 }
 
+function getCounselingRecommendation(comp, univResult) {
+  const p = comp.probability;
+  let category, categoryColor, emoji;
+  if (p >= 65) { category = '안정 지원'; categoryColor = 'var(--green)'; emoji = '안정'; }
+  else if (p >= 45) { category = '적정 지원'; categoryColor = 'var(--blue)'; emoji = '적정'; }
+  else if (p >= 30) { category = '소신 지원'; categoryColor = 'var(--orange)'; emoji = '소신'; }
+  else if (p >= 15) { category = '상향 지원'; categoryColor = '#c0392b'; emoji = '상향'; }
+  else { category = '도전 지원'; categoryColor = 'var(--red)'; emoji = '도전'; }
+
+  const adjs = [
+    { key: 'trendBonus', val: comp.trendBonus, posNote: '성적 상승세가 강점', negNote: '성적 하락세가 약점' },
+    { key: 'fitBonus', val: comp.fitBonus, posNote: '전공적합성 우수', negNote: '' },
+    { key: 'comboBonus', val: comp.comboBonus, posNote: '반영교과가 유리', negNote: '반영교과가 불리' },
+    { key: 'minAdj', val: comp.minAdj, posNote: '', negNote: '수능최저 미충족 위험' },
+    { key: 'classAdj', val: comp.classAdj, posNote: '학급 내 상위 환산', negNote: '학급 내 하위 환산' },
+    { key: 'consistencyAdj', val: comp.consistencyAdj, posNote: '성적 안정적', negNote: '성적 변동 큼' },
+    { key: 'interviewAdj', val: comp.interviewAdj, posNote: '면접 대비 양호', negNote: '면접 대비 보완 필요' },
+    { key: 'ratioAdj', val: comp.ratioAdj, posNote: '낮은 경쟁률 유리', negNote: '높은 경쟁률 불리' },
+  ];
+
+  const strengths = adjs.filter(a => a.val > 0 && a.posNote).map(a => a.posNote);
+  const weaknesses = adjs.filter(a => a.val < 0 && a.negNote).map(a => a.negNote);
+  const topStrength = strengths[0] || (p >= 45 ? '내신 환산 유리' : '');
+  const topWeakness = weaknesses[0] || '';
+
+  let advice = '';
+  if (p >= 65) advice = '합격 가능성이 높습니다. 안정 지원으로 적합합니다.';
+  else if (p >= 45) advice = '합격 가능성이 있습니다. 적정 지원으로 고려할 만합니다.';
+  else if (p >= 30) advice = '합격 가능성은 보통입니다. 소신 지원으로 도전해볼 수 있습니다.';
+  else if (p >= 15) advice = '합격이 쉽지 않습니다. 상향 지원으로 도전적인 선택입니다.';
+  else advice = '합격 가능성이 낮습니다. 포트폴리오의 도전 대학으로만 고려하세요.';
+
+  if (topWeakness) advice += ' (' + topWeakness + ' 주의)';
+
+  return { category, categoryColor, emoji, topStrength, topWeakness, strengths, weaknesses, advice };
+}
+
 function calcCompositeScore(univResult, student, analysis) {
   if (!univResult) return null;
   const reflectStr = univResult.cutline?.reflect || '';
@@ -5393,7 +5430,7 @@ function renderSusiTab(student, analysis) {
   // All results table with probability column
   html += '<div class="glass" id="allUnivSection"><h3>전체 대학 환산 결과 (<span id="univCount">' + results.length + '</span>개)</h3>';
   html += '<div class="scroll-table"><table class="g-table" id="univTable"><thead><tr>';
-  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
+  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>판정</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
   html += '</tr></thead><tbody id="univTableBody">';
 
   allComps.forEach((r, i) => {
@@ -5401,11 +5438,13 @@ function renderSusiTab(student, analysis) {
     const relCls = r.reliability === 'high' ? 'rel-high' : r.reliability === 'medium' ? 'rel-medium' : r.reliability === 'low' ? 'rel-low' : 'rel-none';
     const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '불가';
     const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
+    const rec = getCounselingRecommendation(r.comp, r);
     html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}" data-prob="${r.prob}">
       <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
       <td style="font-size:12px">${esc(r.jeonType)}</td>
       <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
       <td><span class="mono" style="font-weight:700;color:${pColor}">${r.prob}%</span></td>
+      <td><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${rec.categoryColor};color:#fff">${esc(rec.emoji)}</span></td>
       <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
       <td><button style="background:none;border:none;color:var(--teal-mid);cursor:pointer;font-family:inherit;font-size:12px" onclick="showUnivDetail('${esc(r.univ)}')">상세보기</button></td>
@@ -5746,6 +5785,18 @@ function showUnivDetail(univName) {
     <span>종합 합격 확률</span><span style="color:${pColor}">${comp.probability}% <span style="font-size:10px;font-weight:400;color:var(--muted)">(${comp.probLow}~${comp.probHigh}%)</span></span>
   </div>`;
   html += '</div>';
+
+  // Counseling recommendation
+  const rec = getCounselingRecommendation(comp, result);
+  html += `<div style="margin-top:10px;padding:12px;background:linear-gradient(135deg,var(--card),var(--blue-light));border:2px solid ${rec.categoryColor};border-radius:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="padding:3px 10px;background:${rec.categoryColor};color:white;border-radius:6px;font-size:13px;font-weight:700">${esc(rec.emoji)}</span>
+      <span style="font-size:14px;font-weight:700;color:${rec.categoryColor}">${esc(rec.category)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text);line-height:1.5">${esc(rec.advice)}</div>
+    ${rec.strengths.length > 0 ? '<div style="margin-top:6px;font-size:11px"><span style="color:var(--green);font-weight:600">강점:</span> ' + esc(rec.strengths.join(', ')) + '</div>' : ''}
+    ${rec.weaknesses.length > 0 ? '<div style="margin-top:2px;font-size:11px"><span style="color:var(--red);font-weight:600">약점:</span> ' + esc(rec.weaknesses.join(', ')) + '</div>' : ''}
+  </div>`;
 
   // Warnings
   if (result.warnings && result.warnings.length > 0) {
