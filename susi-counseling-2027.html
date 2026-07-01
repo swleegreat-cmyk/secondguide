@@ -3096,61 +3096,127 @@ function analyzeRecord(student, analysis) {
     analysis.alerts.forEach(a => result.counselingPoints.push(a));
   }
 
-  // 7. Interview questions: extract specific activities from records
-  const activityPatterns = [
-    { re: /['「《]([^'」》]{2,20})['」》]\s*(을|를|에|의|이|가|와|과)/g, type: '독서/작품' },
-    { re: /(탐구|연구|실험|조사|프로젝트)\s*(활동|과제|보고서)?/g, type: '탐구활동' },
-    { re: /(발표|프레젠테이션|토론|토의)/g, type: '발표/토론' },
-    { re: /(봉사|멘토링|튜터링|도움)/g, type: '봉사/협력' }
-  ];
+  // 7. Interview questions: context-aware extraction from records
+  const books = new Set();
+  const topics = [];
+  const activities = [];
 
   student.records.forEach(r => {
     if (r.t !== '세부능력및특기사항' || !r.b || r.b.length < 30) return;
     const text = r.b;
     const source = `${r.y}학년 ${r.c || ''}`;
+    const subj = r.c || '';
 
-    if (text.match(/['「《]([^'」》]{2,20})['」》]/)) {
-      const bookMatch = text.match(/['「《]([^'」》]{2,20})['」》]/);
+    // Books with context extraction
+    const bookRe = /['「《]([^'」》]{2,30})['」》]/g;
+    let bm;
+    while ((bm = bookRe.exec(text)) !== null) {
+      const title = bm[1].trim();
+      if (!books.has(title) && title.length >= 2) {
+        books.add(title);
+        const afterIdx = bm.index + bm[0].length;
+        const context = text.substring(afterIdx, afterIdx + 60).replace(/[,.\s]+$/, '');
+        result.interviewPredictions.push({
+          type: '독서', source, priority: 3,
+          q: `'${title}'을 읽게 된 계기와 이 책에서 배운 점이 ${subj || '학업'} 활동에 어떻게 연결되었는지 설명해 주세요.`
+        });
+      }
+    }
+
+    // Inquiry/research with specific topic extraction
+    const topicRe = /(?:['「《]([^'」》]{3,25})['」》]|['"]([^'"]{3,25})['"])\s*(?:을|를)?\s*(?:주제|테마)/g;
+    let tm;
+    while ((tm = topicRe.exec(text)) !== null) {
+      const topic = (tm[1] || tm[2] || '').trim();
+      if (topic && !topics.includes(topic)) {
+        topics.push(topic);
+        result.interviewPredictions.push({
+          type: '탐구', source, priority: 5,
+          q: `'${topic}'을 탐구 주제로 선정한 이유와 탐구 과정에서 예상과 달랐던 점, 그리고 그 결과가 본인에게 어떤 의미가 있었는지 말씀해 주세요.`
+        });
+      }
+    }
+
+    if ((text.includes('탐구') || text.includes('실험') || text.includes('연구')) && text.includes('주제') && !tm) {
       result.interviewPredictions.push({
-        type: '독서', source,
-        q: `'${bookMatch[1]}'을 읽고 가장 인상적이었던 내용과 그것이 본인의 생각에 어떤 변화를 주었는지 설명해 주세요.`
+        type: '탐구', source, priority: 2,
+        q: `${subj} 수업에서 진행한 탐구의 주제 선정 배경과 과정에서 겪은 시행착오, 그리고 배운 점은 무엇인가요?`
       });
     }
-    if ((text.includes('탐구') || text.includes('실험') || text.includes('연구')) && text.includes('주제')) {
+
+    // Presentations and debates with depth questions
+    if (text.includes('발표') && text.includes('주제')) {
       result.interviewPredictions.push({
-        type: '탐구', source,
-        q: `${r.c || ''} 수업에서 진행한 탐구의 주제를 선정한 배경과 과정에서 겪은 어려움, 그리고 배운 점은 무엇인가요?`
+        type: '발표', source, priority: 2,
+        q: `${subj} 수업에서 발표한 주제를 선택한 이유와 발표 준비 과정에서 어떤 점을 가장 중요하게 생각했는지 말씀해 주세요.`
       });
     }
-    if (text.includes('발표')) {
+    if (text.includes('토론') || text.includes('토의')) {
       result.interviewPredictions.push({
-        type: '발표', source,
-        q: `${r.c || ''} 수업에서 발표한 경험 중 가장 의미 있었던 주제와 그 이유를 말씀해 주세요.`
+        type: '토론', source, priority: 2,
+        q: `${subj} 수업에서의 토론 경험 중 본인의 입장이 변했거나 새로운 관점을 얻은 사례가 있다면 설명해 주세요.`
       });
+    }
+
+    // Collaboration/leadership
+    if (text.includes('조장') || text.includes('리더') || text.includes('이끌')) {
+      result.interviewPredictions.push({
+        type: '리더십', source, priority: 2,
+        q: `${subj} 활동에서 팀을 이끈 경험 중 구성원 간 의견 충돌이 있었다면 어떻게 해결했는지 구체적으로 말씀해 주세요.`
+      });
+    }
+
+    // Academic growth moments
+    if (text.match(/(성장|변화|깨달|발전|전환)/) && text.length > 80) {
+      activities.push({ subj, source, text: text.substring(0, 100) });
     }
   });
 
+  // Growth-related question from longest records
+  if (activities.length > 0) {
+    const best = activities.sort((a, b) => b.text.length - a.text.length)[0];
+    result.interviewPredictions.push({
+      type: '성장', source: best.source, priority: 4,
+      q: `${best.subj} 활동을 통해 가장 크게 성장했다고 느끼는 부분과 그 계기가 된 구체적인 경험은 무엇인가요?`
+    });
+  }
+
+  // Career trajectory questions
   if (result.storyArc.length >= 2) {
     const first = result.storyArc[0], last = result.storyArc[result.storyArc.length - 1];
     if (first.career !== last.career) {
       result.interviewPredictions.push({
-        type: '진로변화', source: '진로 흐름',
-        q: `${first.year}학년 때 '${first.career}'에서 ${last.year}학년 때 '${last.career}'(으)로 진로가 변화한 계기는 무엇인가요?`
+        type: '진로변화', source: '진로 흐름', priority: 5,
+        q: `${first.year}학년 때 '${first.career}'에서 ${last.year}학년 때 '${last.career}'(으)로 진로가 변화한 과정에서 결정적인 경험은 무엇이었나요?`
       });
     } else {
       result.interviewPredictions.push({
-        type: '진로일관성', source: '진로 흐름',
-        q: `'${last.career}' 분야에 꾸준히 관심을 가져온 이유와 이를 위해 구체적으로 어떤 노력을 했는지 말씀해 주세요.`
+        type: '진로일관성', source: '진로 흐름', priority: 5,
+        q: `'${last.career}' 분야에 대한 관심을 3년간 유지한 원동력과 이를 위해 교과 외에 어떤 자발적 노력을 했는지 말씀해 주세요.`
+      });
+    }
+  }
+
+  // Weakness question (hardest but most common in interviews)
+  const subjAvgs = calcSubjectAvgs(student);
+  if (subjAvgs.length > 1) {
+    const weakest = subjAvgs[subjAvgs.length - 1];
+    if (weakest.avg > 5) {
+      result.interviewPredictions.push({
+        type: '약점극복', source: '성적 분석', priority: 4,
+        q: `${weakest.name} 교과의 성적이 상대적으로 낮은데, 이에 대해 어떻게 인식하고 있으며 개선을 위해 어떤 노력을 했는지 말씀해 주세요.`
       });
     }
   }
 
   const seen = new Set();
-  result.interviewPredictions = result.interviewPredictions.filter(p => {
-    const key = p.type + p.source;
-    if (seen.has(key)) return false;
-    seen.add(key); return true;
-  }).slice(0, 10);
+  result.interviewPredictions = result.interviewPredictions
+    .sort((a, b) => (b.priority || 1) - (a.priority || 1))
+    .filter(p => {
+      const key = p.type + ':' + p.q.substring(0, 30);
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    }).slice(0, 12);
 
   return result;
 }
@@ -3576,6 +3642,51 @@ function renderScoreTab(student, analysis) {
       <span class="val" style="color:${c}">${s.avg.toFixed(2)}</span>
     </div>`;
   });
+
+  // SVG Radar chart
+  const radarSubjects = subjAvgs.filter(s => !['한국사','기가/제2외','예술','체육'].includes(s.name)).slice(0, 6);
+  if (radarSubjects.length >= 3) {
+    const n = radarSubjects.length;
+    const cx = 120, cy = 120, r = 90;
+    let svg = `<div style="text-align:center;margin-top:16px"><svg viewBox="0 0 240 240" style="max-width:260px;width:100%">`;
+    // Grid rings
+    for (let ring = 1; ring <= 4; ring++) {
+      const rr = r * ring / 4;
+      let points = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+        points.push(`${cx + rr * Math.cos(angle)},${cy + rr * Math.sin(angle)}`);
+      }
+      svg += `<polygon points="${points.join(' ')}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;
+    }
+    // Axes + labels
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+      const x2 = cx + r * Math.cos(angle), y2 = cy + r * Math.sin(angle);
+      svg += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="var(--border)" stroke-width="0.5"/>`;
+      const lx = cx + (r + 18) * Math.cos(angle), ly = cy + (r + 18) * Math.sin(angle);
+      svg += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="var(--sub)" font-family="'Noto Sans KR',sans-serif">${radarSubjects[i].name}</text>`;
+    }
+    // Data polygon
+    let dataPoints = [];
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+      const val = Math.max(0, (10 - radarSubjects[i].avg) / 9);
+      const dr = r * val;
+      dataPoints.push(`${cx + dr * Math.cos(angle)},${cy + dr * Math.sin(angle)}`);
+    }
+    svg += `<polygon points="${dataPoints.join(' ')}" fill="rgba(28,90,96,0.15)" stroke="var(--teal-mid)" stroke-width="2"/>`;
+    // Data dots
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+      const val = Math.max(0, (10 - radarSubjects[i].avg) / 9);
+      const dr = r * val;
+      const dx = cx + dr * Math.cos(angle), dy = cy + dr * Math.sin(angle);
+      svg += `<circle cx="${dx}" cy="${dy}" r="3" fill="var(--teal-mid)"/>`;
+    }
+    svg += `</svg></div>`;
+    html += svg;
+  }
   html += '</div>';
 
   // Combo scores
@@ -3632,6 +3743,90 @@ function renderScoreTab(student, analysis) {
       </div>`;
     }
     html += '</div>';
+  }
+
+  // Per-subject semester trend sparklines
+  const mainSubjects = subjAvgs.filter(s => !['한국사','기가/제2외','예술','체육'].includes(s.name)).slice(0, 8);
+  if (mainSubjects.length > 0 && trend.length > 1) {
+    html += '<div class="glass"><h3>교과별 학기 추이</h3>';
+    html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">주요 교과의 학기별 등급 변화입니다.</p>';
+    mainSubjects.forEach(subj => {
+      const semData = [];
+      student.subjects.filter(s => s.c === subj.name && s.g != null && s.g >= 1 && s.g <= 9).forEach(s => {
+        const key = `${s.y}-${s.s}`;
+        const existing = semData.find(d => d.key === key);
+        if (existing) {
+          existing.total += s.g * s.u;
+          existing.units += s.u;
+        } else {
+          semData.push({ key, total: s.g * s.u, units: s.u, y: s.y, s: s.s });
+        }
+      });
+      semData.sort((a, b) => a.key.localeCompare(b.key));
+      semData.forEach(d => d.avg = d.total / d.units);
+      if (semData.length < 2) return;
+      const first = semData[0].avg, last = semData[semData.length - 1].avg;
+      const diff = last - first;
+      const arrow = diff < -0.3 ? '↑' : diff > 0.3 ? '↓' : '→';
+      const arrowColor = diff < -0.3 ? 'var(--green)' : diff > 0.3 ? 'var(--red)' : 'var(--muted)';
+      // Mini sparkline SVG
+      const svgW = 120, svgH = 28, pad = 4;
+      const minV = Math.min(...semData.map(d => d.avg));
+      const maxV = Math.max(...semData.map(d => d.avg));
+      const range = Math.max(maxV - minV, 0.5);
+      let pts = semData.map((d, i) => {
+        const x = pad + (svgW - 2 * pad) * i / (semData.length - 1);
+        const y = pad + (svgH - 2 * pad) * (d.avg - minV) / range;
+        return `${x},${y}`;
+      }).join(' ');
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="width:60px;font-size:11px;font-weight:600;color:var(--text)">${esc(subj.name)}</span>
+        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:${svgW}px;height:${svgH}px;flex-shrink:0">
+          <polyline points="${pts}" fill="none" stroke="${arrowColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          ${semData.map((d, i) => {
+            const x = pad + (svgW - 2 * pad) * i / (semData.length - 1);
+            const y = pad + (svgH - 2 * pad) * (d.avg - minV) / range;
+            return `<circle cx="${x}" cy="${y}" r="2" fill="${arrowColor}"/>`;
+          }).join('')}
+        </svg>
+        <span style="font-size:11px;color:var(--muted)">${semData.map(d => d.avg.toFixed(1)).join(' → ')}</span>
+        <span style="font-size:14px;color:${arrowColor};font-weight:700">${arrow}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // University advantage summary
+  if (univResults && univResults.length > 0) {
+    const ranked = univResults
+      .map(r => {
+        const comp = calcCompositeScore(r, student, analysis);
+        return { name: r.univ, prob: comp.probability, combo: comp.comboUsed, jeon: r.jeonType };
+      })
+      .filter(r => r.prob != null)
+      .sort((a, b) => b.prob - a.prob);
+    if (ranked.length > 0) {
+      html += '<div class="glass"><h3>대학별 유불리 요약</h3>';
+      html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">이 학생의 성적으로 계산한 대학별 합격 확률 순위 (상위 15개)입니다.</p>';
+      const top = ranked.slice(0, 15);
+      top.forEach((r, i) => {
+        const barW = Math.max(5, r.prob);
+        const c = r.prob >= 50 ? 'var(--green)' : r.prob >= 30 ? 'var(--orange)' : 'var(--red)';
+        html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span style="width:14px;font-size:10px;color:var(--muted);text-align:right">${i+1}</span>
+          <span style="width:100px;font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(r.name)}</span>
+          <span style="width:24px;font-size:8px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0">${esc((r.jeon || '').substring(0, 2))}</span>
+          <div style="flex:1;height:14px;background:var(--bg2);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${barW}%;background:${c};border-radius:4px;transition:width 0.3s"></div>
+          </div>
+          <span style="width:36px;font-size:11px;font-weight:700;color:${c};text-align:right">${r.prob}%</span>
+        </div>`;
+      });
+      if (ranked.length > 15) {
+        html += `<div style="font-size:10px;color:var(--muted);margin-top:4px">외 ${ranked.length - 15}개 대학</div>`;
+      }
+      html += '</div>';
+    }
   }
 
   // Detailed grade table
