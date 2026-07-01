@@ -3458,6 +3458,233 @@ function calcOptimalPortfolio(allComps, count) {
   return { picks, atLeastOne, expectedCount };
 }
 
+function calcAdmissionStrategy(student, analysis) {
+  const avg = calcWeightedAvg(student);
+  const trend = calcYearlyTrend(student);
+  const records = student.records || [];
+  const opinions = student.opinions || [];
+  const a = analysis || {};
+
+  // 1. 교과전형 적합도 — grades are nearly deterministic; stability & level matter most
+  let 교과 = 0;
+  // Grade level (aggressive scaling for realistic avg 3.5-8.5 range)
+  if (avg <= 2.0) 교과 += 50;
+  else if (avg <= 3.0) 교과 += 45;
+  else if (avg <= 3.5) 교과 += 42;
+  else if (avg <= 4.0) 교과 += 38;
+  else if (avg <= 4.5) 교과 += 33;
+  else if (avg <= 5.0) 교과 += 27;
+  else if (avg <= 5.5) 교과 += 22;
+  else if (avg <= 6.0) 교과 += 17;
+  else if (avg <= 7.0) 교과 += 10;
+  else 교과 += 5;
+
+  // Grade stability — 교과전형 values consistency highly
+  if (trend.length >= 3) {
+    const avgs = trend.map(t => t.avg);
+    const range = Math.max(...avgs) - Math.min(...avgs);
+    if (range < 0.3) 교과 += 25;
+    else if (range < 0.5) 교과 += 22;
+    else if (range < 0.8) 교과 += 17;
+    else if (range < 1.2) 교과 += 12;
+    else if (range < 2.0) 교과 += 7;
+    else 교과 += 3;
+  }
+
+  // Subject balance
+  const wkCount = (a.wk || []).length;
+  if (wkCount === 0) 교과 += 15;
+  else if (wkCount <= 1) 교과 += 12;
+  else if (wkCount <= 2) 교과 += 8;
+  else 교과 += 4;
+
+  // Improving trend
+  if (trend.length >= 2) {
+    const last = trend[trend.length - 1].avg;
+    const first = trend[0].avg;
+    if (last < first - 0.5) 교과 += 10;
+    else if (last < first - 0.2) 교과 += 7;
+    else if (last > first + 0.5) 교과 -= 5;
+  }
+
+  // 2. 종합전형 적합도 — record quality, narrative, activities (scaled tighter to differentiate)
+  let 종합 = 0;
+
+  // Record richness — compare against class median (~4000 chars), not absolute
+  const totalChars = records.reduce((sum, r) => sum + (r.b || '').length, 0);
+  if (totalChars > 6000) 종합 += 15;
+  else if (totalChars > 5000) 종합 += 12;
+  else if (totalChars > 4000) 종합 += 9;
+  else if (totalChars > 3000) 종합 += 6;
+  else 종합 += 3;
+
+  // Academic keyword density — higher threshold for meaningful differentiation
+  const allText = records.map(r => r.b || '').join(' ') + ' ' + opinions.map(o => o.b || '').join(' ');
+  const keywords = ['탐구', '연구', '실험', '논문', '발표', '토론', '봉사', '리더', '프로젝트', '분석', '자기주도', '심화', '멘토', '협력', '주도'];
+  let keywordCount = 0;
+  keywords.forEach(k => { keywordCount += (allText.match(new RegExp(k, 'g')) || []).length; });
+  if (keywordCount >= 20) 종합 += 15;
+  else if (keywordCount >= 14) 종합 += 12;
+  else if (keywordCount >= 9) 종합 += 9;
+  else if (keywordCount >= 5) 종합 += 6;
+  else 종합 += 2;
+
+  // Career narrative consistency — strong differentiator
+  const flow = a.career_flow || [];
+  let careerConsistent = false;
+  if (flow.length >= 2) {
+    const careers = flow.map(f => f[1]);
+    careerConsistent = careers.every(c => {
+      const base = careers[0];
+      return c === base || c.includes(base.substring(0, 2)) || base.includes(c.substring(0, 2));
+    });
+    if (careerConsistent) 종합 += 12;
+    else 종합 += 5;
+  }
+
+  // Opinion quality
+  const opinionChars = opinions.reduce((sum, o) => sum + (o.b || '').length, 0);
+  if (opinionChars > 1200) 종합 += 7;
+  else if (opinionChars > 800) 종합 += 5;
+  else 종합 += 2;
+
+  // Record growth across years
+  const yearChars = {};
+  records.forEach(r => { const y = r.y || 0; yearChars[y] = (yearChars[y] || 0) + (r.b || '').length; });
+  if (yearChars[2] > yearChars[1] * 1.1) 종합 += 8;
+  else if (yearChars[2] > yearChars[1]) 종합 += 5;
+  else 종합 += 2;
+
+  // Fit score
+  const concept = analyzeRecord(student, a).concept;
+  const fitData = calcFitScore(student, a, concept);
+  if (fitData.score >= 70) 종합 += 12;
+  else if (fitData.score >= 50) 종합 += 8;
+  else if (fitData.score >= 30) 종합 += 4;
+  else 종합 += 1;
+
+  // 종합 advantage when grades are weak but records are strong
+  if (avg > 5.0 && totalChars > 4000 && keywordCount >= 8) 종합 += 10;
+  else if (avg > 5.0 && (a.str || []).length >= 1) 종합 += 5;
+
+  // Grade baseline for 종합 (still matters, just less)
+  if (avg <= 3.0) 종합 += 12;
+  else if (avg <= 4.0) 종합 += 10;
+  else if (avg <= 5.0) 종합 += 7;
+  else if (avg <= 6.0) 종합 += 4;
+  else 종합 += 2;
+
+  // Alerts as negative signal for 종합 (진로-교과 mismatch)
+  const alerts = a.alerts || [];
+  if (alerts.length >= 2) 종합 -= 5;
+
+  // 3. 논술전형 적합도
+  let 논술 = 0;
+  const subjAvgs = a.subj_avgs || {};
+  const parsed = typeof subjAvgs === 'string' ? JSON.parse(subjAvgs) : subjAvgs;
+
+  const mathAvg = parsed['수학'] || avg;
+  const sciAvg = parsed['과학'] || avg;
+  const korAvg = parsed['국어'] || avg;
+  const engAvg = parsed['영어'] || avg;
+
+  // Math strength (most critical for 논술)
+  if (mathAvg <= 2.5) 논술 += 30;
+  else if (mathAvg <= 3.5) 논술 += 24;
+  else if (mathAvg <= 4.5) 논술 += 17;
+  else if (mathAvg <= 5.5) 논술 += 11;
+  else if (mathAvg <= 6.5) 논술 += 6;
+  else 논술 += 3;
+
+  // Best academic subject
+  const bestAcademic = Math.min(mathAvg, sciAvg, korAvg, engAvg);
+  if (bestAcademic <= 2.5) 논술 += 20;
+  else if (bestAcademic <= 3.5) 논술 += 16;
+  else if (bestAcademic <= 4.5) 논술 += 11;
+  else if (bestAcademic <= 5.5) 논술 += 7;
+  else 논술 += 3;
+
+  // Subject gap — 논술 benefits from peak ability even with poor avg
+  const gapToAvg = avg - bestAcademic;
+  if (gapToAvg >= 2.0) 논술 += 12;
+  else if (gapToAvg >= 1.0) 논술 += 8;
+  else if (gapToAvg >= 0.5) 논술 += 4;
+
+  // Base grade
+  if (avg <= 4.0) 논술 += 15;
+  else if (avg <= 5.0) 논술 += 12;
+  else if (avg <= 6.0) 논술 += 9;
+  else if (avg <= 7.0) 논술 += 6;
+  else 논술 += 3;
+
+  // Trend
+  if (trend.length >= 2) {
+    const last = trend[trend.length - 1].avg;
+    const first = trend[0].avg;
+    if (last < first - 0.3) 논술 += 8;
+    else 논술 += 3;
+  }
+
+  // Keyword frequency analysis for display
+  const foundKeywords = [];
+  keywords.forEach(k => {
+    const cnt = (allText.match(new RegExp(k, 'g')) || []).length;
+    if (cnt >= 2) foundKeywords.push(k + '(' + cnt + ')');
+  });
+
+  // Determine recommendation with nuanced logic
+  const scores = { 교과: Math.min(100, Math.max(0, 교과)), 종합: Math.min(100, Math.max(0, 종합)), 논술: Math.min(100, Math.max(0, 논술)) };
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const best = sorted[0][0];
+  const bestScore = sorted[0][1];
+  const gap12 = sorted[0][1] - sorted[1][1];
+
+  let strategy = '';
+  let detail = '';
+
+  if (gap12 <= 8) {
+    // Top two are close — recommend hybrid
+    const t1 = sorted[0][0], t2 = sorted[1][0];
+    strategy = `${t1}+${t2} 병행`;
+    detail = `${t1}전형과 ${t2}전형 적합도가 비슷합니다. 대학별로 유리한 전형을 선택적으로 지원하는 것이 최적입니다.`;
+  } else if (best === '교과') {
+    strategy = '교과전형 중심';
+    detail = '내신 성적이 안정적이고 교과 간 편차가 작아 교과전형에서 유리합니다. 안정/적정 지원에서 교과전형을 중심으로 배치하세요.';
+  } else if (best === '종합') {
+    strategy = '종합전형 중심';
+    if (avg > 5.0) {
+      detail = '내신 대비 생기부 활동이 풍부하여 종합전형에서 역전 가능성이 높습니다. 면접 준비를 통해 추가 경쟁력을 확보하세요.';
+    } else {
+      detail = '생기부 활동이 풍부하고 진로 일관성이 있어 종합전형에서 유리합니다. 서류와 면접 준비에 집중하세요.';
+    }
+  } else {
+    strategy = '논술전형 병행';
+    detail = '수학/과학 교과 역량이 강해 논술전형에서 좋은 결과를 기대할 수 있습니다. 교과 또는 종합전형과 병행하세요.';
+  }
+
+  // Contextual advice
+  if (avg > 5.5 && scores.종합 > scores.교과) {
+    detail += ' 내신 대비 생기부가 강점이므로 종합전형에서 내신 불리를 생기부로 보완하는 전략이 효과적입니다.';
+  }
+  if (trend.length >= 3 && trend[trend.length - 1].avg < trend[0].avg - 0.5) {
+    detail += ' 성적 상승세가 뚜렷하여 종합전형 면접에서 성장 스토리로 활용 가능합니다.';
+  }
+  if (gapToAvg >= 1.5 && best !== '논술') {
+    detail += ` ${bestAcademic === mathAvg ? '수학' : bestAcademic === sciAvg ? '과학' : bestAcademic === korAvg ? '국어' : '영어'} 교과가 평균 대비 우수하여 논술전형 1~2교 병행도 고려하세요.`;
+  }
+
+  return {
+    scores,
+    sorted,
+    strategy,
+    detail,
+    keywordCount,
+    foundKeywords: foundKeywords.slice(0, 6),
+    recordChars: totalChars,
+    fitScore: fitData.score
+  };
+}
+
 function calcCompositeScore(univResult, student, analysis) {
   if (!univResult) return null;
   const combo = matchReflectCombo(univResult.cutline?.reflect || '');
@@ -4434,6 +4661,45 @@ function renderSusiTab(student, analysis) {
   html += `<div style="margin-top:10px;padding:10px 14px;background:var(--cream);border-radius:10px;font-size:12px;line-height:1.6">
     <strong>상담 포인트:</strong> ${advice}
   </div>`;
+
+  // 전형 전략 분석
+  const strat = calcAdmissionStrategy(student, analysis);
+  html += '<div style="margin-top:14px;padding:14px;background:var(--card);border-radius:12px;border:1px solid var(--border)">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">전형 전략 분석</div>';
+
+  // Three-bar chart
+  html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+  strat.sorted.forEach(([type, score]) => {
+    const color = type === '교과' ? 'var(--teal)' : type === '종합' ? 'var(--blue)' : 'var(--orange)';
+    const isBest = type === strat.sorted[0][0];
+    html += `<div style="flex:1;text-align:center">
+      <div style="font-size:11px;font-weight:${isBest ? '700' : '500'};color:${isBest ? color : 'var(--sub)'};margin-bottom:4px">${type}전형</div>
+      <div style="height:60px;background:var(--cream);border-radius:6px;position:relative;overflow:hidden">
+        <div style="position:absolute;bottom:0;left:0;right:0;height:${score}%;background:${color};opacity:${isBest ? 0.7 : 0.3};border-radius:0 0 6px 6px;transition:height 0.3s"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+          <span class="mono" style="font-size:${isBest ? 18 : 14}px;font-weight:700;color:${isBest ? color : 'var(--muted)'}">${score}</span>
+        </div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Strategy recommendation
+  html += `<div style="padding:8px 12px;background:var(--cream);border-radius:8px;border-left:3px solid var(--teal)">
+    <div style="font-size:12px;font-weight:700;color:var(--teal);margin-bottom:2px">${esc(strat.strategy)}</div>
+    <div style="font-size:11px;color:var(--sub);line-height:1.5">${esc(strat.detail)}</div>
+  </div>`;
+
+  // Key indicators
+  if (strat.foundKeywords.length > 0 || strat.fitScore > 0) {
+    html += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
+    if (strat.foundKeywords.length > 0) {
+      html += `<span style="font-size:10px;padding:2px 8px;background:rgba(0,122,255,0.08);border-radius:10px;color:var(--blue)">생기부 키워드: ${strat.foundKeywords.join(', ')}</span>`;
+    }
+    html += `<span style="font-size:10px;padding:2px 8px;background:rgba(20,58,64,0.06);border-radius:10px;color:var(--sub)">생기부 ${Math.round(strat.recordChars/100)/10}천자 · 적합성 ${strat.fitScore}점</span>`;
+    html += '</div>';
+  }
+  html += '</div>';
 
   // 6지원 최적 포트폴리오 시뮬레이터 (greedy optimization)
   if (allComps.length >= 6) {
@@ -5624,16 +5890,27 @@ th{background:#f5f5f0;font-weight:700}
     report += `<div class="box" style="margin-top:4px"><strong>진로 변화:</strong> ${ra.storyArc.map(s => s.year + '학년:' + s.career).join(' → ')}</div>`;
   }
 
+  // Admission strategy analysis
+  const reportStrat = calcAdmissionStrategy(student, analysis);
+  report += '<h2>6. 전형 전략 분석</h2>';
+  report += '<div class="grid2" style="margin-bottom:6px">';
+  reportStrat.sorted.forEach(([type, score]) => {
+    const isBest = type === reportStrat.sorted[0][0];
+    report += `<div class="box" style="${isBest ? 'border-left:3px solid #143A40;font-weight:700' : ''}">${type}전형: ${score}점${isBest ? ' ★' : ''}</div>`;
+  });
+  report += '</div>';
+  report += `<div class="box" style="border-left:3px solid #143A40"><strong>${esc(reportStrat.strategy)}:</strong> ${esc(reportStrat.detail)}</div>`;
+
   // Counseling points
   if (ra.counselingPoints.length > 0) {
-    report += '<h2>6. 상담 포인트</h2>';
+    report += '<h2>7. 상담 포인트</h2>';
     const unique = [...new Set(ra.counselingPoints)];
     unique.forEach(p => report += `<div class="box" style="margin-bottom:4px;border-left:3px solid #C77B3C">· ${esc(p)}</div>`);
   }
 
   // Interview predictions
   if (ra.interviewPredictions.length > 0) {
-    report += '<h2>7. 예상 면접 질문 (상위 5개)</h2>';
+    report += '<h2>8. 예상 면접 질문 (상위 5개)</h2>';
     ra.interviewPredictions.slice(0, 5).forEach((p, i) => {
       report += `<div class="box" style="margin-bottom:4px"><strong>Q${i+1}.</strong> ${esc(p.q)} <span style="color:#999">(${esc(p.source)})</span></div>`;
     });
@@ -5643,7 +5920,7 @@ th{background:#f5f5f0;font-weight:700}
   const memoKey = `memo_${student.seat}`;
   const studentMemos = memos[memoKey] || [];
   if (studentMemos.length > 0) {
-    report += '<h2>8. 상담 메모</h2>';
+    report += '<h2>9. 상담 메모</h2>';
     studentMemos.forEach(m => {
       report += `<div class="box" style="margin-bottom:4px"><span style="color:#999">${esc(m.time)}</span> · ${esc(m.text)}</div>`;
     });
