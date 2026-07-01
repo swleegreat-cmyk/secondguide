@@ -3796,6 +3796,45 @@ function renderDashboard() {
     html += '</tbody></table></div>';
   }
 
+  // Class-wide admission potential summary (cached)
+  if (!_cache.classPortfolio) {
+    const stats = { atLeastOneSum: 0, expectedSum: 0, count: 0 };
+    const bands = { high: 0, mid: 0, low: 0, warn: 0 };
+    STUDENTS.forEach(s => {
+      const a = ANALYSIS[s.seat] || {};
+      const results = runAllUniversities(s);
+      const allC = results.map(r => {
+        const comp = calcCompositeScore(r, s, a);
+        return { ...r, prob: comp.probability, comp };
+      }).sort((a, b) => b.prob - a.prob);
+      if (allC.length >= 6) {
+        const port = calcOptimalPortfolio(allC, 6);
+        stats.atLeastOneSum += port.atLeastOne;
+        stats.expectedSum += port.expectedCount;
+        stats.count++;
+        if (port.atLeastOne >= 95) bands.high++;
+        else if (port.atLeastOne >= 80) bands.mid++;
+        else if (port.atLeastOne >= 60) bands.low++;
+        else bands.warn++;
+      }
+    });
+    _cache.classPortfolio = { stats, bands };
+  }
+  const { stats: classPortfolioStats, bands: portBands } = _cache.classPortfolio;
+
+  html += '<h3 style="margin-top:20px">학급 합격 예측 요약</h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">전체 학생의 AI 최적 포트폴리오 기반 합격 예측 통계입니다.</p>';
+  if (classPortfolioStats.count > 0) {
+    const avgALO = Math.round(classPortfolioStats.atLeastOneSum / classPortfolioStats.count);
+    const avgExp = (classPortfolioStats.expectedSum / classPortfolioStats.count).toFixed(1);
+    html += '<div class="stat-grid" style="margin-bottom:12px">';
+    html += `<div class="stat-box"><div class="num" style="color:var(--green)">${avgALO}%</div><div class="label">평균 합격 확률 (최소 1교)</div></div>`;
+    html += `<div class="stat-box"><div class="num" style="color:var(--blue)">${avgExp}교</div><div class="label">평균 기대 합격 수</div></div>`;
+    html += `<div class="stat-box"><div class="num">${portBands.high}</div><div class="label">안정 (95%+)</div></div>`;
+    html += `<div class="stat-box"><div class="num" style="color:var(--orange)">${portBands.warn}</div><div class="label">주의 (<60%)</div></div>`;
+    html += '</div>';
+  }
+
   // Counseling priority students
   html += '<h3 style="margin-top:20px">상담 우선 학생</h3>';
   html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">성적 변화, 진로 적합도, 또는 특이사항으로 우선 상담이 필요한 학생입니다.</p>';
@@ -3938,6 +3977,37 @@ function renderScoreTab(student, analysis) {
   }
   const graded = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9);
   html += `<div class="stat-box"><div class="num">${graded.length}</div><div class="label">반영 과목 수</div></div>`;
+  html += '</div>';
+
+  // Class position indicator
+  const allAvgs = STUDENTS.map((s, i) => ({ idx: i, name: s.name, seat: s.seat, avg: calcWeightedAvg(s) })).sort((a, b) => a.avg - b.avg);
+  const rank = allAvgs.findIndex(a => a.idx === selectedIdx) + 1;
+  const percentile = Math.round((1 - (rank - 1) / (STUDENTS.length - 1)) * 100);
+
+  html += `<div style="margin-top:12px;padding:12px;background:var(--cream);border-radius:10px">`;
+  html += `<div style="font-size:12px;font-weight:700;margin-bottom:8px">학급 내 위치 (${STUDENTS.length}명 중 ${rank}위 · 상위 ${percentile <= 50 ? percentile + '%' : (100 - percentile) + '% (하위)'})</div>`;
+  // Distribution bar with position marker
+  html += '<div style="position:relative;height:24px;background:linear-gradient(to right, var(--green), var(--blue), var(--orange), var(--red));border-radius:12px;opacity:0.3"></div>';
+  const markerPos = ((rank - 1) / (STUDENTS.length - 1)) * 100;
+  html += `<div style="position:relative;margin-top:-24px;height:24px">
+    <div style="position:absolute;left:${markerPos}%;transform:translateX(-50%);top:-2px">
+      <div style="width:4px;height:28px;background:var(--ink);border-radius:2px"></div>
+    </div>
+  </div>`;
+  html += `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
+    <span>${allAvgs[0].name} (${allAvgs[0].avg.toFixed(1)})</span>
+    <span>${allAvgs[Math.floor(allAvgs.length/2)].name} (${allAvgs[Math.floor(allAvgs.length/2)].avg.toFixed(1)})</span>
+    <span>${allAvgs[allAvgs.length-1].name} (${allAvgs[allAvgs.length-1].avg.toFixed(1)})</span>
+  </div>`;
+
+  // Similar students
+  const similar = allAvgs.filter(a => a.idx !== selectedIdx && Math.abs(a.avg - avg) <= 0.5).slice(0, 4);
+  if (similar.length > 0) {
+    html += '<div style="margin-top:8px;font-size:11px;color:var(--sub)"><strong>유사 성적 학생:</strong> ';
+    html += similar.map(s => `<span style="cursor:pointer;text-decoration:underline" onclick="selectStudent(${s.idx})">${esc(s.name)}(${s.avg.toFixed(1)})</span>`).join(', ');
+    html += '</div>';
+  }
+
   html += '</div></div>';
 
   // Subject bars
