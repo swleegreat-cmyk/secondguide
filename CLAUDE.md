@@ -62,4 +62,19 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## 5. 자동 매뉴얼 매칭
+
+작업 유형에 따라 `.claude/rules/` 의 관련 규칙 파일을 먼저 읽고 따른다.
+
+| 작업 유형 | 규칙 파일 |
+|----------|----------|
+| 작업 시작, 큰 기능 구현 | `.claude/rules/task-planning.md` |
+| 여러 파일 수정, 연속 작업 | `.claude/rules/context-memory.md` |
+| HTML/CSS/JS 수정 | `.claude/rules/frontend.md` |
+| 커밋 전, 작업 완료 시 | `.claude/rules/quality-check.md` |
+
+복수의 규칙이 해당되면 모두 적용한다.
+
+---
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
