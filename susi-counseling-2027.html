@@ -4528,6 +4528,12 @@ function renderScoreTab(student, analysis) {
   }
   const graded = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9);
   html += `<div class="stat-box"><div class="num">${graded.length}</div><div class="label">반영 과목 수</div></div>`;
+  const gc = calcGradeConsistency(student);
+  if (gc.level !== 'unknown') {
+    const gcColor = gc.level === 'high' ? 'var(--green)' : gc.level === 'medium' ? 'var(--blue)' : 'var(--orange)';
+    const gcLabel = gc.level === 'high' ? '안정' : gc.level === 'medium' ? '보통' : gc.level === 'low' ? '변동' : '불안정';
+    html += `<div class="stat-box"><div class="num" style="font-size:20px;color:${gcColor}">${gcLabel}</div><div class="label">성적 일관성 (σ${gc.stdDev})</div></div>`;
+  }
   html += '</div>';
 
   // Class position indicator
@@ -4639,6 +4645,50 @@ function renderScoreTab(student, analysis) {
     html += `<div style="margin-top:8px;padding:8px 12px;background:var(--green-light);border-radius:8px;font-size:12px">
       <strong>최적 조합:</strong> ${esc(bestCombo)} (${bestScore.toFixed(2)}등급) — 이 조합을 반영하는 대학에서 가장 유리합니다.
     </div>`;
+  }
+
+  // Combo-specific trend sparklines
+  const comboTrends = {};
+  let hasComboTrend = false;
+  COMBO_ORDER.forEach(combo => {
+    if (!combos[combo]) return;
+    const ct = calcComboTrend(student, combo);
+    if (ct.length >= 2) { comboTrends[combo] = ct; hasComboTrend = true; }
+  });
+  if (hasComboTrend) {
+    html += '<div style="margin-top:12px;padding:12px;background:var(--cream);border-radius:10px">';
+    html += '<div style="font-size:12px;font-weight:700;margin-bottom:8px">조합별 학기 추이 (확률 반영)</div>';
+    COMBO_ORDER.forEach(combo => {
+      const ct = comboTrends[combo];
+      if (!ct) return;
+      const first = ct[0].avg, last = ct[ct.length-1].avg;
+      const diff = last - first;
+      const arrow = diff < -0.3 ? '↑' : diff > 0.3 ? '↓' : '→';
+      const ac = diff < -0.3 ? 'var(--green)' : diff > 0.3 ? 'var(--red)' : 'var(--muted)';
+      const svgW = 100, svgH = 24, pad = 3;
+      const minV = Math.min(...ct.map(d => d.avg));
+      const maxV = Math.max(...ct.map(d => d.avg));
+      const rng = Math.max(maxV - minV, 0.5);
+      const pts = ct.map((d, i) => {
+        const x = pad + (svgW - 2*pad) * i / (ct.length - 1);
+        const y = pad + (svgH - 2*pad) * (d.avg - minV) / rng;
+        return `${x},${y}`;
+      }).join(' ');
+      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="width:55px;font-size:10px;font-weight:600">${esc(combo)}</span>
+        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:${svgW}px;height:${svgH}px;flex-shrink:0">
+          <polyline points="${pts}" fill="none" stroke="${ac}" stroke-width="1.5" stroke-linecap="round"/>
+          ${ct.map((d, i) => {
+            const x = pad + (svgW - 2*pad) * i / (ct.length - 1);
+            const y = pad + (svgH - 2*pad) * (d.avg - minV) / rng;
+            return `<circle cx="${x}" cy="${y}" r="1.5" fill="${ac}"/>`;
+          }).join('')}
+        </svg>
+        <span class="mono" style="font-size:10px;color:var(--muted)">${first.toFixed(1)}→${last.toFixed(1)}</span>
+        <span style="font-size:12px;color:${ac};font-weight:700">${arrow}${Math.abs(diff) >= 0.1 ? Math.abs(diff).toFixed(1) : ''}</span>
+      </div>`;
+    });
+    html += '</div>';
   }
   html += '</div>';
 
