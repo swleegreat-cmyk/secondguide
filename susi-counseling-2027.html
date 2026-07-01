@@ -670,15 +670,26 @@ body {
   .match-num { text-align:left; }
 }
 
+/* Memo toggle */
+#memoSection.open { display:block !important; }
+.memo-arrow.open { transform:rotate(90deg); }
+
 /* Print */
 @media print {
-  .sidebar { display:none; }
-  .main { margin-left:0; max-width:100%; }
-  .tab-bar { display:none; }
-  .tab-panel { display:block !important; page-break-before:always; }
-  .tab-panel:first-of-type { page-break-before:avoid; }
-  body { background:#fff; }
-  .glass { backdrop-filter:none; -webkit-backdrop-filter:none; background:#fff; box-shadow:none; border:1px solid #ddd; }
+  .sidebar { display:none !important; }
+  .main { margin-left:0 !important; max-width:100% !important; padding:0 20px !important; }
+  .tab-bar { display:none !important; }
+  .tab-panel { display:block !important; page-break-inside:avoid; }
+  .tab-panel:not(:first-of-type) { page-break-before:always; }
+  body { background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .glass { backdrop-filter:none; -webkit-backdrop-filter:none; background:#fff !important; box-shadow:none !important; border:1px solid #ddd; break-inside:avoid; }
+  .stat-grid { break-inside:avoid; }
+  .footer { break-before:avoid; }
+  .fav-btn, .dtgl, .sort-controls, .search-bar, .filter-btn, .band-chip, #bandFilters, #memoSection button, #memoInput { display:none !important; }
+  .profile-header { break-after:avoid; }
+  .g-table { break-inside:avoid; font-size:10px; }
+  .sem-detail { display:block !important; }
+  #classDashboard { display:none !important; }
 }
 </style>
 </head>
@@ -702,11 +713,7 @@ body {
   <!-- Main -->
   <div class="main" id="mainArea">
     <div id="contentArea">
-      <div class="empty">
-        <div class="icon">&#x1F393;</div>
-        <p>좌측에서 학생을 선택하면</p>
-        <p>성적 · 수시 탐색 · 생기부가 한 화면으로 이어집니다.</p>
-      </div>
+      <div id="classDashboard"></div>
     </div>
   </div>
 
@@ -3732,6 +3739,22 @@ function renderMain(student, analysis) {
   }
   html += `</div>`; // end record tab
 
+  // ── Counseling Memo Section ──
+  const memoCount = (memos[String(student.seat)] || []).length;
+  html += `<div class="glass" style="margin-top:10px">
+    <h3 style="cursor:pointer" onclick="document.getElementById('memoSection').classList.toggle('open');this.querySelector('.memo-arrow').classList.toggle('open')">
+      <span class="memo-arrow" style="display:inline-block;transition:transform .2s;margin-right:6px;font-size:10px">▸</span>
+      상담 메모 <span style="color:var(--muted);font-weight:400;font-size:12px">(${memoCount}건)</span>
+    </h3>
+    <div id="memoSection" style="display:none;margin-top:10px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <textarea id="memoInput" rows="2" placeholder="상담 내용을 기록하세요..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:12px;resize:vertical;background:var(--card-solid)"></textarea>
+        <button onclick="saveMemo(${student.seat})" style="padding:8px 16px;background:var(--teal);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">저장</button>
+      </div>
+      <div id="memoList"></div>
+    </div>
+  </div>`;
+
   // Footer
   html += `<div class="footer">
     <div style="margin-bottom:6px">학생 데이터는 브라우저 내에서만 처리되며 외부로 전송되지 않습니다.</div>
@@ -3765,6 +3788,12 @@ function renderMain(student, analysis) {
       });
     });
   }
+
+  // Render memo list
+  renderMemoList(student.seat);
+
+  // Scroll to top
+  document.querySelector('.main').scrollTo(0, 0);
 }
 
 function formatDetail(d) {
@@ -3896,10 +3925,120 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ── Class Dashboard ──
+function renderDashboard() {
+  const el = document.getElementById('classDashboard');
+  if (!el) return;
+  const avgs = STUDENTS.map(s => ({ name: s.name, seat: s.seat, avg: calcAvg(s) }));
+  avgs.sort((a, b) => a.avg - b.avg);
+  const classAvg = avgs.reduce((s, a) => s + a.avg, 0) / avgs.length;
+  const bands = [0,0,0,0,0,0,0,0,0];
+  avgs.forEach(a => { const b = Math.min(8, Math.max(0, Math.floor(a.avg) - 1)); bands[b]++; });
+  const maxBand = Math.max(...bands, 1);
+
+  let html = `<div class="glass" style="text-align:center;padding:28px">
+    <div style="font-size:22px;font-weight:800;color:var(--teal)">병점고 3학년 4반 · 학급 현황</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">2027학년도 수시 상담용 · ${STUDENTS.length}명</div>
+  </div>`;
+
+  html += `<div class="stat-grid">
+    <div class="stat-box"><div class="num mono" style="color:${gradeColor(classAvg)}">${classAvg.toFixed(2)}</div><div class="label">학급 평균</div></div>
+    <div class="stat-box"><div class="num mono" style="color:var(--green)">${avgs[0].avg.toFixed(2)}</div><div class="label">최고 (${avgs[0].name})</div></div>
+    <div class="stat-box"><div class="num mono" style="color:var(--orange)">${avgs[Math.floor(avgs.length/2)].avg.toFixed(2)}</div><div class="label">중위값</div></div>
+    <div class="stat-box"><div class="num mono" style="color:var(--red)">${avgs[avgs.length-1].avg.toFixed(2)}</div><div class="label">최저</div></div>
+  </div>`;
+
+  html += `<div class="glass"><h3>등급대별 분포</h3>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding:10px 0">`;
+  for (let i = 0; i < 9; i++) {
+    const h = bands[i] > 0 ? Math.max(12, (bands[i] / maxBand) * 100) : 4;
+    const c = gradeColor(i + 1.5);
+    html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <span style="font-size:10px;font-weight:700;color:${bands[i]>0?'var(--ink)':'var(--muted)'}">${bands[i] || ''}</span>
+      <div style="width:100%;height:${h}px;background:${c};border-radius:4px 4px 0 0;opacity:${bands[i]>0?1:0.2}"></div>
+      <span style="font-size:10px;color:var(--muted)">${i+1}등급</span>
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  const combos = ['전교과','국수영사','국수영과','국수영'];
+  html += `<div class="glass"><h3>조합별 상위 5명</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">`;
+  combos.forEach(combo => {
+    const ranked = STUDENTS.map(s => {
+      const cs = calcComboScores(s);
+      return { name: s.name, seat: s.seat, score: cs[combo] };
+    }).filter(s => s.score != null).sort((a, b) => a.score - b.score).slice(0, 5);
+    html += `<div style="padding:10px;background:var(--cream);border-radius:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--teal);margin-bottom:6px">${COMBO_LABELS[combo] || combo}</div>`;
+    ranked.forEach((s, i) => {
+      html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;cursor:pointer" onclick="selectStudent(${STUDENTS.findIndex(st=>st.seat===s.seat)})">
+        <span>${i+1}. ${s.seat}번 ${esc(s.name)}</span>
+        <span class="mono" style="font-weight:700;color:${gradeColor(s.score)}">${s.score.toFixed(2)}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div></div>`;
+
+  html += `<div class="glass"><h3>전체 학생 순위 (전교과 평균)</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">`;
+  avgs.forEach((s, i) => {
+    const bg = i < 5 ? 'var(--green-light)' : i < 10 ? 'var(--blue-light)' : i < 20 ? 'var(--cream)' : i < 27 ? 'var(--orange-light)' : 'var(--red-light)';
+    html += `<div style="display:flex;justify-content:space-between;padding:5px 10px;background:${bg};border-radius:6px;font-size:12px;cursor:pointer" onclick="selectStudent(${STUDENTS.findIndex(st=>st.seat===s.seat)})">
+      <span><span style="color:var(--muted);min-width:18px;display:inline-block">${i+1}</span> ${s.seat}번 ${esc(s.name)}</span>
+      <span class="mono" style="font-weight:700;color:${gradeColor(s.avg)}">${s.avg.toFixed(2)}</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  html += `<div style="text-align:center;padding:20px;font-size:11px;color:var(--muted)">좌측에서 학생을 선택하면 개별 상담 화면으로 이동합니다</div>`;
+  el.innerHTML = html;
+}
+
+// ── Counseling Memo ──
+let memos = {};
+try { memos = JSON.parse(localStorage.getItem('susiMemos') || '{}'); } catch(e) {}
+function saveMemo(seat) {
+  const ta = document.getElementById('memoInput');
+  if (!ta) return;
+  const text = ta.value.trim();
+  if (!text) return;
+  const key = String(seat);
+  if (!memos[key]) memos[key] = [];
+  const now = new Date();
+  const stamp = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  memos[key].unshift({ t: stamp, m: text });
+  if (memos[key].length > 50) memos[key] = memos[key].slice(0, 50);
+  try { localStorage.setItem('susiMemos', JSON.stringify(memos)); } catch(e) {}
+  ta.value = '';
+  renderMemoList(seat);
+}
+function deleteMemo(seat, idx) {
+  const key = String(seat);
+  if (memos[key]) { memos[key].splice(idx, 1); try { localStorage.setItem('susiMemos', JSON.stringify(memos)); } catch(e) {} }
+  renderMemoList(seat);
+}
+function renderMemoList(seat) {
+  const el = document.getElementById('memoList');
+  if (!el) return;
+  const list = memos[String(seat)] || [];
+  if (list.length === 0) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">아직 메모가 없습니다</div>'; return; }
+  el.innerHTML = list.map((m, i) => `<div style="padding:8px 10px;background:var(--cream);border-radius:8px;margin-bottom:6px;font-size:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+      <span style="font-size:10px;color:var(--muted)">${esc(m.t)}</span>
+      <button onclick="deleteMemo(${seat},${i})" style="border:none;background:none;color:var(--red);font-size:10px;cursor:pointer;padding:0">삭제</button>
+    </div>
+    <div style="color:var(--ink);white-space:pre-wrap">${esc(m.m)}</div>
+  </div>`).join('');
+}
+
 // ── Restore last selection ──
 const saved = localStorage.getItem('susi27_last');
 if (saved != null && STUDENTS[parseInt(saved)]) {
   selectStudent(parseInt(saved));
+} else {
+  renderDashboard();
 }
 
 </script>
