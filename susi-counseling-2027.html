@@ -3335,57 +3335,111 @@ function calcCompositeScore(univResult, student, analysis) {
     comboUsed = combo;
   }
 
+  // Smooth interpolation instead of step-based
   let base = 0;
   if (univResult.cutline) {
     const diff = comboScore - univResult.cutline.cut;
-    if (diff <= -1.5) base = 95;
-    else if (diff <= -0.8) base = 85;
-    else if (diff <= -0.3) base = 70;
-    else if (diff <= 0) base = 55;
-    else if (diff <= 0.5) base = 40;
-    else if (diff <= 1.0) base = 25;
-    else base = 10;
+    // sigmoid-like curve: maps diff to probability
+    // diff < 0 means student is better than cutline
+    if (diff <= -2.0) base = 97;
+    else if (diff >= 3.0) base = 5;
+    else {
+      // linear interpolation between anchor points
+      const anchors = [
+        [-2.0, 97], [-1.5, 93], [-1.0, 85], [-0.5, 72],
+        [-0.2, 60], [0, 50], [0.3, 38], [0.5, 30],
+        [1.0, 20], [1.5, 13], [2.0, 8], [3.0, 5]
+      ];
+      for (let i = 0; i < anchors.length - 1; i++) {
+        if (diff >= anchors[i][0] && diff < anchors[i+1][0]) {
+          const t = (diff - anchors[i][0]) / (anchors[i+1][0] - anchors[i][0]);
+          base = Math.round(anchors[i][1] + t * (anchors[i+1][1] - anchors[i][1]));
+          break;
+        }
+      }
+      if (base === 0) base = 5;
+    }
   } else {
-    if (comboScore <= 2.0) base = 65;
-    else if (comboScore <= 3.0) base = 50;
-    else if (comboScore <= 4.0) base = 35;
-    else if (comboScore <= 5.0) base = 25;
-    else base = 15;
+    // No cutline: use absolute grade anchors
+    const anchors = [
+      [1.0, 75], [1.5, 65], [2.0, 55], [2.5, 47],
+      [3.0, 40], [3.5, 33], [4.0, 27], [5.0, 20],
+      [6.0, 14], [7.0, 10], [9.0, 5]
+    ];
+    base = 5;
+    for (let i = 0; i < anchors.length - 1; i++) {
+      if (comboScore >= anchors[i][0] && comboScore < anchors[i+1][0]) {
+        const t = (comboScore - anchors[i][0]) / (anchors[i+1][0] - anchors[i][0]);
+        base = Math.round(anchors[i][1] + t * (anchors[i+1][1] - anchors[i][1]));
+        break;
+      }
+    }
+    if (comboScore < 1.0) base = 80;
   }
 
+  // Trend analysis
   const trend = calcYearlyTrend(student);
   let trendBonus = 0;
-  if (trend.length >= 2) {
+  if (trend.length >= 3) {
     const first = trend[0].avg, last = trend[trend.length-1].avg;
     const diff = last - first;
+    const recent = trend.slice(-2);
+    const recentDiff = recent.length === 2 ? recent[1].avg - recent[0].avg : 0;
+    // Weight recent trend more heavily
+    if (diff < -0.8 && recentDiff < 0) trendBonus = 7;
+    else if (diff < -0.3) trendBonus = 4;
+    else if (diff > 0.8) trendBonus = -6;
+    else if (diff > 0.3) trendBonus = -3;
+  } else if (trend.length === 2) {
+    const diff = trend[1].avg - trend[0].avg;
     if (diff < -0.5) trendBonus = 5;
     else if (diff > 0.5) trendBonus = -5;
   }
 
+  // Competition ratio adjustment
   let ratioAdj = 0;
   if (univResult.cutline && univResult.cutline.ratio) {
     const r = parseFloat(univResult.cutline.ratio);
     if (!isNaN(r)) {
-      if (r > 10) ratioAdj = -3;
+      if (r > 15) ratioAdj = -5;
+      else if (r > 10) ratioAdj = -3;
       else if (r > 7) ratioAdj = -1;
-      else if (r < 4) ratioAdj = 2;
+      else if (r < 3) ratioAdj = 3;
+      else if (r < 5) ratioAdj = 1;
     }
   }
 
+  // 수능최저 penalty
   let minAdj = 0;
-  if (univResult.cutline && univResult.cutline.min) minAdj = -5;
+  if (univResult.cutline && univResult.cutline.min) {
+    const minText = String(univResult.cutline.min);
+    if (minText.includes('4') || minText.includes('5')) minAdj = -3;
+    else if (minText.includes('2') || minText.includes('3')) minAdj = -5;
+    else minAdj = -4;
+  }
 
+  // Reliability discount
+  let reliabilityAdj = 0;
+  if (univResult.reliability === 'none') reliabilityAdj = -3;
+  else if (univResult.reliability === 'low') reliabilityAdj = -2;
+
+  // Subject count: fewer subjects = less confidence
+  let countAdj = 0;
+  if (univResult.count && univResult.count < 10) countAdj = -2;
+
+  // Fit score
   const concept = analyzeRecord(student, analysis || {}).concept;
   const fitData = calcFitScore(student, analysis || {}, concept);
   const jeonType = univResult.jeonType || '';
   const is종합 = jeonType.includes('종합') || jeonType.includes('서류') || jeonType.includes('면접');
   const fitBonus = is종합 ? Math.round(fitData.score * 0.1) : Math.round(fitData.score * 0.03);
 
-  const raw = Math.max(5, Math.min(99, base + trendBonus + ratioAdj + minAdj + fitBonus));
+  const raw = Math.max(5, Math.min(99, base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus));
   return {
     probability: raw,
     comboScore, comboUsed,
     trendBonus, ratioAdj, minAdj, fitBonus,
+    reliabilityAdj, countAdj,
     fitData,
     is종합
   };
@@ -3528,6 +3582,47 @@ function renderDashboard() {
     </div>`;
   });
   html += '</div>';
+
+  // Counseling priority students
+  html += '<h3 style="margin-top:20px">상담 우선 학생</h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">성적 변화, 진로 적합도, 또는 특이사항으로 우선 상담이 필요한 학생입니다.</p>';
+  const priorityStudents = [];
+  STUDENTS.forEach((s, i) => {
+    const avg = calcWeightedAvg(s);
+    const a = ANALYSIS[s.seat] || {};
+    const ra = analyzeRecord(s, a);
+    const fit = calcFitScore(s, a, ra.concept);
+    const trend = calcYearlyTrend(s);
+    const reasons = [];
+    if (trend.length >= 2) {
+      const diff = trend[trend.length-1].avg - trend[0].avg;
+      if (diff > 1.0) reasons.push({text:'성적 급락 (' + Math.abs(diff).toFixed(1) + '등급↓)', severity:3});
+      else if (diff < -1.0) reasons.push({text:'성적 급상승 (' + Math.abs(diff).toFixed(1) + '등급↑)', severity:1});
+    }
+    if (fit.score < 30) reasons.push({text:'전공적합성 낮음 (' + fit.score + '점)', severity:2});
+    if (!ra.concept) reasons.push({text:'진로 방향 미설정', severity:2});
+    if (ra.storyArc.length >= 2) {
+      const first = ra.storyArc[0], last = ra.storyArc[ra.storyArc.length-1];
+      if (first.career !== last.career) reasons.push({text:'진로 변경 (' + first.career + '→' + last.career + ')', severity:1});
+    }
+    if (avg > 6.0) reasons.push({text:'전체 평균 ' + avg.toFixed(1) + '등급', severity:1});
+    if (reasons.length > 0) {
+      const maxSev = Math.max(...reasons.map(r => r.severity));
+      priorityStudents.push({idx: i, name: s.name, seat: s.seat, reasons, severity: maxSev, avg});
+    }
+  });
+  priorityStudents.sort((a, b) => b.severity - a.severity || a.avg - b.avg);
+  if (priorityStudents.length > 0) {
+    priorityStudents.slice(0, 12).forEach(ps => {
+      const sevColor = ps.severity >= 3 ? 'var(--red)' : ps.severity >= 2 ? 'var(--orange)' : 'var(--blue)';
+      html += `<div class="dash-student" data-idx="${ps.idx}" style="border-left:3px solid ${sevColor}">
+        <div class="ds-name">${ps.seat}번 ${esc(ps.name)}</div>
+        <div style="font-size:10px;color:var(--muted)">${ps.reasons.map(r => r.text).join(' · ')}</div>
+      </div>`;
+    });
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted)">특별히 우선 상담이 필요한 학생이 없습니다.</div>';
+  }
 
   // Student grid with fit scores
   html += '<h3 style="margin-top:20px">전체 학생</h3>';
@@ -4100,12 +4195,15 @@ function showUnivDetail(univName) {
   // Probability breakdown
   html += '<div style="margin-top:10px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px">';
   html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--sub)">합격 확률 산출 근거</div>';
+  const baseVal = comp.probability - comp.trendBonus - comp.ratioAdj - comp.minAdj - comp.fitBonus - (comp.reliabilityAdj||0) - (comp.countAdj||0);
   const factors = [
-    {label:'내신 환산 기반', val: result.cutline ? (comp.probability - comp.trendBonus - comp.ratioAdj - comp.minAdj - comp.fitBonus) : comp.probability - comp.trendBonus - comp.fitBonus},
+    {label:'내신 환산 기반', val: baseVal},
   ];
   if (comp.trendBonus !== 0) factors.push({label:'성적 추세', val:comp.trendBonus, note: comp.trendBonus>0?'상승세':'하락세'});
   if (comp.ratioAdj !== 0) factors.push({label:'경쟁률 보정', val:comp.ratioAdj, note: comp.ratioAdj>0?'낮은 경쟁':'높은 경쟁'});
   if (comp.minAdj !== 0) factors.push({label:'수능최저 감점', val:comp.minAdj, note:'수능최저 충족 필요'});
+  if (comp.reliabilityAdj) factors.push({label:'환산 신뢰도', val:comp.reliabilityAdj, note:'환산 정확도 낮음'});
+  if (comp.countAdj) factors.push({label:'반영과목 부족', val:comp.countAdj, note:'과목 수 부족'});
   if (comp.fitBonus !== 0) factors.push({label: comp.is종합 ? '전공적합성(종합전형)' : '전공적합성(교과전형)', val:comp.fitBonus});
   factors.forEach(f => {
     const sign = f.val > 0 ? '+' : '';
