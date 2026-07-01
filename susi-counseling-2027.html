@@ -3399,8 +3399,6 @@ function parseMinRequirement(minText) {
 }
 
 function calcOptimalPortfolio(allComps, count) {
-  // Greedy portfolio optimization: maximize expected acceptances while maintaining tier diversity
-  // Strategy: pick from each band (safe/fit/reach) to ensure balanced portfolio
   const sorted = [...allComps].sort((a,b) => b.prob - a.prob);
   const picks = [];
   const used = new Set();
@@ -3409,20 +3407,28 @@ function calcOptimalPortfolio(allComps, count) {
   const fit = sorted.filter(r => r.prob >= 40 && r.prob < 65);
   const reach = sorted.filter(r => r.prob >= 15 && r.prob < 40);
 
-  // Balanced allocation: 안정 2-3, 적정 2, 소신 1-2
-  const addPick = (pool, n) => {
+  const addPick = (pool, n, opts) => {
     let added = 0;
     for (const r of pool) {
       if (picks.length >= count || added >= n) break;
       if (used.has(r.univ)) continue;
-      // Prefer different university tiers for diversity
       const sameTier = picks.filter(p => p.comp.tier === r.comp.tier).length;
       if (sameTier >= 3) continue;
+      if (opts && opts.preferType) {
+        const sameType = picks.filter(p => {
+          const pt = p.comp.is논술 ? '논술' : p.comp.is종합 ? '종합' : '교과';
+          return pt === opts.preferType;
+        }).length;
+        if (sameType >= 4) continue;
+      }
       picks.push(r);
       used.add(r.univ);
       added++;
     }
   };
+
+  const has종합 = sorted.some(r => r.comp.is종합);
+  const has논술 = sorted.some(r => r.comp.is논술);
 
   if (safe.length >= 3 && fit.length >= 2) {
     addPick(safe, 3);
@@ -3438,7 +3444,19 @@ function calcOptimalPortfolio(allComps, count) {
     addPick(reach, 3 - safe.length);
   }
 
-  // Fill remaining slots with best available
+  // Fill remaining: prefer 전형 type diversity
+  if (picks.length < count && (has종합 || has논술)) {
+    const pickedTypes = new Set(picks.map(p => p.comp.is논술 ? '논술' : p.comp.is종합 ? '종합' : '교과'));
+    if (!pickedTypes.has('종합') && has종합) {
+      const 종합pool = sorted.filter(r => r.comp.is종합 && !used.has(r.univ));
+      addPick(종합pool, 1);
+    }
+    if (!pickedTypes.has('논술') && has논술) {
+      const 논술pool = sorted.filter(r => r.comp.is논술 && !used.has(r.univ));
+      addPick(논술pool, 1);
+    }
+  }
+
   while (picks.length < count) {
     const next = sorted.find(r => !used.has(r.univ));
     if (!next) break;
@@ -3446,16 +3464,46 @@ function calcOptimalPortfolio(allComps, count) {
     used.add(next.univ);
   }
 
-  // Sort picks by probability descending
   picks.sort((a,b) => b.prob - a.prob);
 
-  // Calculate portfolio statistics
   const probs = picks.map(p => p.prob / 100);
   const nonePassing = probs.reduce((acc, p) => acc * (1 - p), 1);
   const atLeastOne = Math.round((1 - nonePassing) * 100);
   const expectedCount = probs.reduce((s, p) => s + p, 0);
 
-  return { picks, atLeastOne, expectedCount };
+  const safeCount = picks.filter(p => p.prob >= 65).length;
+  const fitCount = picks.filter(p => p.prob >= 40 && p.prob < 65).length;
+  const reachCount = picks.filter(p => p.prob < 40).length;
+  const typeBreakdown = {};
+  picks.forEach(p => {
+    const t = p.comp.is논술 ? '논술' : p.comp.is종합 ? '종합' : '교과';
+    typeBreakdown[t] = (typeBreakdown[t] || 0) + 1;
+  });
+
+  let riskLevel, riskAdvice;
+  if (safeCount >= 2 && fitCount >= 1) {
+    riskLevel = '안정적';
+    riskAdvice = '안정권 확보가 충분합니다. 남은 지원에서 상향 도전을 고려하세요.';
+  } else if (safeCount >= 1 && fitCount >= 2) {
+    riskLevel = '균형';
+    riskAdvice = '안정과 도전이 적절히 배분되어 있습니다.';
+  } else if (safeCount === 0 && fitCount >= 3) {
+    riskLevel = '주의';
+    riskAdvice = '안정권 대학이 없습니다. 합격 가능성이 높은 대학 1개 이상 포함을 권장합니다.';
+  } else if (reachCount >= 4) {
+    riskLevel = '위험';
+    riskAdvice = '소신·도전 지원 비중이 매우 높습니다. 수시 미합격 시 정시 전환 전략이 필요합니다.';
+  } else {
+    riskLevel = '보통';
+    riskAdvice = '전체적으로 무난한 구성이지만, 학생 상황에 맞는 세부 조정을 권장합니다.';
+  }
+
+  const dupUnivs = [];
+  const univNameCount = {};
+  picks.forEach(p => { univNameCount[p.univ] = (univNameCount[p.univ] || 0) + 1; });
+  for (const [u, c] of Object.entries(univNameCount)) { if (c > 1) dupUnivs.push(u); }
+
+  return { picks, atLeastOne, expectedCount, safeCount, fitCount, reachCount, typeBreakdown, riskLevel, riskAdvice, dupUnivs };
 }
 
 function calcAdmissionStrategy(student, analysis) {
@@ -3719,6 +3767,17 @@ function calcCompositeScore(univResult, student, analysis) {
           [1.0, 24], [1.5, 17], [2.0, 12], [3.0, 8]
         ], 8);
       }
+    } else if (is논술) {
+      // 논술전형: flattest spread — 논술 실력이 핵심, 내신은 보조적
+      if (diff <= -2.0) base = 82;
+      else if (diff >= 3.0) base = 12;
+      else {
+        base = interpolateAnchors(diff, [
+          [-2.0, 82], [-1.5, 74], [-1.0, 65], [-0.5, 56],
+          [-0.2, 50], [0, 45], [0.3, 40], [0.5, 36],
+          [1.0, 28], [1.5, 22], [2.0, 17], [3.0, 12]
+        ], 12);
+      }
     } else {
       // 교과전형: tighter spread — 내신이 거의 결정적
       if (diff <= -2.0) base = 98;
@@ -3745,7 +3804,13 @@ function calcCompositeScore(univResult, student, analysis) {
       3: [[1.0,82],[1.5,72],[2.0,62],[2.5,54],[3.0,46],[3.5,39],[4.0,33],[5.0,26],[6.0,19],[7.0,13],[9.0,6]],
       4: [[1.0,90],[1.5,80],[2.0,70],[2.5,62],[3.0,54],[3.5,47],[4.0,40],[5.0,32],[6.0,24],[7.0,17],[9.0,9]]
     };
-    const tierSet = is종합 ? tierAnchors종합 : tierAnchors교과;
+    const tierAnchors논술 = {
+      1: [[1.0,48],[1.5,40],[2.0,34],[2.5,28],[3.0,23],[3.5,19],[4.0,16],[5.0,12],[6.0,9],[9.0,5]],
+      2: [[1.0,60],[1.5,52],[2.0,44],[2.5,38],[3.0,33],[3.5,28],[4.0,24],[5.0,18],[6.0,14],[7.0,10],[9.0,6]],
+      3: [[1.0,70],[1.5,62],[2.0,54],[2.5,48],[3.0,42],[3.5,37],[4.0,32],[5.0,26],[6.0,20],[7.0,15],[9.0,8]],
+      4: [[1.0,80],[1.5,72],[2.0,64],[2.5,56],[3.0,50],[3.5,44],[4.0,38],[5.0,32],[6.0,25],[7.0,18],[9.0,10]]
+    };
+    const tierSet = is논술 ? tierAnchors논술 : is종합 ? tierAnchors종합 : tierAnchors교과;
     const anchors = tierSet[tier] || tierSet[4];
     base = interpolateAnchors(comboScore, anchors, comboScore < anchors[0][0] ? anchors[0][1] + 5 : 3);
   }
@@ -3760,8 +3825,7 @@ function calcCompositeScore(univResult, student, analysis) {
     const recentDiff = recent.length === 2 ? recent[1].avg - recent[0].avg : 0;
     const recentWeight = 0.65, overallWeight = 0.35;
     const combinedDiff = recentDiff * recentWeight + overallDiff * overallWeight;
-    // 종합전형: trend matters more (면접에서 성적 추세 설명 가능)
-    const trendMult = is종합 ? 1.3 : 1.0;
+    const trendMult = is종합 ? 1.3 : is논술 ? 0.5 : 1.0;
     if (combinedDiff < -0.6) trendBonus = Math.round(9 * trendMult);
     else if (combinedDiff < -0.3) trendBonus = Math.round(6 * trendMult);
     else if (combinedDiff < -0.1) trendBonus = Math.round(3 * trendMult);
@@ -4736,28 +4800,76 @@ function renderSusiTab(student, analysis) {
     html += '</div>';
   }
 
-  // 6지원 최적 포트폴리오 시뮬레이터 (greedy optimization)
+  // 6지원 최적 포트폴리오 시뮬레이터
   if (allComps.length >= 6) {
     const optPortfolio = calcOptimalPortfolio(allComps, 6);
     html += '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
-    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:8px">🎯 AI 최적 6지원 시뮬레이션</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:8px">AI 최적 6지원 시뮬레이션</div>';
     html += '<p style="font-size:11px;color:var(--sub);margin-bottom:10px">합격 확률, 대학 티어, 전형 다양성을 종합 최적화한 6개 대학 조합입니다.</p>';
+
+    // Risk distribution bar
+    const total = optPortfolio.picks.length;
+    const sPct = Math.round(optPortfolio.safeCount / total * 100);
+    const fPct = Math.round(optPortfolio.fitCount / total * 100);
+    const rPct = 100 - sPct - fPct;
+    const riskColor = optPortfolio.riskLevel === '안정적' ? 'var(--green)' : optPortfolio.riskLevel === '균형' ? 'var(--blue)' : optPortfolio.riskLevel === '주의' || optPortfolio.riskLevel === '위험' ? 'var(--red)' : 'var(--orange)';
+    html += `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+        <span>안정 ${optPortfolio.safeCount}교 / 적정 ${optPortfolio.fitCount}교 / 소신 ${optPortfolio.reachCount}교</span>
+        <span style="font-weight:700;color:${riskColor}">${optPortfolio.riskLevel}</span>
+      </div>
+      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden">
+        ${sPct > 0 ? `<div style="width:${sPct}%;background:var(--green)"></div>` : ''}
+        ${fPct > 0 ? `<div style="width:${fPct}%;background:var(--blue)"></div>` : ''}
+        ${rPct > 0 ? `<div style="width:${rPct}%;background:var(--orange)"></div>` : ''}
+      </div>
+    </div>`;
+
+    // Type breakdown chips
+    const typeEntries = Object.entries(optPortfolio.typeBreakdown);
+    if (typeEntries.length > 1) {
+      html += '<div style="display:flex;gap:6px;margin-bottom:8px">';
+      typeEntries.forEach(([t, c]) => {
+        const tc = t === '교과' ? 'var(--teal)' : t === '종합' ? 'var(--blue)' : 'var(--orange)';
+        html += `<span style="font-size:10px;padding:2px 8px;background:${tc}15;border-radius:10px;color:${tc};font-weight:600">${t} ${c}교</span>`;
+      });
+      html += '</div>';
+    }
+
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">';
     optPortfolio.picks.forEach((p, i) => {
       const tierLabel = p.prob >= 65 ? '안정' : p.prob >= 40 ? '적정' : p.prob >= 15 ? '소신' : '도전';
       const tColor = p.prob >= 65 ? 'var(--green)' : p.prob >= 40 ? 'var(--blue)' : p.prob >= 15 ? 'var(--orange)' : 'var(--red)';
+      const typeTag = p.comp.is논술 ? '논술' : p.comp.is종합 ? '종합' : '교과';
       html += `<div style="padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);cursor:pointer;text-align:center" onclick="showUnivDetail('${esc(p.univ)}')">
-        <div style="font-size:10px;color:${tColor};font-weight:700">${tierLabel} ${i+1}</div>
+        <div style="display:flex;justify-content:center;gap:4px;margin-bottom:2px">
+          <span style="font-size:9px;color:${tColor};font-weight:700">${tierLabel}</span>
+          <span style="font-size:9px;color:var(--muted)">${typeTag}</span>
+        </div>
         <div style="font-size:12px;font-weight:600;margin:2px 0">${esc(p.univ)}</div>
         <div class="mono" style="font-size:16px;font-weight:700;color:${tColor}">${p.prob}%</div>
         <div style="font-size:10px;color:var(--muted)">${esc((p.jeonType||'').substring(0,6))}</div>
       </div>`;
     });
     html += '</div>';
+
+    // Duplicate university warning
+    if (optPortfolio.dupUnivs.length > 0) {
+      html += `<div style="margin-top:6px;padding:6px 10px;background:var(--orange-light);border-radius:6px;font-size:11px;color:var(--orange)">
+        동일 대학 중복 지원: ${optPortfolio.dupUnivs.join(', ')} — 대학별 복수 지원 가능 여부를 확인하세요.
+      </div>`;
+    }
+
     html += `<div style="margin-top:8px;text-align:center;font-size:12px;color:var(--sub)">
       최소 1개 합격 확률: <strong class="mono" style="color:var(--teal);font-size:16px">${optPortfolio.atLeastOne}%</strong>
       · 기대 합격 수: <strong class="mono" style="color:var(--teal)">${optPortfolio.expectedCount.toFixed(1)}교</strong>
     </div>`;
+
+    // Risk advice
+    html += `<div style="margin-top:6px;padding:6px 10px;background:var(--cream);border-radius:6px;font-size:11px;color:var(--sub);border-left:3px solid ${riskColor}">
+      ${optPortfolio.riskAdvice}
+    </div>`;
+
     html += '</div>';
   }
 
@@ -5137,6 +5249,33 @@ function showUnivDetail(univName) {
         <div style="height:6px;background:var(--border);border-radius:3px;margin-top:2px"><div style="height:100%;width:${barW}%;background:${fc};border-radius:3px"></div></div>
       </div>`;
     });
+  } else if (comp.is논술) {
+    html += '<h3>논술전형 분석</h3>';
+    html += `<p style="font-size:11px;color:var(--muted);margin-bottom:10px">논술전형은 논술 시험 성적이 당락을 좌우하며, 내신은 보조적 역할입니다.</p>`;
+    const avg = calcWeightedAvg(student);
+    const subjAvgs = calcSubjectAvgs(student);
+    const mathSubj = subjAvgs.find(s => s.name === '수학');
+    const korSubj = subjAvgs.find(s => s.name === '국어');
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0">';
+    html += `<div style="padding:6px;background:var(--card);border-radius:6px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--muted)">전교과 평균</div>
+      <div class="mono" style="font-size:16px;font-weight:700;color:${gradeColor(avg)}">${avg.toFixed(2)}</div>
+    </div>`;
+    if (mathSubj) {
+      html += `<div style="padding:6px;background:var(--card);border-radius:6px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:10px;color:var(--muted)">수학 평균</div>
+        <div class="mono" style="font-size:16px;font-weight:700;color:${gradeColor(mathSubj.avg)}">${mathSubj.avg.toFixed(2)}</div>
+      </div>`;
+    }
+    if (korSubj) {
+      html += `<div style="padding:6px;background:var(--card);border-radius:6px;text-align:center;border:1px solid var(--border)">
+        <div style="font-size:10px;color:var(--muted)">국어 평균</div>
+        <div class="mono" style="font-size:16px;font-weight:700;color:${gradeColor(korSubj.avg)}">${korSubj.avg.toFixed(2)}</div>
+      </div>`;
+    }
+    html += '</div>';
+    html += `<div class="insight-item">논술전형에서 내신 반영 비중은 보통 20~40%입니다. 논술 시험 준비가 핵심이며, 내신은 최소 기준 충족이 중요합니다.
+      ${avg <= 3.5 ? ' 현재 내신이 양호하여 논술 합격 시 내신 감점이 크지 않습니다.' : avg <= 5.0 ? ' 내신 감점이 있을 수 있으나, 논술 성적으로 충분히 보완 가능합니다.' : ' 내신 감점이 상당할 수 있으므로, 논술에서 높은 점수가 필요합니다.'}</div>`;
   } else {
     html += '<h3>학업역량 분석 (교과전형)</h3>';
     if (character.includes('전과목')) {
@@ -5163,6 +5302,14 @@ function showUnivDetail(univName) {
   if (result.cutline && result.cutline.min) disadvantages.push('수능최저 충족 필요 — 수능 대비도 병행해야 함');
   if (comp.is종합 && comp.fitData.score >= 60) advantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 경쟁력 양호`);
   else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 보완 필요`);
+  if (comp.is논술) {
+    const avg = calcWeightedAvg(student);
+    if (avg <= 3.5) advantages.push('내신 3.5 이내 — 논술전형 내신 감점 최소화');
+    else if (avg > 5.0) disadvantages.push(`내신 ${avg.toFixed(1)} — 논술전형에서도 내신 감점 상당`);
+    const subjAvgs = calcSubjectAvgs(student);
+    const mathSubj = subjAvgs.find(s => s.name === '수학');
+    if (mathSubj && mathSubj.avg <= 2.5) advantages.push('수학 우수 — 이공계 논술에 유리');
+  }
 
   if (advantages.length) {
     advantages.forEach(a => {
