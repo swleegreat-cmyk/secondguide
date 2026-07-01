@@ -4178,10 +4178,12 @@ function calcCompositeScore(univResult, student, analysis) {
       else if (classPctl <= 10) classAdj = Math.round(6 * tierScale);
       else if (classPctl <= 20) classAdj = Math.round(4 * tierScale);
       else if (classPctl <= 35) classAdj = Math.round(2 * tierScale);
+      else if (classPctl <= 45) classAdj = Math.round(1 * tierScale);
       else if (classPctl >= 95) classAdj = -Math.round(7 * tierScale);
       else if (classPctl >= 85) classAdj = -Math.round(5 * tierScale);
       else if (classPctl >= 75) classAdj = -Math.round(3 * tierScale);
       else if (classPctl >= 60) classAdj = -Math.round(1 * tierScale);
+      else if (classPctl >= 55) classAdj = -1;
     }
   }
 
@@ -4304,9 +4306,10 @@ function calcCompositeScore(univResult, student, analysis) {
   let ciHalf = 8;
   if (is종합) ciHalf = 12;
   else if (is논술) ciHalf = 14;
-  if (!univResult.cutline && classAdj === 0) ciHalf += 5;
+  if (!univResult.cutline && classAdj === 0) ciHalf += 3;
   else if (!univResult.cutline && Math.abs(classAdj) >= 6) ciHalf -= 1;
-  else if (!univResult.cutline) ciHalf += 2;
+  else if (!univResult.cutline && Math.abs(classAdj) <= 1) ciHalf += 2;
+  else if (!univResult.cutline) ciHalf += 1;
   if (univResult.reliability === 'none') ciHalf += 4;
   else if (univResult.reliability === 'low') ciHalf += 2;
   if (univResult.count && univResult.count < 10) ciHalf += 2;
