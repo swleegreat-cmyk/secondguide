@@ -2968,6 +2968,25 @@ function calcYearlyTrend(student) {
   return (_cache.trend[student.seat] = result);
 }
 
+function calcComboTrend(student, comboKey) {
+  const cacheKey = student.seat + '_' + (comboKey || 'all');
+  if (_cache.trend[cacheKey]) return _cache.trend[cacheKey];
+  const subjects = comboKey && COMBO_SUBJECTS[comboKey] ? COMBO_SUBJECTS[comboKey] : null;
+  const map = {};
+  student.subjects.forEach(s => {
+    if (s.g == null || s.g < 1 || s.g > 9) return;
+    if (subjects && !subjects.includes(s.c)) return;
+    const key = `${s.y}-${s.s}`;
+    if (!map[key]) map[key] = { wsum: 0, wcnt: 0 };
+    map[key].wsum += s.g * (s.u || 1);
+    map[key].wcnt += (s.u || 1);
+  });
+  const result = Object.entries(map)
+    .map(([k, v]) => ({ key: k, avg: v.wsum / v.wcnt }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  return (_cache.trend[cacheKey] = result);
+}
+
 function toEngineFormat(student) {
   return student.subjects.map(s => ({
     학년: s.y, 학기: s.s, 교과: s.c, 과목명: s.n,
@@ -3770,9 +3789,39 @@ function calcAdmissionStrategy(student, analysis) {
   };
 }
 
+function inferComboFromRule(univName) {
+  const rule = NAESIN_RULES[univName];
+  if (!rule || !rule.규칙) return null;
+  const arr = Array.isArray(rule.규칙) ? rule.규칙 : [rule.규칙];
+  const allGroups = new Set();
+  arr.forEach(r => {
+    if (!r) return;
+    const g = Array.isArray(r.교과군) ? r.교과군 : (r.교과군 ? [r.교과군] : []);
+    g.forEach(s => {
+      const norm = s.replace(/\s/g, '').toLowerCase();
+      if (norm.includes('국어')) allGroups.add('국어');
+      if (norm.includes('수학')) allGroups.add('수학');
+      if (norm.includes('영어')) allGroups.add('영어');
+      if (norm.includes('사회') || norm.includes('한국사')) allGroups.add('사회');
+      if (norm.includes('과학')) allGroups.add('과학');
+    });
+  });
+  if (allGroups.size === 0) return '전교과';
+  const has = s => allGroups.has(s);
+  if (has('국어') && has('수학') && has('영어') && has('사회') && has('과학')) return '국수영사과';
+  if (has('국어') && has('수학') && has('영어') && has('사회')) return '국수영사';
+  if (has('국어') && has('수학') && has('영어') && has('과학')) return '국수영과';
+  if (has('국어') && has('수학') && has('영어')) return '국수영';
+  if (has('국어') && has('영어') && has('사회')) return '국영사';
+  if (has('수학') && has('영어') && has('과학')) return '수영과';
+  if (has('수학') && has('과학')) return '수과';
+  return '전교과';
+}
+
 function calcCompositeScore(univResult, student, analysis) {
   if (!univResult) return null;
-  const combo = matchReflectCombo(univResult.cutline?.reflect || '');
+  const reflectStr = univResult.cutline?.reflect || '';
+  const combo = matchReflectCombo(reflectStr) || inferComboFromRule(univResult.univ);
   const combos = calcComboScores(student);
 
   // Use university-converted score (computeScore result) as primary
@@ -3852,23 +3901,28 @@ function calcCompositeScore(univResult, student, analysis) {
     base = interpolateAnchors(comboScore, anchors, comboScore < anchors[0][0] ? anchors[0][1] + 5 : 3);
   }
 
-  // Trend analysis: per-subject trend when combo is known, overall otherwise
-  const trend = calcYearlyTrend(student);
+  // Trend analysis: use combo-specific trend when available, global otherwise
+  const comboTrend = comboUsed ? calcComboTrend(student, comboUsed) : null;
+  const globalTrend = calcYearlyTrend(student);
+  const trend = (comboTrend && comboTrend.length >= 2) ? comboTrend : globalTrend;
+  const trendIsCombo = (comboTrend && comboTrend.length >= 2);
   let trendBonus = 0;
   if (trend.length >= 3) {
     const first = trend[0].avg, last = trend[trend.length-1].avg;
     const overallDiff = last - first;
     const recent = trend.slice(-2);
     const recentDiff = recent.length === 2 ? recent[1].avg - recent[0].avg : 0;
-    const recentWeight = 0.65, overallWeight = 0.35;
+    const recentWeight = is종합 ? 0.7 : 0.6;
+    const overallWeight = 1 - recentWeight;
     const combinedDiff = recentDiff * recentWeight + overallDiff * overallWeight;
     const trendMult = is종합 ? 1.3 : is논술 ? 0.5 : 1.0;
-    if (combinedDiff < -0.6) trendBonus = Math.round(9 * trendMult);
-    else if (combinedDiff < -0.3) trendBonus = Math.round(6 * trendMult);
-    else if (combinedDiff < -0.1) trendBonus = Math.round(3 * trendMult);
-    else if (combinedDiff > 0.6) trendBonus = Math.round(-7 * trendMult);
-    else if (combinedDiff > 0.3) trendBonus = Math.round(-4 * trendMult);
-    else if (combinedDiff > 0.1) trendBonus = Math.round(-2 * trendMult);
+    const comboBoost = trendIsCombo ? 1.15 : 1.0;
+    if (combinedDiff < -0.6) trendBonus = Math.round(9 * trendMult * comboBoost);
+    else if (combinedDiff < -0.3) trendBonus = Math.round(6 * trendMult * comboBoost);
+    else if (combinedDiff < -0.1) trendBonus = Math.round(3 * trendMult * comboBoost);
+    else if (combinedDiff > 0.6) trendBonus = Math.round(-7 * trendMult * comboBoost);
+    else if (combinedDiff > 0.3) trendBonus = Math.round(-4 * trendMult * comboBoost);
+    else if (combinedDiff > 0.1) trendBonus = Math.round(-2 * trendMult * comboBoost);
   } else if (trend.length === 2) {
     const diff = trend[1].avg - trend[0].avg;
     if (diff < -0.5) trendBonus = 6;
@@ -3948,7 +4002,7 @@ function calcCompositeScore(univResult, student, analysis) {
   return {
     probability: raw, probLow, probHigh,
     comboScore, comboUsed, comboAvgRef,
-    trendBonus, ratioAdj, minAdj, fitBonus, comboBonus,
+    trendBonus, trendIsCombo, ratioAdj, minAdj, fitBonus, comboBonus,
     reliabilityAdj, countAdj,
     fitData, minReq,
     is종합, is논술, tier
@@ -5371,7 +5425,7 @@ function showUnivDetail(univName) {
   const factors = [
     {label:'내신 환산 기반', val: baseVal, note: result.cutline ? `컷라인 비교 (${jeonLabel})` : `절대등급 기준 (${tierNames[comp.tier]||'중위'}권)`},
   ];
-  if (comp.trendBonus !== 0) factors.push({label:'성적 추세', val:comp.trendBonus, note: comp.trendBonus>0?'상승세 (최근 학기 가중)':'하락세 (최근 학기 가중)'});
+  if (comp.trendBonus !== 0) factors.push({label:'성적 추세', val:comp.trendBonus, note: (comp.trendBonus>0?'상승세':'하락세') + (comp.trendIsCombo ? ' (반영교과 '+comp.comboUsed+' 기준)' : ' (전체 교과 기준)')});
   if (comp.ratioAdj !== 0) factors.push({label:'경쟁률 보정', val:comp.ratioAdj, note: comp.ratioAdj>0?'낮은 경쟁':'높은 경쟁'});
   if (comp.minAdj !== 0) factors.push({label:'수능최저 충족률', val:comp.minAdj, note: comp.minReq ? `충족 예상 ${comp.minReq.meetRate}% (${comp.minReq.detail})` : '수능최저 충족 필요'});
   if (comp.reliabilityAdj) factors.push({label:'환산 신뢰도', val:comp.reliabilityAdj, note:'환산 정확도 낮음'});
