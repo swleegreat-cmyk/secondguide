@@ -638,6 +638,13 @@ body {
   font-family:inherit; font-size:11px; cursor:pointer; padding:2px 0;
 }
 
+/* Semester toggle */
+.sem-detail { display:none; }
+.sem-detail.open { display:block; }
+.sem-toggle.open .sem-arrow { transform:rotate(90deg) !important; }
+.sem-toggle { transition:background .15s; }
+.sem-toggle:hover { background:var(--cream) !important; }
+
 /* Privacy footer */
 .footer {
   text-align:center;
@@ -3353,18 +3360,24 @@ function renderMain(student, analysis) {
   });
   html += `</div>`;
 
-  // Semester detail
+  // Semester detail (collapsible)
   const byYear = gradesByYear(student);
   const sortedKeys = Object.keys(byYear).sort();
   html += `<div class="glass"><h3>학기별 상세 성적</h3>`;
-  sortedKeys.forEach(key => {
+  sortedKeys.forEach((key, ki) => {
     const [y, s] = key.split('-');
     const data = byYear[key];
     const semAvg = data.wsum / data.wcnt;
-    html += `<div style="margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px">${y}학년 ${s}학기
-        <span class="mono" style="color:${gradeColor(semAvg)};margin-left:8px">${semAvg.toFixed(2)}</span></div>
-      <table class="g-table"><tr><th>교과</th><th>과목명</th><th>등급</th><th>단위</th></tr>`;
+    const isLast = ki === sortedKeys.length - 1;
+    html += `<div style="margin-bottom:${isLast ? 0 : 10}px">
+      <button class="sem-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card-solid);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;text-align:left">
+        <span style="transform:rotate(0deg);transition:transform .2s;display:inline-block" class="sem-arrow">▸</span>
+        ${y}학년 ${s}학기
+        <span class="mono" style="color:${gradeColor(semAvg)};margin-left:4px">${semAvg.toFixed(2)}</span>
+        <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:auto">${data.subs.length}과목</span>
+      </button>
+      <div class="sem-detail">
+      <table class="g-table" style="margin-top:6px"><tr><th>교과</th><th>과목명</th><th>등급</th><th>단위</th></tr>`;
     data.subs.sort((a, b) => (a.g || 9) - (b.g || 9)).forEach(sub => {
       const dotBg = sub.g <= 2 ? 'var(--green-light)' : sub.g <= 4 ? 'var(--blue-light)' : sub.g <= 6 ? 'var(--orange-light)' : 'var(--red-light)';
       html += `<tr><td>${esc(sub.c)}</td>
@@ -3372,13 +3385,13 @@ function renderMain(student, analysis) {
         <td><span class="g-dot" style="background:${dotBg};color:${gradeColor(sub.g)}">${sub.g}</span></td>
         <td>${sub.u}</td></tr>`;
     });
-    html += `</table></div>`;
+    html += `</table></div></div>`;
   });
 
   // Achievement subjects
   const achSubs = student.subjects.filter(s => s.a);
   if (achSubs.length > 0) {
-    html += `<h3 style="margin-top:12px">성취도 평가 과목</h3>
+    html += `<h3 style="margin-top:12px">성취도 평가 과목 (진로선택)</h3>
       <table class="g-table"><tr><th>학기</th><th>과목명</th><th>성취도</th><th>단위</th></tr>`;
     achSubs.forEach(s => {
       const ac = s.a === 'A' ? 'var(--green)' : s.a === 'B' ? 'var(--blue)' : 'var(--orange)';
@@ -3515,21 +3528,52 @@ function renderMain(student, analysis) {
   if (student.records.length === 0 && student.opinions.length === 0) {
     html += `<div class="glass"><div class="empty"><div class="icon">&#x1F4CB;</div><p>생기부 기록이 없습니다.</p></div></div>`;
   } else {
-    const byYr = {};
-    student.records.forEach(r => {
-      if (!byYr[r.y]) byYr[r.y] = [];
-      byYr[r.y].push(r);
-    });
-    for (const year of Object.keys(byYr).sort()) {
-      html += `<div class="glass"><h3>${year}학년 세부능력 및 특기사항</h3>`;
-      byYr[year].forEach(r => {
-        html += `<div class="rec-item">`;
-        if (r.c) html += `<span class="rec-tag" style="background:var(--blue-light);color:var(--teal)">${esc(r.c)}</span>`;
-        html += `<span class="rec-tag" style="background:var(--cream);color:var(--sub)">${esc(r.t || '세특')}</span>`;
-        html += `<div style="margin-top:6px">${esc(r.b)}</div></div>`;
+    // Year sub-tabs
+    const recYears = [...new Set(student.records.map(r => r.y))].sort();
+    if (recYears.length > 0) {
+      html += `<div class="glass">
+        <div style="display:flex;gap:4px;padding:3px;background:var(--cream);border-radius:12px;margin-bottom:14px" id="recYearBar">
+          <button class="rec-year-btn active" data-ry="all" onclick="filterRecYear(this)" style="flex:1;padding:7px 8px;border:none;background:var(--teal);color:#fff;font-family:inherit;font-size:12px;font-weight:600;border-radius:9px;cursor:pointer">전체</button>`;
+      recYears.forEach(y => {
+        const cnt = student.records.filter(r => r.y === y).length;
+        html += `<button class="rec-year-btn" data-ry="${y}" onclick="filterRecYear(this)" style="flex:1;padding:7px 8px;border:none;background:transparent;color:var(--sub);font-family:inherit;font-size:12px;font-weight:600;border-radius:9px;cursor:pointer">${y}학년 <span style="font-size:10px;opacity:.6">${cnt}</span></button>`;
+      });
+      html += `</div>`;
+
+      // Record summary
+      const typeMap = {};
+      student.records.forEach(r => {
+        const t = r.t || '세특';
+        typeMap[t] = (typeMap[t] || 0) + 1;
+      });
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">`;
+      for (const [t, cnt] of Object.entries(typeMap)) {
+        const tagColors = { '세부능력및특기사항': ['var(--blue-light)', 'var(--teal)'], '세특': ['var(--blue-light)', 'var(--teal)'], '자율활동': ['var(--green-light)', 'var(--green)'], '동아리활동': ['var(--purple-light)', 'var(--purple)'], '진로활동': ['var(--copper-light)', 'var(--copper)'] };
+        const [bg, fg] = tagColors[t] || ['var(--cream)', 'var(--sub)'];
+        html += `<span style="padding:3px 10px;border-radius:6px;font-size:10px;font-weight:600;background:${bg};color:${fg}">${esc(t)} ${cnt}</span>`;
+      }
+      html += `</div>`;
+
+      // Records grouped by year
+      recYears.forEach(year => {
+        const yearRecs = student.records.filter(r => r.y === year);
+        html += `<div class="rec-year-group" data-ry="${year}">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${year}학년 세부능력 및 특기사항</div>`;
+        yearRecs.forEach(r => {
+          const tagColors = { '세부능력및특기사항': ['var(--blue-light)', 'var(--teal)'], '세특': ['var(--blue-light)', 'var(--teal)'], '자율활동': ['var(--green-light)', 'var(--green)'], '동아리활동': ['var(--purple-light)', 'var(--purple)'], '진로활동': ['var(--copper-light)', 'var(--copper)'] };
+          const tName = r.t || '세특';
+          const [tbg, tfg] = tagColors[tName] || ['var(--cream)', 'var(--sub)'];
+          html += `<div class="rec-item">`;
+          if (r.c) html += `<span class="rec-tag" style="background:var(--blue-light);color:var(--teal)">${esc(r.c)}</span>`;
+          html += `<span class="rec-tag" style="background:${tbg};color:${tfg}">${esc(tName)}</span>`;
+          html += `<div style="margin-top:6px">${esc(r.b)}</div></div>`;
+        });
+        html += `</div>`;
       });
       html += `</div>`;
     }
+
+    // Opinions
     if (student.opinions.length > 0) {
       html += `<div class="glass"><h3>행동특성 및 종합의견</h3>`;
       student.opinions.forEach(o => {
@@ -3621,6 +3665,21 @@ function filterBand(btn) {
   const band = btn.dataset.band;
   document.querySelectorAll('.match-row[data-band]').forEach(row => {
     row.style.display = (band === 'all' || row.dataset.band === band) ? '' : 'none';
+  });
+}
+
+function filterRecYear(btn) {
+  document.querySelectorAll('.rec-year-btn').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = 'var(--sub)';
+    b.classList.remove('active');
+  });
+  btn.style.background = 'var(--teal)';
+  btn.style.color = '#fff';
+  btn.classList.add('active');
+  const ry = btn.dataset.ry;
+  document.querySelectorAll('.rec-year-group').forEach(g => {
+    g.style.display = (ry === 'all' || g.dataset.ry === ry) ? '' : 'none';
   });
 }
 
