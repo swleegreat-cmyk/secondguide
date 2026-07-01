@@ -3869,6 +3869,35 @@ function inferComboFromRule(univName) {
   return '전교과';
 }
 
+function detectJeonTypeFromCutline(cutlineType) {
+  if (!cutlineType) return null;
+  const t = cutlineType.toLowerCase();
+  if (t.includes('논술')) return '논술';
+  const 종합KW = ['종합','자기추천','미래인재','ace','바람개비','서류','네오르네상스',
+    'do dream','활동우수','학교장추천','잠재능력','프론티어','다빈치','탐구형',
+    '크로스오버','소프트웨어','글로벌','sw','면접'];
+  if (종합KW.some(k => t.includes(k))) return '종합';
+  return null;
+}
+
+function calcGradeConsistency(student) {
+  const ck = 'gc_' + student.seat;
+  if (_cache.trend[ck]) return _cache.trend[ck];
+  const grades = student.subjects
+    .filter(s => s.g != null && s.g >= 1 && s.g <= 9)
+    .map(s => s.g);
+  if (grades.length < 5) return (_cache.trend[ck] = { stdDev: 0, level: 'unknown', count: grades.length });
+  const avg = grades.reduce((s,v) => s+v, 0) / grades.length;
+  const variance = grades.reduce((s,v) => s + (v - avg) ** 2, 0) / grades.length;
+  const stdDev = Math.sqrt(variance);
+  let level;
+  if (stdDev <= 0.8) level = 'high';
+  else if (stdDev <= 1.3) level = 'medium';
+  else if (stdDev <= 1.9) level = 'low';
+  else level = 'very_low';
+  return (_cache.trend[ck] = { stdDev: Math.round(stdDev * 100) / 100, level, count: grades.length });
+}
+
 function calcCompositeScore(univResult, student, analysis) {
   if (!univResult) return null;
   const reflectStr = univResult.cutline?.reflect || '';
@@ -3886,9 +3915,11 @@ function calcCompositeScore(univResult, student, analysis) {
   }
 
   const tier = getUnivTier(univResult.univ);
-  const jeonType = univResult.jeonType || '';
-  const is종합 = jeonType.includes('종합') || jeonType.includes('서류') || jeonType.includes('면접');
-  const is논술 = jeonType.includes('논술');
+  const ruleJeonType = univResult.jeonType || '';
+  const cutJeonType = univResult.cutline ? detectJeonTypeFromCutline(univResult.cutline.type) : null;
+  const effectiveType = cutJeonType || ruleJeonType;
+  const is종합 = effectiveType.includes('종합') || effectiveType.includes('서류') || effectiveType.includes('면접');
+  const is논술 = effectiveType.includes('논술');
 
   let base = 0;
   if (univResult.cutline) {
@@ -4016,7 +4047,7 @@ function calcCompositeScore(univResult, student, analysis) {
   const fitData = calcFitScore(student, analysis || {}, concept);
   let fitBonus;
   if (is종합) {
-    const jt = jeonType.toLowerCase();
+    const jt = effectiveType.toLowerCase();
     const has면접 = jt.includes('면접') || univResult.hasInterviews;
     const fitCoeff = tier <= 2
       ? (has면접 ? 0.18 : 0.14)
@@ -4039,7 +4070,16 @@ function calcCompositeScore(univResult, student, analysis) {
     comboBonus = Math.max(comboBonus, -5);
   }
 
-  const raw = Math.max(3, Math.min(99, base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus + comboBonus));
+  // Grade consistency: uniform grades across subjects → more predictable outcome
+  const gc = calcGradeConsistency(student);
+  let consistencyAdj = 0;
+  if (!is논술) {
+    if (gc.level === 'high') consistencyAdj = is종합 ? 1 : 2;
+    else if (gc.level === 'low') consistencyAdj = is종합 ? 0 : -1;
+    else if (gc.level === 'very_low') consistencyAdj = is종합 ? -1 : -2;
+  }
+
+  const raw = Math.max(3, Math.min(99, base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus + comboBonus + consistencyAdj));
 
   // Confidence interval: width depends on data quality and admission type
   let ciHalf = 8;
@@ -4049,6 +4089,9 @@ function calcCompositeScore(univResult, student, analysis) {
   if (univResult.reliability === 'none') ciHalf += 4;
   else if (univResult.reliability === 'low') ciHalf += 2;
   if (univResult.count && univResult.count < 10) ciHalf += 2;
+  if (gc.level === 'very_low') ciHalf += 3;
+  else if (gc.level === 'low') ciHalf += 1;
+  else if (gc.level === 'high') ciHalf = Math.max(4, ciHalf - 2);
   const probLow = Math.max(1, raw - ciHalf);
   const probHigh = Math.min(99, raw + ciHalf);
 
@@ -4056,6 +4099,7 @@ function calcCompositeScore(univResult, student, analysis) {
     probability: raw, probLow, probHigh,
     comboScore, comboUsed, comboAvgRef,
     trendBonus, trendIsCombo, ratioAdj, minAdj, fitBonus, comboBonus,
+    consistencyAdj, gradeConsistency: gc,
     reliabilityAdj, countAdj,
     fitData, minReq,
     is종합, is논술, tier
@@ -5484,6 +5528,7 @@ function showUnivDetail(univName) {
   if (comp.reliabilityAdj) factors.push({label:'환산 신뢰도', val:comp.reliabilityAdj, note:'환산 정확도 낮음'});
   if (comp.countAdj) factors.push({label:'반영과목 부족', val:comp.countAdj, note:'과목 수 부족'});
   if (comp.comboBonus) factors.push({label:'반영교과 보정', val:comp.comboBonus, note: comp.comboBonus>0?'반영교과 유리':'반영교과 불리'});
+  if (comp.consistencyAdj) factors.push({label:'성적 일관성', val:comp.consistencyAdj, note: comp.gradeConsistency ? `편차 ${comp.gradeConsistency.stdDev} (${comp.gradeConsistency.level === 'high' ? '안정적' : comp.gradeConsistency.level === 'very_low' ? '변동 큼' : '보통'})` : ''});
   if (comp.fitBonus !== 0) factors.push({label: comp.is종합 ? '전공적합성(종합전형)' : comp.is논술 ? '전공적합성(논술전형)' : '전공적합성(교과전형)', val:comp.fitBonus});
   factors.forEach(f => {
     const sign = f.val > 0 ? '+' : '';
