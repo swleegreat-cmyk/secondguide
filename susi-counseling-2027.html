@@ -484,6 +484,144 @@ body {
 }
 .fav-btn:hover, .fav-btn.on { opacity:1; }
 
+/* Combo bars */
+.combo-bar {
+  display:flex;
+  align-items:center;
+  margin-bottom:5px;
+  font-size:12px;
+}
+.combo-bar .clbl { width:80px; font-weight:500; color:var(--sub); font-size:11px; }
+.combo-bar .cbar {
+  flex:1; height:22px;
+  background:var(--cream);
+  border-radius:5px;
+  overflow:hidden;
+  margin:0 10px;
+  position:relative;
+}
+.combo-bar .cfill {
+  height:100%;
+  border-radius:5px;
+  transition:width .6s ease;
+}
+.combo-bar .cval {
+  width:50px;
+  text-align:right;
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:700;
+  font-size:13px;
+}
+.combo-bar .cbest {
+  font-size:9px;
+  font-weight:700;
+  color:#fff;
+  background:var(--teal-mid);
+  padding:1px 6px;
+  border-radius:4px;
+  margin-left:6px;
+}
+
+/* Trend mini chart */
+.trend-wrap {
+  display:flex;
+  align-items:flex-end;
+  gap:2px;
+  height:60px;
+  padding:8px 0;
+}
+.trend-col {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+}
+.trend-bar-outer {
+  width:100%;
+  height:44px;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  align-items:center;
+}
+.trend-bar-inner {
+  width:70%;
+  border-radius:4px 4px 0 0;
+  transition:height .5s ease;
+}
+.trend-label {
+  font-size:9px;
+  color:var(--muted);
+  white-space:nowrap;
+}
+.trend-val {
+  font-size:10px;
+  font-weight:700;
+  font-family:'IBM Plex Mono',monospace;
+}
+
+/* Sort controls */
+.sort-controls {
+  display:flex;
+  gap:6px;
+  margin-bottom:10px;
+}
+.sort-btn {
+  padding:4px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--card-solid);
+  font-family:inherit;
+  font-size:11px;
+  color:var(--sub);
+  cursor:pointer;
+}
+.sort-btn.active {
+  background:var(--teal);
+  color:#fff;
+  border-color:var(--teal);
+}
+
+/* Filter chips for 판정 */
+.band-filter {
+  display:inline-flex;
+  gap:4px;
+  margin-left:12px;
+}
+.band-chip {
+  padding:3px 10px;
+  border-radius:6px;
+  font-size:10px;
+  font-weight:600;
+  cursor:pointer;
+  border:1px solid transparent;
+  transition:all .15s;
+}
+.band-chip:hover { opacity:.8; }
+.band-chip.active { border-color:currentColor; }
+
+/* Analysis card */
+.analysis-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:10px;
+}
+.analysis-item {
+  padding:12px 14px;
+  border-radius:10px;
+  font-size:12px;
+  line-height:1.7;
+}
+.analysis-item .alabel {
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.3px;
+  margin-bottom:4px;
+}
+
 /* Scrollable table */
 .scroll-table { max-height:500px; overflow-y:auto; }
 .scroll-table::-webkit-scrollbar { width:4px; }
@@ -2916,6 +3054,33 @@ function gaugePaths(value) {
   return { bg: arc(start, 0), fg: arc(start, ang), hx: hx.toFixed(1), hy: hy.toFixed(1) };
 }
 
+// ── COMBO calculations ──
+const COMBO_ORDER = ["전교과", "국수영사", "국수영과", "국수영사과", "국수영", "국영사", "수영과", "수과"];
+const COMBO_LABELS = { 전교과:"전 교과", 국수영사:"국·수·영·사", 국수영과:"국·수·영·과", 국수영사과:"국·수·영·사·과", 국수영:"국·수·영", 국영사:"국·영·사", 수영과:"수·영·과", 수과:"수·과" };
+const COMBO_SUBJECTS = {
+  전교과: null,
+  국수영사: ["국어","수학","영어","사회","한국사"],
+  국수영과: ["국어","수학","영어","과학"],
+  국수영사과: ["국어","수학","영어","사회","과학","한국사"],
+  국수영: ["국어","수학","영어"],
+  국영사: ["국어","영어","사회","한국사"],
+  수영과: ["수학","영어","과학"],
+  수과: ["수학","과학"]
+};
+
+function calcComboScores(student) {
+  const graded = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9);
+  const result = {};
+  for (const [combo, targets] of Object.entries(COMBO_SUBJECTS)) {
+    const pool = targets ? graded.filter(s => targets.includes(s.c)) : graded;
+    if (pool.length === 0) continue;
+    let wsum = 0, wcnt = 0;
+    pool.forEach(s => { wsum += s.g * (s.u || 1); wcnt += (s.u || 1); });
+    result[combo] = wsum / wcnt;
+  }
+  return result;
+}
+
 // ── Calculations ──
 function calcAvg(student) {
   const graded = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9);
@@ -2940,6 +3105,19 @@ function calcSubjectAvgs(student) {
   }
   result.sort((a, b) => a.avg - b.avg);
   return result;
+}
+
+function calcSemesterTrend(student) {
+  const map = {};
+  student.subjects.forEach(s => {
+    if (s.g == null || s.g < 1 || s.g > 9) return;
+    const key = s.y + '-' + s.s;
+    if (!map[key]) map[key] = { wsum: 0, wcnt: 0 };
+    map[key].wsum += s.g * (s.u || 1);
+    map[key].wcnt += (s.u || 1);
+  });
+  const keys = Object.keys(map).sort();
+  return keys.map(k => ({ label: k, avg: map[k].wsum / map[k].wcnt }));
 }
 
 function gradesByYear(student) {
@@ -3049,6 +3227,8 @@ function renderMain(student, analysis) {
   const gauge = gaugePaths(avg);
   const gc = gradeColor(avg);
   const subjAvgs = calcSubjectAvgs(student);
+  const comboScores = calcComboScores(student);
+  const trend = calcSemesterTrend(student);
   const career2 = analysis.career ? analysis.career.split('->').pop().trim() : '';
 
   let html = '';
@@ -3076,9 +3256,20 @@ function renderMain(student, analysis) {
   // ── Score Tab ──
   html += `<div class="tab-panel active" id="panel-score">`;
 
-  // Gauge + stats
+  // Summary stat boxes
+  const totalSubs = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9).length;
+  const top3 = student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 3).length;
+  const achA = student.subjects.filter(s => s.a === 'A').length;
+  html += `<div class="stat-grid">
+    <div class="stat-box"><div class="num" style="color:${gc}">${avg.toFixed(2)}</div><div class="label">전교과 평균</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--green)">${top3}</div><div class="label">1~3등급 과목</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--teal-mid)">${totalSubs}</div><div class="label">전체 과목 수</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--blue)">${achA}</div><div class="label">성취도 A</div></div>
+  </div>`;
+
+  // Gauge + Combo bars + Trend
   html += `<div class="glass">
-    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
       <div style="flex:0 0 auto">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">평균 내신 (전 교과)</div>
         <svg viewBox="0 0 260 178" width="260" style="max-width:100%">
@@ -3091,9 +3282,66 @@ function renderMain(student, analysis) {
           <text x="232" y="172" text-anchor="middle" font-size="12" fill="#9B958A" font-family="'IBM Plex Mono',monospace">1</text>
         </svg>
       </div>
-      <div style="flex:1;min-width:200px">`;
+      <div style="flex:1;min-width:240px">`;
 
-  // Subject bars
+  // Combo bars (COMBO_ORDER)
+  const comboVals = COMBO_ORDER.filter(k => comboScores[k] != null).map(k => [k, comboScores[k]]);
+  const bestCombo = comboVals.reduce((a, b) => b[1] < a[1] ? b : a, comboVals[0] || ["전교과", 9]);
+  html += `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">교과 조합별 평균</div>`;
+  comboVals.forEach(([k, v]) => {
+    const pct = Math.max(5, ((9 - v) / 8) * 100);
+    const color = gradeColor(v);
+    const isBest = k === bestCombo[0];
+    const barBg = isBest ? 'var(--teal-mid)' : gradeColor(v);
+    html += `<div class="combo-bar">
+      <span class="clbl">${COMBO_LABELS[k] || k}</span>
+      <div class="cbar"><div class="cfill" style="width:${pct}%;background:${barBg}"></div></div>
+      <span class="cval" style="color:${color}">${v.toFixed(2)}</span>
+      ${isBest ? '<span class="cbest">최유리</span>' : ''}
+    </div>`;
+  });
+
+  html += `</div></div>`;
+
+  // Semester trend mini chart
+  if (trend.length > 1) {
+    html += `<div style="margin-top:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">학기별 등급 추이</div>
+    <div class="trend-wrap">`;
+    trend.forEach(t => {
+      const h = Math.max(8, ((9 - t.avg) / 8) * 40);
+      const c = gradeColor(t.avg);
+      html += `<div class="trend-col">
+        <div class="trend-val" style="color:${c}">${t.avg.toFixed(1)}</div>
+        <div class="trend-bar-outer"><div class="trend-bar-inner" style="height:${h}px;background:${c}"></div></div>
+        <div class="trend-label">${t.label}</div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // Career flow + Analysis
+  if (analysis.career || analysis.str || analysis.wk) {
+    html += `<div style="margin-top:12px">`;
+    if (analysis.career) {
+      html += `<div style="padding:10px 14px;background:var(--teal-light);border-radius:10px;font-size:12px;margin-bottom:10px">
+        <strong>진로 희망:</strong> ${esc(analysis.career)}</div>`;
+    }
+    if (analysis.str || analysis.wk) {
+      html += `<div class="analysis-grid">`;
+      if (analysis.str) html += `<div class="analysis-item" style="background:var(--green-light)"><div class="alabel" style="color:var(--green)">강점</div>${esc(analysis.str)}</div>`;
+      if (analysis.wk) html += `<div class="analysis-item" style="background:var(--red-light)"><div class="alabel" style="color:var(--red)">약점</div>${esc(analysis.wk)}</div>`;
+      html += `</div>`;
+    }
+    if (analysis.summary) {
+      html += `<div style="padding:10px 14px;background:var(--cream);border-radius:10px;font-size:12px;margin-top:10px;color:var(--sub)">
+        <strong>종합:</strong> ${esc(analysis.summary)}</div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  // Subject averages bar chart
+  html += `<div class="glass"><h3>교과별 평균 등급</h3>`;
   subjAvgs.forEach(s => {
     const pct = Math.max(5, (10 - s.avg) / 9 * 100);
     const color = gradeColor(s.avg);
@@ -3103,14 +3351,6 @@ function renderMain(student, analysis) {
       <span class="val" style="color:${color}">${s.avg.toFixed(1)}</span>
     </div>`;
   });
-
-  html += `</div></div>`;
-
-  // Career flow
-  if (analysis.career) {
-    html += `<div style="margin-top:12px;padding:10px 14px;background:var(--teal-light);border-radius:10px;font-size:12px">
-      <strong>진로 희망:</strong> ${esc(analysis.career)}</div>`;
-  }
   html += `</div>`;
 
   // Semester detail
@@ -3161,35 +3401,73 @@ function renderMain(student, analysis) {
   // ── Susi Tab ──
   html += `<div class="tab-panel" id="panel-susi">`;
 
-  // Search & filters
-  html += `<div class="glass">
-    <div class="search-bar">
-      <input class="search-input" id="univSearch" placeholder="대학명 검색..." autocomplete="off">
-      <button class="filter-btn active" data-filter="all" onclick="filterUniv(this)">전체</button>
-      <button class="filter-btn" data-filter="fav" onclick="filterUniv(this)">즐겨찾기</button>
-    </div>
-  </div>`;
-
-  // Cutline comparison
+  // Engine results + cutline comparison
   const engineResults = runEngine(student);
   const cutlineMap = {};
   CUTLINES.forEach(c => { cutlineMap[c.univ] = c; });
 
-  const cutlineResults = [];
+  // Compute stability distribution for ALL cutline results
+  const allCutResults = [];
   engineResults.forEach(r => {
     const cut = cutlineMap[r.univ];
     if (cut) {
       const diff = r.score - cut.cutline;
       const band = judgeBand(diff);
-      cutlineResults.push({ ...r, cut, band, diff });
+      allCutResults.push({ ...r, cut, band, diff });
     }
   });
+  const stabDist = { 안정: 0, 적정: 0, 소신: 0, 상향: 0 };
+  allCutResults.forEach(r => { stabDist[r.band.label] = (stabDist[r.band.label] || 0) + 1; });
+  const stabTotal = allCutResults.length || 1;
 
-  if (cutlineResults.length > 0) {
+  // Search & filters + stability distribution
+  html += `<div class="glass">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:700">수시 탐색</div>
+      <div style="font-size:11px;color:var(--muted)">전형 ${engineResults.length}건</div>
+    </div>`;
+
+  // Stability distribution bar
+  if (allCutResults.length > 0) {
+    html += `<div style="margin-bottom:12px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px">안정성 분포 (등급컷 대비)</div>
+      <div style="display:flex;height:24px;border-radius:6px;overflow:hidden;margin-bottom:6px">`;
+    const bandColors = { 안정: 'var(--green)', 적정: 'var(--blue)', 소신: 'var(--orange)', 상향: 'var(--red)' };
+    for (const [label, count] of Object.entries(stabDist)) {
+      if (count === 0) continue;
+      const pct = (count / stabTotal * 100).toFixed(1);
+      html += `<div style="width:${pct}%;background:${bandColors[label]};display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700">${count}</div>`;
+    }
+    html += `</div>
+      <div style="display:flex;gap:12px;font-size:10px">`;
+    for (const [label, count] of Object.entries(stabDist)) {
+      html += `<span style="color:${bandColors[label]}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${bandColors[label]};margin-right:3px;vertical-align:middle"></span>${label} ${count}</span>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Search bar + filter buttons
+  html += `<div class="search-bar">
+      <input class="search-input" id="univSearch" placeholder="대학명 검색..." autocomplete="off">
+      <button class="filter-btn active" data-filter="all" onclick="filterUniv(this)">전체</button>
+      <button class="filter-btn" data-filter="fav" onclick="filterUniv(this)">즐겨찾기</button>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px" id="bandFilters">
+      <button class="band-chip active" data-band="all" onclick="filterBand(this)" style="background:var(--cream);color:var(--sub)">전체</button>
+      <button class="band-chip" data-band="안정" onclick="filterBand(this)" style="background:var(--green-light);color:var(--green)">안정</button>
+      <button class="band-chip" data-band="적정" onclick="filterBand(this)" style="background:var(--blue-light);color:var(--blue)">적정</button>
+      <button class="band-chip" data-band="소신" onclick="filterBand(this)" style="background:var(--orange-light);color:var(--orange)">소신</button>
+      <button class="band-chip" data-band="상향" onclick="filterBand(this)" style="background:var(--red-light);color:var(--red)">상향</button>
+    </div>
+  </div>`;
+
+  // Cutline comparison cards
+  if (allCutResults.length > 0) {
     html += `<div class="glass"><h3>등급컷 비교</h3>`;
-    cutlineResults.forEach(r => {
+    allCutResults.sort((a, b) => a.diff - b.diff).forEach(r => {
       const favOn = isFav(student.seat, r.univKey);
-      html += `<div class="match-row">
+      const diffSign = r.diff >= 0 ? '+' : '';
+      html += `<div class="match-row" data-band="${r.band.label}">
         <span class="match-badge ${r.band.cls}">${r.band.label}</span>
         <div class="match-body">
           <div class="univ">${esc(r.univ)}</div>
@@ -3197,7 +3475,7 @@ function renderMain(student, analysis) {
         </div>
         <div class="match-num">
           <div class="big" style="color:${r.band.color}">${r.score.toFixed(2)}</div>
-          <div class="unit">컷 ${r.cut.cutline}</div>
+          <div class="unit">컷 ${r.cut.cutline} (${diffSign}${r.diff.toFixed(2)})</div>
         </div>
         <button class="fav-btn ${favOn ? 'on' : ''}" onclick="doFav(${student.seat},'${r.univKey}',this)" title="즐겨찾기">${favOn ? '★' : '☆'}</button>
       </div>`;
@@ -3205,14 +3483,20 @@ function renderMain(student, analysis) {
     html += `</div>`;
   }
 
-  // All university results
+  // All university results with sort controls
   html += `<div class="glass"><h3>전체 대학 환산 결과 <span style="color:var(--muted);font-weight:400">(${engineResults.length}개)</span></h3>
+    <div class="sort-controls">
+      <button class="sort-btn active" data-sort="score" onclick="sortUniv(this)">등급순</button>
+      <button class="sort-btn" data-sort="name" onclick="sortUniv(this)">이름순</button>
+      <button class="sort-btn" data-sort="reliability" onclick="sortUniv(this)">신뢰도순</button>
+    </div>
     <div class="scroll-table" id="univResultsWrap">
     <table class="g-table" id="univResults"><tr><th>대학명</th><th>환산등급</th><th>신뢰</th><th>규칙</th><th></th><th></th></tr>`;
   engineResults.forEach((r, i) => {
     const favOn = isFav(student.seat, r.univKey);
     const relColor = r.reliability === 'high' ? 'var(--green)' : r.reliability === 'medium' ? 'var(--orange)' : 'var(--muted)';
-    html += `<tr class="univ-row" data-univ="${esc(r.univ)}">
+    const relOrder = r.reliability === 'high' ? 0 : r.reliability === 'medium' ? 1 : 2;
+    html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score.toFixed(4)}" data-rel="${relOrder}">
       <td style="font-weight:600">${esc(r.univ)}</td>
       <td><span class="mono" style="font-weight:700;color:${gradeColor(r.score)}">${r.score.toFixed(2)}</span></td>
       <td><span style="font-size:10px;color:${relColor}">${r.reliability}</span></td>
@@ -3321,9 +3605,7 @@ function filterUniv(btn) {
     const seat = STUDENTS[selectedIdx].seat;
     document.querySelectorAll('.univ-row').forEach(row => {
       const univName = row.dataset.univ || '';
-      // Check if this univ is in favorites
       const faved = (favs[String(seat)] || []).some(k => {
-        // univKey in NAESIN_RULES might differ from display name
         return k === univName || univName.includes(k) || k.includes(univName);
       });
       row.style.display = faved ? '' : 'none';
@@ -3331,6 +3613,31 @@ function filterUniv(btn) {
   } else {
     document.querySelectorAll('.univ-row').forEach(row => { row.style.display = ''; });
   }
+}
+
+function filterBand(btn) {
+  document.querySelectorAll('.band-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const band = btn.dataset.band;
+  document.querySelectorAll('.match-row[data-band]').forEach(row => {
+    row.style.display = (band === 'all' || row.dataset.band === band) ? '' : 'none';
+  });
+}
+
+function sortUniv(btn) {
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const mode = btn.dataset.sort;
+  const table = document.getElementById('univResults');
+  if (!table) return;
+  const rows = Array.from(table.querySelectorAll('.univ-row'));
+  rows.sort((a, b) => {
+    if (mode === 'name') return (a.dataset.univ || '').localeCompare(b.dataset.univ || '');
+    if (mode === 'reliability') return parseFloat(a.dataset.rel || 9) - parseFloat(b.dataset.rel || 9);
+    return parseFloat(a.dataset.score || 9) - parseFloat(b.dataset.score || 9);
+  });
+  const parent = rows[0]?.parentElement;
+  if (parent) rows.forEach(r => parent.appendChild(r));
 }
 
 // ── Restore last selection ──
