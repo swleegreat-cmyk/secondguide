@@ -2975,112 +2975,181 @@ function runAllUniversities(student) {
 // ═══════════════════════════════════════════════
 function analyzeRecord(student, analysis) {
   const result = {
-    concept: null,
-    themes: [],
-    deptMatch: [],
-    strengths: [],
-    weaknesses: [],
-    storyArc: [],
-    interviewPredictions: []
+    concept: null, themes: [], deptMatch: [],
+    strengths: [], weaknesses: [],
+    storyArc: [], careerInsights: [],
+    interviewPredictions: [], counselingPoints: []
   };
 
-  // 1. Identify student concept/theme from records
-  const allText = student.records.map(r => r.b).join(' ');
-  const keywords = {};
-  const conceptMap = {
-    '과학': ['실험','탐구','연구','과학','물리','화학','생명','지구','관찰','분석','데이터'],
-    '수학': ['수학','통계','확률','미적분','함수','증명','논리','알고리즘'],
-    '인문': ['독서','문학','역사','철학','사회','문화','비평','해석','글쓰기'],
-    '교육': ['교사','교육','수업','학습','멘토','가르치','지도'],
-    '예술': ['미술','음악','디자인','창작','표현','감상','예술'],
-    '체육': ['체육','스포츠','운동','경기','건강','신체'],
-    '공학': ['공학','기술','프로그래밍','코딩','로봇','AI','소프트웨어','정보'],
-    '경영': ['경영','경제','마케팅','기업','창업','금융'],
-    '의료': ['의학','간호','보건','건강','생명','약학'],
-    '법률': ['법','정의','인권','사회문제','윤리','변호']
+  const careerConceptMap = {
+    '자연과학': '과학', '생명과학': '과학', '물리': '과학', '화학': '과학',
+    '지구과학': '과학', '환경': '과학', '생물': '과학', '천문': '과학',
+    '수학': '수학', '통계': '수학', '데이터': '공학',
+    '공학': '공학', '컴퓨터': '공학', '정보': '공학', 'IT': '공학',
+    '소프트웨어': '공학', '전자': '공학', '기계': '공학', '로봇': '공학',
+    '의학': '의료', '간호': '의료', '약학': '의료', '보건': '의료', '치의': '의료',
+    '교육': '교육', '교사': '교육', '사범': '교육',
+    '경영': '경영', '경제': '경영', '금융': '경영', '회계': '경영', '무역': '경영',
+    '법': '법률', '행정': '법률', '정치': '법률',
+    '문학': '인문', '역사': '인문', '철학': '인문', '어문': '인문', '언어': '인문',
+    '영어': '인문', '국문': '인문', '사회': '인문',
+    '미술': '예술', '음악': '예술', '디자인': '예술', '예술': '예술', '영상': '예술',
+    '체육': '체육', '스포츠': '체육', '운동': '체육'
   };
 
-  for (const [concept, words] of Object.entries(conceptMap)) {
+  // 1. Concept: prioritize career_flow over keyword frequency
+  if (analysis && analysis.career_flow && analysis.career_flow.length > 0) {
+    const latestCareer = analysis.career_flow[analysis.career_flow.length - 1][1];
+    for (const [keyword, concept] of Object.entries(careerConceptMap)) {
+      if (latestCareer.includes(keyword)) { result.concept = concept; break; }
+    }
+    if (!result.concept) {
+      for (const [y, career] of analysis.career_flow) {
+        for (const [keyword, concept] of Object.entries(careerConceptMap)) {
+          if (career.includes(keyword)) { result.concept = concept; break; }
+        }
+        if (result.concept) break;
+      }
+    }
+  }
+
+  // Fallback: keyword analysis on 세부능력 records (exclude 교과명 matches)
+  const subjectNames = new Set(student.records.map(r => r.c).filter(Boolean));
+  const recordText = student.records
+    .filter(r => r.t === '세부능력및특기사항' && r.b)
+    .map(r => r.b).join(' ');
+  const conceptScores = {};
+  const conceptKeywords = {
+    '과학': ['실험','탐구','연구','관찰','분석','데이터','가설','변인','결과','원리'],
+    '수학': ['통계','확률','함수','증명','논리','수식','그래프','모델링'],
+    '인문': ['비평','해석','논증','관점','맥락','텍스트','서사','토론'],
+    '공학': ['프로그래밍','코딩','알고리즘','시스템','설계','기술'],
+    '경영': ['마케팅','기업','시장','전략','소비자'],
+    '의료': ['의학','임상','치료','환자','건강','질병'],
+    '교육': ['교사','교육','학습','수업설계','멘토링'],
+    '예술': ['창작','미적','감상','조형','작품세계'],
+    '법률': ['인권','정의','윤리','법률','사회정의']
+  };
+  for (const [concept, words] of Object.entries(conceptKeywords)) {
     let count = 0;
-    words.forEach(w => {
-      const matches = allText.split(w).length - 1;
-      count += matches;
-    });
-    if (count > 0) keywords[concept] = count;
+    words.forEach(w => { count += (recordText.split(w).length - 1); });
+    if (count > 0) conceptScores[concept] = count;
   }
-
-  const sorted = Object.entries(keywords).sort((a,b) => b[1] - a[1]);
-  if (sorted.length > 0) {
-    result.concept = sorted[0][0];
-    result.themes = sorted.slice(0, 3).map(([k,v]) => k);
+  const sortedConcepts = Object.entries(conceptScores).sort((a,b) => b[1] - a[1]);
+  if (!result.concept && sortedConcepts.length > 0) {
+    result.concept = sortedConcepts[0][0];
   }
+  result.themes = [result.concept, ...sortedConcepts.filter(([k]) => k !== result.concept).slice(0, 2).map(([k]) => k)].filter(Boolean);
 
-  // 2. Career flow analysis
+  // 2. Career flow story with insights
   if (analysis && analysis.career_flow) {
     analysis.career_flow.forEach(([year, career]) => {
-      result.storyArc.push({ year, career, text: `${year}학년: ${career}` });
+      const cd = (analysis.career_data || []).find(d => d.학년 === year);
+      let insight = '';
+      if (cd) {
+        const diff = cd.전체평균대비;
+        if (diff > 0.5) insight = `주의 (평균 대비 +${diff.toFixed(2)})`;
+        else if (diff < -0.5) insight = `강점 (평균 대비 ${diff.toFixed(2)})`;
+        else insight = `보통 (평균 대비 ${diff > 0 ? '+' : ''}${diff.toFixed(2)})`;
+      }
+      result.storyArc.push({ year, career, insight, relatedSubj: cd?.관련교과추정, grade: cd?.해당교과평균등급 });
     });
   }
 
-  // 3. Department matching based on concept
+  // 3. Career insights from 행동특성종합의견
+  student.opinions.forEach(o => {
+    const text = o.b;
+    const careerMentions = [];
+    if (text.includes('진로')) {
+      const sentences = text.split(/[.。]/);
+      sentences.forEach(s => { if (s.includes('진로') || s.includes('꿈') || s.includes('분야')) careerMentions.push(s.trim()); });
+    }
+    if (careerMentions.length > 0) {
+      result.careerInsights.push({ year: o.y, excerpts: careerMentions.slice(0, 2) });
+    }
+  });
+
+  // 4. Department matching based on career flow + concept
   const deptMap = {
-    '과학': ['자연과학부','생명과학과','화학과','물리학과','환경과학과','지구과학과'],
-    '수학': ['수학과','통계학과','데이터사이언스학과','컴퓨터공학과','정보통계학과'],
-    '인문': ['국어국문학과','영어영문학과','사학과','철학과','문헌정보학과','미디어커뮤니케이션학과'],
-    '교육': ['교육학과','국어교육과','수학교육과','영어교육과','사회교육과','과학교육과','초등교육과'],
+    '과학': ['자연과학부','생명과학과','화학과','물리학과','환경과학과','지구과학과','생명공학과'],
+    '수학': ['수학과','통계학과','데이터사이언스학과','정보통계학과','응용수학과'],
+    '인문': ['국어국문학과','영어영문학과','사학과','철학과','미디어커뮤니케이션학과','문헌정보학과'],
+    '교육': ['교육학과','국어교육과','수학교육과','영어교육과','과학교육과','초등교육과'],
     '예술': ['미술학과','디자인학과','음악학과','공연예술학과','영상학과'],
-    '체육': ['체육학과','스포츠과학과','운동건강학과','체육교육과','스포츠의학과'],
+    '체육': ['체육학과','스포츠과학과','운동건강학과','체육교육과'],
     '공학': ['컴퓨터공학과','전자공학과','기계공학과','소프트웨어학과','AI학과','정보보안학과'],
     '경영': ['경영학과','경제학과','무역학과','회계학과','금융학과'],
-    '의료': ['의예과','간호학과','약학과','물리치료학과','보건행정학과','임상병리학과'],
+    '의료': ['의예과','간호학과','약학과','물리치료학과','보건행정학과'],
     '법률': ['법학과','행정학과','정치외교학과','사회학과','사회복지학과']
   };
+  if (result.concept && deptMap[result.concept]) result.deptMatch = deptMap[result.concept];
 
-  if (result.concept && deptMap[result.concept]) {
-    result.deptMatch = deptMap[result.concept];
-  }
-
-  // 4. Strengths from record analysis
+  // 5. Strengths/weaknesses
   if (analysis) {
     if (analysis.str) result.strengths = analysis.str;
     if (analysis.wk) result.weaknesses = analysis.wk;
   }
 
-  // 5. Predict interview questions based on records
+  // 6. Counseling points from alerts (deduplicated)
+  if (analysis && analysis.alerts) {
+    analysis.alerts.forEach(a => result.counselingPoints.push(a));
+  }
+
+  // 7. Interview questions: extract specific activities from records
+  const activityPatterns = [
+    { re: /['「《]([^'」》]{2,20})['」》]\s*(을|를|에|의|이|가|와|과)/g, type: '독서/작품' },
+    { re: /(탐구|연구|실험|조사|프로젝트)\s*(활동|과제|보고서)?/g, type: '탐구활동' },
+    { re: /(발표|프레젠테이션|토론|토의)/g, type: '발표/토론' },
+    { re: /(봉사|멘토링|튜터링|도움)/g, type: '봉사/협력' }
+  ];
+
   student.records.forEach(r => {
-    if (r.t !== '세부능력및특기사항' || !r.b || r.b.length < 50) return;
+    if (r.t !== '세부능력및특기사항' || !r.b || r.b.length < 30) return;
     const text = r.b;
-    if (text.includes('탐구') || text.includes('연구') || text.includes('보고서')) {
+    const source = `${r.y}학년 ${r.c || ''}`;
+
+    if (text.match(/['「《]([^'」》]{2,20})['」》]/)) {
+      const bookMatch = text.match(/['「《]([^'」》]{2,20})['」》]/);
       result.interviewPredictions.push({
-        type: '탐구활동',
-        q: `${r.c || ''} 수업에서 진행한 탐구활동의 주제를 선정한 이유와 그 과정에서 배운 점을 설명해 주세요.`,
-        source: `${r.y}학년 ${r.c || ''}`
+        type: '독서', source,
+        q: `'${bookMatch[1]}'을 읽고 가장 인상적이었던 내용과 그것이 본인의 생각에 어떤 변화를 주었는지 설명해 주세요.`
       });
     }
-    if (text.includes('발표') || text.includes('프레젠테이션')) {
+    if ((text.includes('탐구') || text.includes('실험') || text.includes('연구')) && text.includes('주제')) {
       result.interviewPredictions.push({
-        type: '발표활동',
-        q: `${r.c || ''} 수업에서 발표한 내용 중 가장 기억에 남는 것은 무엇이며, 청중의 반응은 어떠했나요?`,
-        source: `${r.y}학년 ${r.c || ''}`
+        type: '탐구', source,
+        q: `${r.c || ''} 수업에서 진행한 탐구의 주제를 선정한 배경과 과정에서 겪은 어려움, 그리고 배운 점은 무엇인가요?`
       });
     }
-    if (text.includes('독서') || text.includes('읽고')) {
+    if (text.includes('발표')) {
       result.interviewPredictions.push({
-        type: '독서활동',
-        q: `생기부에 기록된 독서 경험 중, 본인의 진로관에 가장 큰 영향을 준 책은 무엇이며 그 이유는?`,
-        source: `${r.y}학년 ${r.c || ''}`
+        type: '발표', source,
+        q: `${r.c || ''} 수업에서 발표한 경험 중 가장 의미 있었던 주제와 그 이유를 말씀해 주세요.`
       });
     }
   });
 
-  // Deduplicate predictions
+  if (result.storyArc.length >= 2) {
+    const first = result.storyArc[0], last = result.storyArc[result.storyArc.length - 1];
+    if (first.career !== last.career) {
+      result.interviewPredictions.push({
+        type: '진로변화', source: '진로 흐름',
+        q: `${first.year}학년 때 '${first.career}'에서 ${last.year}학년 때 '${last.career}'(으)로 진로가 변화한 계기는 무엇인가요?`
+      });
+    } else {
+      result.interviewPredictions.push({
+        type: '진로일관성', source: '진로 흐름',
+        q: `'${last.career}' 분야에 꾸준히 관심을 가져온 이유와 이를 위해 구체적으로 어떤 노력을 했는지 말씀해 주세요.`
+      });
+    }
+  }
+
   const seen = new Set();
   result.interviewPredictions = result.interviewPredictions.filter(p => {
     const key = p.type + p.source;
     if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 8);
+    seen.add(key); return true;
+  }).slice(0, 10);
 
   return result;
 }
@@ -3707,15 +3776,17 @@ function renderRecordTab(student, analysis) {
   // Student concept & theme
   html += '<div class="glass"><h3>학생 컨셉 분석</h3>';
   if (ra.concept) {
+    const hasCareerFlow = analysis && analysis.career_flow && analysis.career_flow.length > 0;
+    const sourceLabel = hasCareerFlow ? '진로 희망 기반' : '생기부 기록 분석';
     html += `<div style="text-align:center;margin:12px 0">
       <span class="concept-badge">${esc(ra.concept)}</span>
       ${ra.themes.slice(1).map(t => `<span class="concept-badge" style="background:var(--copper-light);color:var(--copper)">${esc(t)}</span>`).join('')}
     </div>`;
     html += `<div style="font-size:13px;text-align:center;color:var(--sub)">
-      생기부 기록 분석을 통해 도출된 학생의 핵심 관심 영역입니다.
+      ${sourceLabel}으로 도출된 학생의 핵심 관심 영역입니다.
     </div>`;
   } else {
-    html += '<div style="font-size:13px;color:var(--muted)">생기부 기록이 부족하여 컨셉을 도출하기 어렵습니다.</div>';
+    html += '<div style="font-size:13px;color:var(--muted)">진로 희망 및 생기부 기록이 부족하여 컨셉을 도출하기 어렵습니다.</div>';
   }
 
   // Career flow
@@ -3756,6 +3827,30 @@ function renderRecordTab(student, analysis) {
     html += '</div>';
   }
   html += '</div>';
+
+  // Career insights from 행특
+  if (ra.careerInsights.length > 0) {
+    html += '<h3 style="margin-top:16px">행동특성 종합의견 중 진로 관련 발췌</h3>';
+    ra.careerInsights.forEach(ci => {
+      ci.excerpts.forEach(ex => {
+        html += `<div style="padding:8px 14px;margin:6px 0;border-left:3px solid var(--purple);background:var(--cream);border-radius:0 8px 8px 0;font-size:12px;line-height:1.7">
+          <span style="font-weight:600;color:var(--purple)">${ci.year}학년:</span> ${esc(ex)}
+        </div>`;
+      });
+    });
+  }
+  html += '</div>';
+
+  // Counseling points
+  if (ra.counselingPoints.length > 0) {
+    html += '<div class="glass" style="border-left:4px solid var(--orange)"><h3>상담 포인트</h3>';
+    html += '<p style="font-size:11px;color:var(--muted);margin-bottom:8px">진로-교과 불일치, 성적 변화 등 상담 시 확인이 필요한 사항입니다.</p>';
+    const unique = [...new Set(ra.counselingPoints)];
+    unique.forEach(p => {
+      html += `<div class="alert-item">${esc(p)}</div>`;
+    });
+    html += '</div>';
+  }
 
   // Strengths & Weaknesses
   html += '<div class="glass"><h3>생기부 강점·약점 평가</h3>';
@@ -3832,14 +3927,6 @@ function renderRecordTab(student, analysis) {
     html += '</div>';
   }
 
-  // Alerts
-  if (analysis.alerts && analysis.alerts.length > 0) {
-    html += '<div class="glass"><h3>교사 확인 필요 사항</h3>';
-    analysis.alerts.forEach(a => {
-      html += `<div class="alert-item">${esc(a)}</div>`;
-    });
-    html += '</div>';
-  }
 
   el.innerHTML = html;
 }
