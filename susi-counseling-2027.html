@@ -3801,7 +3801,7 @@ function renderProfileHeader(student, analysis) {
   el.innerHTML = `<div class="profile-header">
     <div class="profile-avatar">${student.seat}</div>
     <div class="profile-info">
-      <div class="pname">${esc(student.name)}</div>
+      <div class="pname">${esc(student.name)} <button onclick="exportReport()" style="font-size:11px;padding:2px 10px;border:1px solid var(--copper);border-radius:6px;background:none;color:var(--copper);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:6px">보고서</button></div>
       <div class="pmeta">3학년 4반 ${student.seat}번 · 병점고등학교</div>
     </div>
     <div class="profile-chips">${chips}</div>
@@ -4027,6 +4027,61 @@ function renderScoreTab(student, analysis) {
         html += `<div style="font-size:10px;color:var(--muted);margin-top:4px">외 ${ranked.length - 15}개 대학</div>`;
       }
       html += '</div>';
+    }
+  }
+
+  // Subject-University cross analysis
+  if (univResults && univResults.length > 0) {
+    const mainSubjects = {};
+    student.subjects.filter(s => s.g != null && s.g >= 1 && s.g <= 9).forEach(s => {
+      const key = s.c || s.n;
+      if (!mainSubjects[key]) mainSubjects[key] = { grades: [], units: 0 };
+      mainSubjects[key].grades.push(s.g);
+      mainSubjects[key].units += (s.u || 1);
+    });
+    const subjEntries = Object.entries(mainSubjects).filter(([,v]) => v.grades.length >= 2).map(([name, v]) => ({
+      name,
+      avg: v.grades.reduce((s,g) => s+g, 0) / v.grades.length,
+      units: v.units
+    })).sort((a,b) => a.avg - b.avg);
+
+    if (subjEntries.length >= 3) {
+      const strongSubjs = subjEntries.slice(0, 3);
+      const weakSubjs = subjEntries.slice(-3).reverse();
+      html += '<div class="glass"><h3>교과 강약점 × 대학 반영 분석</h3>';
+      html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">강점/약점 교과가 어떤 대학에서 유리/불리한지 교차 분석합니다.</p>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+      html += '<div style="padding:10px;background:var(--green-light);border-radius:8px">';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">강점 교과</div>';
+      strongSubjs.forEach(s => {
+        html += `<div style="font-size:11px;margin-bottom:2px">${esc(s.name)}: <span class="mono" style="font-weight:700;color:${gradeColor(s.avg)}">${s.avg.toFixed(1)}</span>등급</div>`;
+      });
+      const strongNames = strongSubjs.map(s => s.name);
+      const favorUnivs = univResults.filter(r => {
+        const rule = NAESIN_RULES[r.univ];
+        if (!rule) return false;
+        const reflect = (r.cutline?.reflect || rule.rfl || '').toLowerCase();
+        return strongNames.some(n => reflect.includes(n.substring(0, 2).toLowerCase()));
+      }).slice(0, 3);
+      if (favorUnivs.length > 0) {
+        html += '<div style="font-size:10px;color:var(--green);margin-top:4px;font-weight:600">유리한 대학:</div>';
+        favorUnivs.forEach(u => {
+          html += `<div style="font-size:10px;cursor:pointer" onclick="showUnivDetail('${esc(u.univ)}')">${esc(u.univ)} (${u.score.toFixed(1)})</div>`;
+        });
+      }
+      html += '</div>';
+
+      html += '<div style="padding:10px;background:var(--red-light);border-radius:8px">';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px">약점 교과</div>';
+      weakSubjs.forEach(s => {
+        html += `<div style="font-size:11px;margin-bottom:2px">${esc(s.name)}: <span class="mono" style="font-weight:700;color:${gradeColor(s.avg)}">${s.avg.toFixed(1)}</span>등급</div>`;
+      });
+      html += '<div style="font-size:10px;color:var(--red);margin-top:4px;font-weight:600">대응 전략:</div>';
+      html += '<div style="font-size:10px">이 교과 비중이 낮은 대학을 선택하거나, 종합전형으로 서류 경쟁력을 활용하세요.</div>';
+      html += '</div>';
+
+      html += '</div></div>';
     }
   }
 
@@ -5201,7 +5256,10 @@ function renderMemoTab(student) {
   const printFit = calcFitScore(student, analysis, null);
   html += `<div style="margin-top:8px"><strong>전공적합성:</strong> ${printFit.score}점/100점</div>`;
   html += '</div>';
-  html += `<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;border:none;border-radius:8px;background:var(--teal);color:#fff;font-family:inherit;font-size:13px;cursor:pointer">인쇄</button>`;
+  html += `<div style="margin-top:12px;display:flex;gap:8px">
+    <button onclick="window.print()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--teal);color:#fff;font-family:inherit;font-size:13px;cursor:pointer">현재 화면 인쇄</button>
+    <button onclick="exportReport()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--copper);color:#fff;font-family:inherit;font-size:13px;cursor:pointer">상담 보고서 출력</button>
+  </div>`;
   html += '</div>';
 
   el.innerHTML = html;
@@ -5231,6 +5289,138 @@ function deleteMemo(idx) {
     localStorage.setItem('susi27_memos', JSON.stringify(memos));
     renderMemoTab(student);
   }
+}
+
+// ═══════════════════════════════════════════════
+// COUNSELING REPORT EXPORT
+// ═══════════════════════════════════════════════
+function exportReport() {
+  if (selectedIdx == null) return;
+  const student = STUDENTS[selectedIdx];
+  const analysis = ANALYSIS[student.seat] || {};
+  const avg = calcWeightedAvg(student);
+  const ra = analyzeRecord(student, analysis);
+  const fitData = calcFitScore(student, analysis, ra.concept);
+  const trend = calcYearlyTrend(student);
+  const density = calcRecordDensity(student);
+  const combos = calcComboScores(student);
+
+  const allComps = univResults.map(r => {
+    const comp = calcCompositeScore(r, student, analysis);
+    return { ...r, prob: comp.probability, comp };
+  }).sort((a, b) => b.prob - a.prob);
+
+  const safeCount = allComps.filter(r => r.prob >= 65).length;
+  const fitCount = allComps.filter(r => r.prob >= 40 && r.prob < 65).length;
+  const reachCount = allComps.filter(r => r.prob >= 15 && r.prob < 40).length;
+
+  let report = `
+<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>${student.name} 수시 상담 보고서</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;font-size:12px;line-height:1.6;color:#333;padding:20px;max-width:800px;margin:0 auto}
+h1{font-size:18px;border-bottom:2px solid #143A40;padding-bottom:6px;margin-bottom:12px;color:#143A40}
+h2{font-size:14px;color:#1C5A60;margin:14px 0 6px;border-left:3px solid #C77B3C;padding-left:8px}
+table{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:11px}
+th,td{border:1px solid #ddd;padding:4px 8px;text-align:left}
+th{background:#f5f5f0;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.box{padding:8px 12px;background:#f9f7f2;border-radius:6px;font-size:11px}
+.safe{color:#2E7D4A;font-weight:700}.fit{color:#3C6E71;font-weight:700}.reach{color:#C77B3C;font-weight:700}
+.footer{margin-top:20px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center}
+@media print{body{padding:10px}h1{font-size:16px}}
+</style></head><body>
+<h1>${student.seat}번 ${esc(student.name)} — 2027학년도 수시 상담 보고서</h1>
+<div style="font-size:11px;color:#666;margin-bottom:12px">병점고등학교 3학년 4반 · 작성일: ${new Date().toLocaleDateString('ko-KR')} · 학생 데이터는 브라우저 내에서만 처리되며 외부로 전송되지 않습니다</div>
+
+<h2>1. 학생 기본 정보</h2>
+<div class="grid2">
+<div class="box"><strong>전체 평균등급:</strong> ${avg.toFixed(2)}등급</div>
+<div class="box"><strong>전공적합성:</strong> ${fitData.score}점/100점 (${fitData.score >= 60 ? '우수' : fitData.score >= 35 ? '양호' : '보완필요'})</div>
+<div class="box"><strong>진로 키워드:</strong> ${ra.concept || '미설정'}</div>
+<div class="box"><strong>강점 교과:</strong> ${(analysis.str || []).join(', ') || '-'}</div>
+</div>`;
+
+  // Grade trend
+  if (trend.length >= 2) {
+    report += '<h2>2. 학기별 성적 추이</h2><table><tr><th>학기</th>';
+    trend.forEach(t => report += `<th>${t.year}학년 ${t.sem}학기</th>`);
+    report += '</tr><tr><td>평균등급</td>';
+    trend.forEach(t => report += `<td style="font-weight:700">${t.avg.toFixed(2)}</td>`);
+    report += '</tr></table>';
+    const first = trend[0].avg, last = trend[trend.length-1].avg;
+    const diff = last - first;
+    report += `<div class="box">추세: ${diff < -0.3 ? '상승세 (' + Math.abs(diff).toFixed(1) + '등급 향상)' : diff > 0.3 ? '하락세 (' + diff.toFixed(1) + '등급 하락)' : '안정적'}</div>`;
+  }
+
+  // Combo scores
+  report += '<h2>3. 교과 조합별 성적</h2><table><tr><th>조합</th><th>평균등급</th></tr>';
+  COMBO_ORDER.forEach(combo => {
+    if (combos[combo]) report += `<tr><td>${esc(combo)}</td><td>${combos[combo].avg.toFixed(2)}</td></tr>`;
+  });
+  report += '</table>';
+
+  // University matching
+  report += `<h2>4. 대학 매칭 결과 (${allComps.length}개 대학)</h2>`;
+  report += `<div class="grid2" style="margin-bottom:8px">
+    <div class="box"><span class="safe">안정권 (65%+):</span> ${safeCount}교</div>
+    <div class="box"><span class="fit">적정 (40~64%):</span> ${fitCount}교</div>
+    <div class="box"><span class="reach">소신 (15~39%):</span> ${reachCount}교</div>
+    <div class="box"><strong>도전 (15%↓):</strong> ${allComps.length - safeCount - fitCount - reachCount}교</div>
+  </div>`;
+
+  report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>티어</th></tr>';
+  const tierLabel = {1:'최상위',2:'상위',3:'중상위',4:'중위'};
+  allComps.slice(0, 20).forEach((r, i) => {
+    const cls = r.prob >= 65 ? 'safe' : r.prob >= 40 ? 'fit' : r.prob >= 15 ? 'reach' : '';
+    report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td>${r.score.toFixed(2)}</td><td class="${cls}">${r.prob}%</td><td style="font-size:10px">${tierLabel[r.comp.tier]||'중위'}</td></tr>`;
+  });
+  report += '</table>';
+
+  // 생기부 요약
+  report += '<h2>5. 생기부 분석 요약</h2>';
+  report += `<div class="grid2">
+    <div class="box"><strong>기록 총 분량:</strong> ${density.total.toLocaleString()}자</div>
+    <div class="box"><strong>추천 학과:</strong> ${ra.deptMatch.slice(0, 5).join(', ') || '-'}</div>
+  </div>`;
+  if (ra.storyArc.length > 0) {
+    report += `<div class="box" style="margin-top:4px"><strong>진로 변화:</strong> ${ra.storyArc.map(s => s.year + '학년:' + s.career).join(' → ')}</div>`;
+  }
+
+  // Counseling points
+  if (ra.counselingPoints.length > 0) {
+    report += '<h2>6. 상담 포인트</h2>';
+    const unique = [...new Set(ra.counselingPoints)];
+    unique.forEach(p => report += `<div class="box" style="margin-bottom:4px;border-left:3px solid #C77B3C">· ${esc(p)}</div>`);
+  }
+
+  // Interview predictions
+  if (ra.interviewPredictions.length > 0) {
+    report += '<h2>7. 예상 면접 질문 (상위 5개)</h2>';
+    ra.interviewPredictions.slice(0, 5).forEach((p, i) => {
+      report += `<div class="box" style="margin-bottom:4px"><strong>Q${i+1}.</strong> ${esc(p.q)} <span style="color:#999">(${esc(p.source)})</span></div>`;
+    });
+  }
+
+  // Saved memos
+  const memoKey = `memo_${student.seat}`;
+  const studentMemos = memos[memoKey] || [];
+  if (studentMemos.length > 0) {
+    report += '<h2>8. 상담 메모</h2>';
+    studentMemos.forEach(m => {
+      report += `<div class="box" style="margin-bottom:4px"><span style="color:#999">${esc(m.time)}</span> · ${esc(m.text)}</div>`;
+    });
+  }
+
+  report += `<div class="footer">2027학년도 수시 상담 프로그램 · 병점고등학교 3학년 4반 · 학생 데이터는 브라우저 내에서만 처리되며 외부로 전송되지 않습니다</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(report);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 500);
 }
 
 // ═══════════════════════════════════════════════
