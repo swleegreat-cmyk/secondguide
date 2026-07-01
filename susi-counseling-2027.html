@@ -4149,15 +4149,17 @@ function calcCompositeScore(univResult, student, analysis) {
       base = base1;
     }
 
-    // Class-percentile calibration: compare this student's converted score against all classmates
     const classPctl = getClassPercentile(comboScore, univResult.univ);
     if (classPctl != null) {
-      if (classPctl <= 10) classAdj = 5;
-      else if (classPctl <= 20) classAdj = 3;
-      else if (classPctl <= 35) classAdj = 1;
-      else if (classPctl >= 90) classAdj = -4;
-      else if (classPctl >= 75) classAdj = -2;
-      else if (classPctl >= 60) classAdj = -1;
+      const tierScale = effectiveTier >= 4 ? 1.8 : effectiveTier >= 3 ? 1.4 : effectiveTier >= 2 ? 1.0 : 0.7;
+      if (classPctl <= 5) classAdj = Math.round(8 * tierScale);
+      else if (classPctl <= 10) classAdj = Math.round(6 * tierScale);
+      else if (classPctl <= 20) classAdj = Math.round(4 * tierScale);
+      else if (classPctl <= 35) classAdj = Math.round(2 * tierScale);
+      else if (classPctl >= 95) classAdj = -Math.round(7 * tierScale);
+      else if (classPctl >= 85) classAdj = -Math.round(5 * tierScale);
+      else if (classPctl >= 75) classAdj = -Math.round(3 * tierScale);
+      else if (classPctl >= 60) classAdj = -Math.round(1 * tierScale);
     }
   }
 
@@ -4237,15 +4239,18 @@ function calcCompositeScore(univResult, student, analysis) {
     fitBonus = Math.round(fitData.score * 0.04);
   }
 
-  // Combo average cross-check: if combo avg is significantly better than converted score,
-  // give slight bonus (student's reflected subjects are stronger than overall)
   let comboBonus = 0;
-  if (comboAvgRef != null && comboAvgRef < comboScore - 0.3) {
-    comboBonus = Math.round((comboScore - comboAvgRef) * 2);
-    comboBonus = Math.min(comboBonus, 5);
-  } else if (comboAvgRef != null && comboAvgRef > comboScore + 0.3) {
-    comboBonus = -Math.round((comboAvgRef - comboScore) * 2);
-    comboBonus = Math.max(comboBonus, -5);
+  if (comboAvgRef != null) {
+    const overallAvg = calcWeightedAvg(student);
+    const comboDiff = overallAvg - comboAvgRef;
+    const mult = is논술 ? 1.5 : is종합 ? 2.0 : 3.0;
+    if (comboDiff > 0.2) {
+      comboBonus = Math.round(comboDiff * mult);
+      comboBonus = Math.min(comboBonus, is논술 ? 3 : 5);
+    } else if (comboDiff < -0.2) {
+      comboBonus = Math.round(comboDiff * mult);
+      comboBonus = Math.max(comboBonus, is논술 ? -3 : -5);
+    }
   }
 
   // Grade consistency: uniform grades across subjects → more predictable outcome
@@ -4272,7 +4277,8 @@ function calcCompositeScore(univResult, student, analysis) {
   if (is종합) ciHalf = 12;
   else if (is논술) ciHalf = 14;
   if (!univResult.cutline && classAdj === 0) ciHalf += 5;
-  else if (!univResult.cutline && classAdj !== 0) ciHalf += 2;
+  else if (!univResult.cutline && Math.abs(classAdj) >= 6) ciHalf -= 1;
+  else if (!univResult.cutline) ciHalf += 2;
   if (univResult.reliability === 'none') ciHalf += 4;
   else if (univResult.reliability === 'low') ciHalf += 2;
   if (univResult.count && univResult.count < 10) ciHalf += 2;
