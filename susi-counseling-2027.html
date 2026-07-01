@@ -3644,6 +3644,50 @@ function renderDashboard() {
   });
   html += '</div>';
 
+  // Class-wide university target heat map (cached)
+  html += '<h3 style="margin-top:20px">학급 전체 대학 지원 현황</h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">각 대학에 안정/적정/소신권인 학생 수를 보여줍니다. 상위 15개 대학만 표시됩니다.</p>';
+
+  if (!_cache.heatmap) {
+    const univStudentMap = {};
+    STUDENTS.forEach((s, idx) => {
+      const a = ANALYSIS[s.seat] || {};
+      const results = runAllUniversities(s);
+      results.forEach(r => {
+        const comp = calcCompositeScore(r, s, a);
+        if (!univStudentMap[r.univ]) univStudentMap[r.univ] = { safe: 0, fit: 0, reach: 0, total: 0, tier: comp.tier };
+        if (comp.probability >= 65) univStudentMap[r.univ].safe++;
+        else if (comp.probability >= 40) univStudentMap[r.univ].fit++;
+        else if (comp.probability >= 15) univStudentMap[r.univ].reach++;
+        univStudentMap[r.univ].total++;
+      });
+    });
+    _cache.heatmap = Object.entries(univStudentMap)
+      .map(([univ, d]) => ({ univ, ...d, weighted: d.safe * 3 + d.fit * 2 + d.reach }))
+      .sort((a, b) => b.weighted - a.weighted)
+      .slice(0, 15);
+  }
+  const topUnivs = _cache.heatmap;
+
+  if (topUnivs.length > 0) {
+    html += '<div class="scroll-table"><table class="g-table"><thead><tr>';
+    html += '<th>대학명</th><th>티어</th><th style="color:var(--green)">안정</th><th style="color:var(--blue)">적정</th><th style="color:var(--orange)">소신</th><th>합계</th>';
+    html += '</tr></thead><tbody>';
+    const tierLabel = {1:'최상위',2:'상위',3:'중상위',4:'중위'};
+    topUnivs.forEach(u => {
+      const maxBar = Math.max(u.safe, u.fit, u.reach, 1);
+      html += `<tr>
+        <td style="font-weight:600">${esc(u.univ)}</td>
+        <td style="font-size:11px;color:var(--muted)">${tierLabel[u.tier]||'중위'}</td>
+        <td><span style="display:inline-block;width:${Math.max(4, u.safe/34*60)}px;height:14px;background:var(--green);border-radius:3px;vertical-align:middle;opacity:0.7"></span> ${u.safe}</td>
+        <td><span style="display:inline-block;width:${Math.max(4, u.fit/34*60)}px;height:14px;background:var(--blue);border-radius:3px;vertical-align:middle;opacity:0.7"></span> ${u.fit}</td>
+        <td><span style="display:inline-block;width:${Math.max(4, u.reach/34*60)}px;height:14px;background:var(--orange);border-radius:3px;vertical-align:middle;opacity:0.7"></span> ${u.reach}</td>
+        <td style="font-weight:600">${u.total}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
   // Counseling priority students
   html += '<h3 style="margin-top:20px">상담 우선 학생</h3>';
   html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">성적 변화, 진로 적합도, 또는 특이사항으로 우선 상담이 필요한 학생입니다.</p>';
@@ -4922,6 +4966,84 @@ function renderRecordTab(student, analysis) {
       <div style="font-size:28px;font-weight:800;color:${fitData.score >= 60 ? 'var(--green)' : fitData.score >= 35 ? 'var(--blue)' : 'var(--orange)'}">${fitData.score}<span style="font-size:14px;font-weight:600">/100</span></div>
     </div>
   </div>`;
+  html += '</div>';
+
+  // 생기부 품질 점수 & 개선 팁
+  const qualityFactors = [];
+  let qualityScore = 0;
+
+  // Factor 1: Record density (0-20 points)
+  const densityScore = Math.min(20, Math.round(density.total / 500));
+  qualityFactors.push({ name: '기록 분량', score: densityScore, max: 20,
+    tip: densityScore < 10 ? '세특 기록 분량이 부족합니다. 교과별 구체적 탐구 활동을 추가하세요.' : null });
+  qualityScore += densityScore;
+
+  // Factor 2: Subject diversity (0-15 points)
+  const diverseSubjs = density.bySubject.filter(d => d.chars >= 100).length;
+  const divScore = Math.min(15, diverseSubjs * 2);
+  qualityFactors.push({ name: '교과 다양성', score: divScore, max: 15,
+    tip: divScore < 8 ? '기록된 교과가 편중되어 있습니다. 다양한 교과에서 활동 기록을 확보하세요.' : null });
+  qualityScore += divScore;
+
+  // Factor 3: 3-year consistency (0-20 points)
+  const recYears = new Set(student.records.filter(r => r.t === '세부능력및특기사항' && r.b).map(r => r.y));
+  const yearCoverage = recYears.size;
+  const consScore = yearCoverage >= 3 ? 20 : yearCoverage === 2 ? 12 : 5;
+  qualityFactors.push({ name: '학년별 분포', score: consScore, max: 20,
+    tip: consScore < 15 ? `${3 - yearCoverage}개 학년의 기록이 부족합니다.` : null });
+  qualityScore += consScore;
+
+  // Factor 4: Concept clarity (0-20 points)
+  const conceptScore = ra.concept ? (ra.themes.length >= 2 ? 20 : 14) : 5;
+  qualityFactors.push({ name: '진로 일관성', score: conceptScore, max: 20,
+    tip: conceptScore < 14 ? '명확한 진로 키워드가 부족합니다. 관심 분야를 일관되게 드러내세요.' : null });
+  qualityScore += conceptScore;
+
+  // Factor 5: Depth indicators - books, research, debate (0-15 points)
+  const allText = student.records.map(r => r.b || '').join(' ');
+  const bookCount = (allText.match(/['「《][^'」》]{2,30}['」》]/g) || []).length;
+  const researchCount = (allText.match(/탐구|연구|실험|조사|분석/g) || []).length;
+  const debateCount = (allText.match(/토론|발표|토의|논의/g) || []).length;
+  const depthRaw = Math.min(15, bookCount * 2 + Math.min(5, researchCount) + Math.min(3, debateCount));
+  qualityFactors.push({ name: '심화 활동', score: depthRaw, max: 15,
+    tip: depthRaw < 8 ? '도서, 탐구, 토론 등 심화 활동 언급이 부족합니다.' : null });
+  qualityScore += depthRaw;
+
+  // Factor 6: Behavioral records (0-10 points)
+  const opinionLen = student.opinions.reduce((s, o) => s + (o.b || '').length, 0);
+  const behScore = Math.min(10, Math.round(opinionLen / 200));
+  qualityFactors.push({ name: '행특 기록', score: behScore, max: 10,
+    tip: behScore < 5 ? '행동특성종합의견 기록이 부족합니다.' : null });
+  qualityScore += behScore;
+
+  const qColor = qualityScore >= 75 ? 'var(--green)' : qualityScore >= 50 ? 'var(--blue)' : qualityScore >= 30 ? 'var(--orange)' : 'var(--red)';
+  const qLabel = qualityScore >= 75 ? '우수' : qualityScore >= 50 ? '양호' : qualityScore >= 30 ? '보완 필요' : '부족';
+  html += `<div style="margin-top:12px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700">생기부 품질 점수</div>
+      <div style="font-size:24px;font-weight:800;color:${qColor}">${qualityScore}<span style="font-size:12px;font-weight:600;color:var(--muted)">/100 (${qLabel})</span></div>
+    </div>`;
+  qualityFactors.forEach(f => {
+    const pct = (f.score / f.max) * 100;
+    const fColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--blue)' : 'var(--orange)';
+    html += `<div style="margin:4px 0">
+      <div style="display:flex;justify-content:space-between;font-size:11px">
+        <span>${f.name}</span><span style="color:${fColor};font-weight:600">${f.score}/${f.max}</span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px;margin-top:2px">
+        <div style="height:100%;width:${pct}%;background:${fColor};border-radius:3px"></div>
+      </div>
+    </div>`;
+  });
+
+  const tips = qualityFactors.filter(f => f.tip).map(f => f.tip);
+  if (tips.length > 0) {
+    html += '<div style="margin-top:10px;padding:8px 12px;background:var(--orange-light);border-radius:8px;font-size:11px;line-height:1.6">';
+    html += '<div style="font-weight:700;color:var(--orange);margin-bottom:4px">개선 포인트</div>';
+    tips.forEach(t => { html += `<div>· ${t}</div>`; });
+    html += '</div>';
+  }
+  html += '</div>';
   html += '</div>';
 
   // Career insights from 행특
