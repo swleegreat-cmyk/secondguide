@@ -3384,6 +3384,27 @@ function calcFitScore(student, analysis, concept) {
     factors.push({label:'행특 기록', val:opScore, note:student.opinions.length+'개 학년'});
   }
 
+  const yearChars = {};
+  student.records.filter(r => r.t === '세부능력및특기사항' && r.b).forEach(r => {
+    const y = r.y || 0;
+    if (!yearChars[y]) yearChars[y] = { chars: 0, count: 0 };
+    yearChars[y].chars += r.b.length;
+    yearChars[y].count++;
+  });
+  const years = Object.keys(yearChars).sort();
+  if (years.length >= 2) {
+    const firstAvg = yearChars[years[0]].chars / yearChars[years[0]].count;
+    const lastAvg = yearChars[years[years.length-1]].chars / yearChars[years[years.length-1]].count;
+    const growth = (lastAvg - firstAvg) / firstAvg;
+    let depthScore = 0;
+    if (growth >= 0.3) { depthScore = 10; }
+    else if (growth >= 0.1) { depthScore = 6; }
+    else if (growth >= 0) { depthScore = 3; }
+    else { depthScore = 0; }
+    score += depthScore;
+    factors.push({label:'연도별 심화', val:depthScore, note: growth >= 0 ? Math.round(growth*100)+'% 심화' : '심화 부족'});
+  }
+
   return { score: Math.min(100, score), factors };
 }
 
@@ -3995,13 +4016,15 @@ function calcCompositeScore(univResult, student, analysis) {
   const fitData = calcFitScore(student, analysis || {}, concept);
   let fitBonus;
   if (is종합) {
-    // 종합전형: 전공적합성 최대 15%p 영향 (핵심 평가요소)
-    fitBonus = Math.round(fitData.score * 0.15);
+    const jt = jeonType.toLowerCase();
+    const has면접 = jt.includes('면접') || univResult.hasInterviews;
+    const fitCoeff = tier <= 2
+      ? (has면접 ? 0.18 : 0.14)
+      : (has면접 ? 0.15 : 0.12);
+    fitBonus = Math.round(fitData.score * fitCoeff);
   } else if (is논술) {
-    // 논술전형: 전공적합성 거의 무관
     fitBonus = Math.round(fitData.score * 0.02);
   } else {
-    // 교과전형: 전공적합성 약간 영향
     fitBonus = Math.round(fitData.score * 0.04);
   }
 
