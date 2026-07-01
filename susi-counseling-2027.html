@@ -4236,7 +4236,7 @@ function calcCompositeScore(univResult, student, analysis) {
   } else if (is논술) {
     fitBonus = Math.round(fitData.score * 0.02);
   } else {
-    fitBonus = Math.round(fitData.score * 0.04);
+    fitBonus = Math.round(fitData.score * 0.01);
   }
 
   let comboBonus = 0;
@@ -4270,7 +4270,10 @@ function calcCompositeScore(univResult, student, analysis) {
     interviewAdj = Math.max(-4, Math.min(4, interviewAdj));
   }
 
-  const raw = Math.max(3, Math.min(99, base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus + comboBonus + consistencyAdj + classAdj + interviewAdj));
+  let raw = base + trendBonus + ratioAdj + minAdj + reliabilityAdj + countAdj + fitBonus + comboBonus + consistencyAdj + classAdj + interviewAdj;
+  if (raw > 90) raw = 90 + (raw - 90) * 0.3;
+  else if (raw < 10) raw = 10 - (10 - raw) * 0.3;
+  raw = Math.max(3, Math.min(97, Math.round(raw)));
 
   // Confidence interval: width depends on data quality and admission type
   let ciHalf = 8;
