@@ -4701,6 +4701,41 @@ function renderSusiTab(student, analysis) {
   }
   html += '</div>';
 
+  // 전형별 대학 추천 (grouped by admission type)
+  const 교과Results = allComps.filter(r => !r.comp.is종합 && !r.comp.is논술);
+  const 종합Results = allComps.filter(r => r.comp.is종합);
+  const 논술Results = allComps.filter(r => r.comp.is논술);
+  const hasMultipleTypes = (교과Results.length > 0 ? 1 : 0) + (종합Results.length > 0 ? 1 : 0) + (논술Results.length > 0 ? 1 : 0) >= 2;
+
+  if (hasMultipleTypes) {
+    html += '<div style="margin-top:14px;padding:14px;background:var(--card);border-radius:12px;border:1px solid var(--border)">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">전형별 추천 대학</div>';
+
+    const renderTypeSection = (label, color, items, maxShow) => {
+      if (items.length === 0) return;
+      const top = items.slice(0, maxShow);
+      html += `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:${color};margin-bottom:5px">${label} (${items.length}교)</div>`;
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+      top.forEach(r => {
+        const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
+        html += `<div style="padding:5px 10px;background:var(--cream);border-radius:8px;cursor:pointer;border:1px solid var(--border);min-width:80px;text-align:center" onclick="showUnivDetail('${esc(r.univ)}')">
+          <div style="font-size:11px;font-weight:600">${esc(r.univ)}</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:${pColor}">${r.prob}%</div>
+          <div style="font-size:10px;color:var(--muted)">${r.score.toFixed(2)}등급</div>
+        </div>`;
+      });
+      if (items.length > maxShow) {
+        html += `<div style="padding:5px 10px;display:flex;align-items:center;font-size:10px;color:var(--muted)">+${items.length - maxShow}교</div>`;
+      }
+      html += '</div></div>';
+    };
+
+    renderTypeSection('교과전형', 'var(--teal)', 교과Results, 4);
+    renderTypeSection('종합전형', 'var(--blue)', 종합Results, 4);
+    renderTypeSection('논술전형', 'var(--orange)', 논술Results, 3);
+    html += '</div>';
+  }
+
   // 6지원 최적 포트폴리오 시뮬레이터 (greedy optimization)
   if (allComps.length >= 6) {
     const optPortfolio = calcOptimalPortfolio(allComps, 6);
