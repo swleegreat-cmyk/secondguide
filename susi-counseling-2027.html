@@ -345,13 +345,23 @@ body {
   .g-table { font-size:11px; }
   .tab-bar { gap:0; }
   .tab-btn { padding:10px 8px; font-size:12px; }
+  .combo-bar, .subj-bar { font-size:11px; }
+  .dash-grid { grid-template-columns:1fr 1fr !important; }
+}
+@media (max-width:480px) {
+  .stat-grid { grid-template-columns:1fr; }
+  .dash-grid { grid-template-columns:1fr !important; }
 }
 @media print {
-  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer { display:none !important; }
-  .main { margin-left:0; max-width:100%; }
+  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn { display:none !important; }
+  .main { margin-left:0; max-width:100%; padding:10px; }
   .tab-panel { display:block !important; page-break-before:always; }
-  body { background:#fff; }
-  .glass { box-shadow:none; border:1px solid #ddd; }
+  body { background:#fff; font-size:11px; }
+  .glass { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid; margin-bottom:10px; }
+  .interview-card { page-break-inside:avoid; }
+  .profile-header { page-break-after:avoid; }
+  svg { max-width:200px !important; }
+  .match-row { page-break-inside:avoid; }
 }
 
 /* Interview Q cards */
@@ -4001,7 +4011,7 @@ function renderSusiTab(student, analysis) {
       html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')">
         <span class="match-badge ${b.cls}">${b.label}</span>
         <div class="match-body">
-          <div class="univ">${esc(r.univ)}</div>
+          <div class="univ">${esc(r.univ)}${ADMISSIONS_INFO[r.univ] ? ' <span style="font-size:10px;color:var(--blue);font-weight:600">' + esc(Object.keys(ADMISSIONS_INFO[r.univ])[0]) + '</span>' : ''}</div>
           <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}${comboLabel}</div>
         </div>
         <div class="match-num">
@@ -4150,6 +4160,25 @@ function showUnivDetail(univName) {
   if (result.reliability !== 'none') {
     const relCls = result.reliability === 'high' ? 'rel-high' : result.reliability === 'medium' ? 'rel-medium' : 'rel-low';
     html += `<div style="font-size:13px"><strong>계산 신뢰도:</strong> <span class="rel-badge ${relCls}">${result.reliability}</span></div>`;
+  }
+
+  // Additional admission info (5 detailed universities)
+  const admInfo = ADMISSIONS_INFO[univName];
+  if (admInfo) {
+    html += '<div style="margin-top:12px;padding:10px;background:var(--blue-light);border-radius:8px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px">상세 전형 정보</div>';
+    Object.entries(admInfo).forEach(([jeonName, info]) => {
+      html += `<div style="margin-bottom:6px;padding:8px;background:var(--card);border-radius:6px;border:1px solid var(--border)">`;
+      html += `<div style="font-size:13px;font-weight:700;margin-bottom:4px">${esc(jeonName)}</div>`;
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">';
+      if (info.cut85) html += `<div>등급컷(85%): <span class="mono" style="font-weight:700;color:${gradeColor(info.cut85)}">${info.cut85}</span></div>`;
+      if (info.reflect) html += `<div>반영교과: <span style="font-weight:600">${esc(info.reflect)}</span> <span style="color:var(--muted)">(${esc(info.reflect_source || '')})</span></div>`;
+      if (info.경쟁률) html += `<div>경쟁률: <span style="font-weight:600">${esc(info.경쟁률)}</span></div>`;
+      if (info.min) html += `<div>수능최저: <span style="font-weight:600;color:var(--red)">${esc(info.min)}</span></div>`;
+      else html += `<div>수능최저: <span style="color:var(--green);font-weight:600">없음</span></div>`;
+      html += '</div></div>';
+    });
+    html += '</div>';
   }
   html += '</div>';
 
