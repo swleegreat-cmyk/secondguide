@@ -1524,9 +1524,9 @@ select { cursor: pointer; }
         <div class="tl-desc"><b>9월 초~중순 원서 접수 기간.</b> 접수 마감일 실수 없도록 주의. 수능 최저 대비 집중</div>
       </div>
       <div class="tl-item">
-        <div class="tl-month">2026년 9~10월</div>
+        <div class="tl-month">2026년 10~12월</div>
         <div class="tl-title">논술 시험</div>
-        <div class="tl-desc">대학별 논술 시험 일정 확인 및 응시. 일정 중복 시 우선순위 결정</div>
+        <div class="tl-desc">대학별 논술 시험은 주로 10~12월에 실시. 수능 전후 일정이 다르므로 반드시 확인. 일정 중복 시 우선순위 결정</div>
       </div>
       <div class="tl-item">
         <div class="tl-month">2026년 10~11월</div>
@@ -1636,7 +1636,10 @@ select { cursor: pointer; }
 <!-- ==================== FOOTER ==================== -->
 <div class="footer">
   2027학년도 수시 상담 프로그램<br>
-  이 프로그램은 참고용이며, 최종 결정은 학교 진학 상담 교사와 함께 하세요.
+  이 프로그램은 참고용이며, 정확한 입시 정보는 한국대학교육협의회 및 각 대학 입학처를 확인하세요.<br>
+  최종 결정은 학교 진학 상담 교사와 함께 하세요.<br><br>
+  <span style="font-size:11px; color:#999;">입력하신 정보는 서버에 전송되지 않으며, 브라우저(localStorage)에만 저장됩니다.</span><br>
+  <button onclick="if(confirm('저장된 모든 상담 데이터를 삭제하시겠습니까?')){localStorage.removeItem('susi2027');location.reload();}" style="margin-top:8px;padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#c5221f;font-size:12px;cursor:pointer;">저장 데이터 삭제</button>
 </div>
 
 </div>
@@ -1902,7 +1905,10 @@ function generateRecommendation() {
 
   var recs = [];
 
-  var activityScore = activities.length;
+  var scoredActivities = activities.filter(function(a) {
+    return a !== 'contest' && a !== 'reading';
+  });
+  var activityScore = scoredActivities.length;
   var hasResearch = activities.indexOf('research') !== -1;
   var hasSubjectSpecial = activities.indexOf('subject-special') !== -1;
   var hasLeadership = activities.indexOf('leadership') !== -1;
@@ -2047,6 +2053,12 @@ function generateSummary() {
   document.getElementById('sum-recommendation').textContent = studentData.recommendation || '-';
 
   // 지원 전략 수집
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
   var strategyHtml = '';
   var tiers = [
     { label: '상향', ids: ['reach1', 'reach2'] },
@@ -2062,8 +2074,8 @@ function generateSummary() {
       var type = document.getElementById(id + '-type').value;
       if (univ || dept) {
         strategyHtml += '<div class="summary-row">';
-        strategyHtml += '<span class="s-label">[' + tier.label + '] ' + (univ || '?') + '</span>';
-        strategyHtml += '<span class="s-value">' + (dept || '?') + ' / ' + (typeNames[type] || '미정') + '</span>';
+        strategyHtml += '<span class="s-label">[' + escapeHtml(tier.label) + '] ' + escapeHtml(univ || '?') + '</span>';
+        strategyHtml += '<span class="s-value">' + escapeHtml(dept || '?') + ' / ' + escapeHtml(typeNames[type] || '미정') + '</span>';
         strategyHtml += '</div>';
       }
     });
