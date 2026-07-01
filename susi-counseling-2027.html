@@ -3497,6 +3497,17 @@ const UNIV_TIER = (() => {
 
 function getUnivTier(name) { return UNIV_TIER[name] || 4; }
 
+function getUnivDifficulty(univName) {
+  ensureClassScores();
+  const scores = _cache.classScores[univName];
+  if (!scores || scores.length < 10) return null;
+  const avg = scores.reduce((s,v)=>s+v,0) / scores.length;
+  const spread = scores[scores.length-1] - scores[0];
+  const baseTier = getUnivTier(univName);
+  const diffIdx = avg * 0.6 + spread * 0.15 + baseTier * 0.4;
+  return { avg: Math.round(avg*100)/100, spread: Math.round(spread*100)/100, diffIdx: Math.round(diffIdx*100)/100, baseTier };
+}
+
 function interpolateAnchors(val, anchors, fallback) {
   for (let i = 0; i < anchors.length - 1; i++) {
     if (val >= anchors[i][0] && val < anchors[i+1][0]) {
@@ -4083,8 +4094,23 @@ function calcCompositeScore(univResult, student, analysis) {
       4: [[1.0,80],[1.5,72],[2.0,64],[2.5,56],[3.0,50],[3.5,44],[4.0,38],[5.0,32],[6.0,25],[7.0,18],[9.0,10]]
     };
     const tierSet = is논술 ? tierAnchors논술 : is종합 ? tierAnchors종합 : tierAnchors교과;
-    const anchors = tierSet[tier] || tierSet[4];
-    base = interpolateAnchors(comboScore, anchors, comboScore < anchors[0][0] ? anchors[0][1] + 5 : 3);
+    const diff = getUnivDifficulty(univResult.univ);
+    let effectiveTier = tier;
+    if (diff) {
+      // High avg class score = strict formula = genuinely harder → promote to lower tier
+      // Low avg class score = generous formula = easier → keep or demote tier
+      if (diff.avg >= 5.5 && tier >= 3) effectiveTier = Math.max(2, tier - 1);
+      else if (diff.avg <= 3.5 && tier <= 3) effectiveTier = Math.min(4, tier + 1);
+    }
+    const anchors = tierSet[effectiveTier] || tierSet[4];
+    let base1 = interpolateAnchors(comboScore, anchors, comboScore < anchors[0][0] ? anchors[0][1] + 5 : 3);
+    if (diff && effectiveTier !== tier) {
+      const altAnchors = tierSet[tier] || tierSet[4];
+      const base2 = interpolateAnchors(comboScore, altAnchors, comboScore < altAnchors[0][0] ? altAnchors[0][1] + 5 : 3);
+      base = Math.round(base1 * 0.6 + base2 * 0.4);
+    } else {
+      base = base1;
+    }
 
     // Class-percentile calibration: compare this student's converted score against all classmates
     const classPctl = getClassPercentile(comboScore, univResult.univ);
@@ -4209,7 +4235,7 @@ function calcCompositeScore(univResult, student, analysis) {
   if (is종합) ciHalf = 12;
   else if (is논술) ciHalf = 14;
   if (!univResult.cutline && classAdj === 0) ciHalf += 5;
-  else if (!univResult.cutline && classAdj !== 0) ciHalf += 3;
+  else if (!univResult.cutline && classAdj !== 0) ciHalf += 2;
   if (univResult.reliability === 'none') ciHalf += 4;
   else if (univResult.reliability === 'low') ciHalf += 2;
   if (univResult.count && univResult.count < 10) ciHalf += 2;
