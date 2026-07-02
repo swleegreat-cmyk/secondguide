@@ -210,6 +210,66 @@ assert('breakdown#2: 합성 케이스 기여도 합=100% (일반/전부0 모두)
   fbData.synth1Sum === 100 && fbData.synth2Sum === 100, JSON.stringify(fbData));
 
 // ═══════════════════════════════════════════════
+// adiga 데이터 품질: 중복 처리 + 결측 폴백 검증
+// ═══════════════════════════════════════════════
+import { readFileSync as _rf } from 'fs';
+import { dirname as _dn, join as _jn } from 'path';
+import { fileURLToPath as _fp } from 'url';
+const _SCRATCH = _dn(_fp(import.meta.url));
+const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
+
+// 중복#1: 탈락 레코드 67건 전부가 규칙(완전성 우선 → 모집인원 큰 쪽) 만족
+{
+  const gradeOk = v => { const f = parseFloat(v); return !isNaN(f) && f >= 1 && f <= 9; };
+  const comp = r => (gradeOk(r.등급50) ? 1 : 0) + (gradeOk(r.등급70) ? 1 : 0);
+  const num = v => { const f = parseFloat(v); return isNaN(f) ? -1 : f; };
+  const bad = dq.dup_dropped.filter(d => {
+    const ck = comp(d.keep), cd = comp(d.drop);
+    if (ck > cd) return false;                       // 더 완전한 쪽 채택 ✓
+    if (ck === cd) return num(d.keep.모집인원) < num(d.drop.모집인원); // 동률 → 모집인원 큰 쪽 ✓
+    return true;                                     // 덜 완전한 쪽을 채택했으면 규칙 위반
+  });
+  assert(`중복#1: 탈락 ${dq.dup_dropped.length}건 전부 규칙(완전성→모집인원) 만족`,
+    dq.dup_dropped.length > 0 && bad.length === 0, JSON.stringify(bad.slice(0, 3)));
+}
+// 중복#2: 대표 중복 키가 baked DEPT_CUTLINES에서 전형당 1건으로 정리됨
+{
+  const dupCheck = await page.evaluate(() => {
+    const out = [];
+    for (const key of ['동덕여자대학교|컴퓨터학전공', '부산대학교|전기공학전공']) {
+      const entries = DEPT_CUTLINES[key] || [];
+      const seen = {};
+      let dup = 0;
+      for (const e of entries) { const k = e.jn; if (seen[k]) dup++; seen[k] = 1; }
+      out.push({ key, n: entries.length, dup });
+    }
+    return out;
+  });
+  assert('중복#2: 동덕여대·부산대 중복 키가 전형명당 1건으로 정리 (중복 0)',
+    dupCheck.every(o => o.n > 0 && o.dup === 0), JSON.stringify(dupCheck));
+}
+// 폴백#1: 등급70만 결측 → 등급50 기반 판정 + '70컷 정보 없음' 플래그
+{
+  const r = await page.evaluate(() => deptCutFallback({ g50: 3.2, g70: null, ratio: 7.1 }));
+  assert("폴백#1: g70 결측 → g50 기반 + '70컷 정보 없음' 플래그",
+    r.mode === 'g50-fallback' && r.cut === 3.2 && r.flag === '70컷 정보 없음', JSON.stringify(r));
+}
+// 폴백#2: 둘 다 결측 → 판정 불가 + '컷 정보 없음 — 경쟁률 N:1 참고' (목록 유지)
+{
+  const r = await page.evaluate(() => deptCutFallback({ g50: null, g70: null, ratio: 5.2 }));
+  const kept = await page.evaluate(() => {
+    // 둘 다 결측 레코드가 baked 데이터에서 제외되지 않고 유지되는지
+    let n = 0;
+    for (const list of Object.values(DEPT_CUTLINES))
+      for (const e of list) if (e.g50 == null && e.g70 == null) n++;
+    return n;
+  });
+  assert("폴백#2: 둘 다 결측 → '컷 정보 없음 — 경쟁률 5.2:1 참고' + 데이터 유지",
+    r.mode === 'no-cut' && r.cut === null && r.label === '컷 정보 없음 — 경쟁률 5.2:1 참고' && kept > 0,
+    JSON.stringify({ r, kept }));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.
