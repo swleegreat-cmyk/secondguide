@@ -2860,10 +2860,12 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
   compute복합공통선택진로선택별도 = function(subjects, rule, achievementMap) {
     const pickedAll = [];
     const warnings = [];
+    let hasFullBlock = false; // '전과목 반영' 블록 존재 여부 (있으면 규정상 이수단위 가중평균)
     for (const r of (rule.규칙 || [])) {
       let 교과군 = r.교과군;
       let isCareer, 교과목록;
-      if (typeof 교과군 === 'string' && 교과군.includes('진로선택')) {
+      // '진로선택'뿐 아니라 '전교과중 진로과목' 등 변형 표기도 진로 블록으로 인식
+      if (typeof 교과군 === 'string' && 교과군.includes('진로')) {
         isCareer = true; 교과목록 = null;
       } else if (Array.isArray(교과군)) {
         isCareer = false; 교과목록 = 교과군;
@@ -2873,7 +2875,7 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
       let n = r.선택수;
       if (typeof n !== 'number') {
         const cands = filterSubjects(subjects, { 교과목록, isCareer, warnings });
-        if (cands.length > 0) { pickedAll.push(...cands); continue; }
+        if (cands.length > 0) { pickedAll.push(...cands); hasFullBlock = true; continue; }
         continue;
       }
       const candidates = filterSubjects(subjects, { 교과목록, isCareer, warnings });
@@ -2882,7 +2884,8 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
     if (pickedAll.length === 0) {
       return { 환산등급: null, reliability: 'none', note: '자동계산 불가', warnings };
     }
-    const result = { 환산등급: average(pickedAll, achievementMap, true), reliability: 'high', 반영과목수: pickedAll.length };
+    // 상위N 선발 규칙은 원본 검증 엔진과 동일하게 단순평균, 전과목 블록 포함 시에만 가중평균
+    const result = { 환산등급: average(pickedAll, achievementMap, hasFullBlock), reliability: 'high', 반영과목수: pickedAll.length };
     if (warnings.length > 0) { result.reliability = 'low'; result.warnings = warnings; }
     return result;
   };
@@ -2942,19 +2945,64 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
     const pickedAll = [];
     const warnings = [];
     let parsedAny = false;
+    // 규정 보정 1: '적용/적용계열/적용학과' 라벨 항목은 계열·전형별 택1 변형 —
+    // 전부 합산(중복 반영)하지 않고 첫 번째 변형(대표)만 적용, 라벨 없는 공통 항목은 항상 적용
+    const isVariantItem = it => it && (it.적용 !== undefined || it.적용계열 !== undefined || it.적용학과 !== undefined);
+    let variantUsed = false;
+    // 규정 보정 2: 진로선택 전용 블록이 있으면 일반 블록에서 진로선택 제외 (별도 반영 규정)
+    const hasCareerBlock = flatItems.some(it => typeof it.교과군 === 'string' && it.교과군.includes('진로'));
+    // 규정 보정 3: 비고에 진로선택 포함 상한 명시 시 적용 (예: '최대 2과목', '3과목 포함가능')
+    const capText = (rule.비고 || '') + ' ' + flatItems.map(it => it.비고 || '').join(' ');
+    const capMatch = capText.match(/진로선택[^\d]*(\d+)\s*과목/);
+    const careerCap = capMatch ? parseInt(capMatch[1]) : null;
+    let careerPicked = 0;
+    const isCareerSubj = s => !!s.is_career || (s.grade == null && s.achievement != null);
+    // 상위 N 선발 + 진로선택 총 상한 준수 (등급 우수 순, 동점 시 단위수 큰 과목)
+    const pickTopNCapped = (cands, n) => {
+      if (careerCap == null) return pickTopN(cands, n, achievementMap);
+      const sorted = [...cands].sort((a, b) => {
+        const sa = scoreKey(a, achievementMap), sb = scoreKey(b, achievementMap);
+        if (sa !== sb) return sa - sb;
+        return (b.unit || 0) - (a.unit || 0);
+      });
+      const out = [];
+      for (const s of sorted) {
+        if (out.length >= n) break;
+        if (isCareerSubj(s)) { if (careerPicked >= careerCap) continue; careerPicked++; }
+        out.push(s);
+      }
+      return out;
+    };
     for (const r of flatItems) {
+      if (isVariantItem(r)) { if (variantUsed) continue; variantUsed = true; }
       let 교과군 = r.교과군;
-      if (typeof 교과군 === 'string') 교과군 = null;
+      let isCareerBlockItem = false;
+      if (typeof 교과군 === 'string') {
+        if (교과군.includes('진로')) isCareerBlockItem = true;
+        교과군 = null;
+      }
       let n = r.선택수;
       if (typeof n !== 'number') {
         n = parseSelCount(n, r);
         if (n == null) continue;
         parsedAny = true;
       }
-      const isCareerFilter = r.진로선택 === '미반영' ? false : null;
-      const candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: isCareerFilter, warnings });
+      // 진로선택 포함 여부: 미반영 명시 → 제외 / 진로 전용 블록 → 진로만 /
+      // 진로 전용 블록이 따로 있으면 일반 블록은 일반과목만 /
+      // 배제 조항 없으면 규정 문언대로 포함 (A=1·B=3·C=5 환산, 상한은 careerCap)
+      let candidates;
+      if (r.진로선택 === '미반영') {
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings });
+      } else if (isCareerBlockItem) {
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: true });
+      } else if (hasCareerBlock) {
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings });
+      } else {
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings })
+          .concat(filterSubjects(subjects, { 교과목록: 교과군, isCareer: true }));
+      }
       if (n >= 9999) pickedAll.push(...candidates);
-      else pickedAll.push(...pickTopN(candidates, n, achievementMap));
+      else pickedAll.push(...pickTopNCapped(candidates, n));
     }
     if (pickedAll.length === 0) {
       const totalN = parseSelCount(rule.총반영과목수);
@@ -2974,6 +3022,22 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
     if (RULE_DISPATCH[key] === _origSimple) RULE_DISPATCH[key] = compute단순상위N;
   }
   compute교과군별상위N = compute단순상위N;
+
+  const _orig전과목 = compute전과목;
+  compute전과목 = function(subjects, rule, achievementMap) {
+    // 규정 보정: '석차등급이 기재된' 과목만 반영한다고 명시된 규칙(예: 부산대)은
+    // 성취평가(A/B/C) 과목을 환산 포함하지 않는다
+    if (typeof rule.규칙 === 'string' && rule.규칙.includes('석차등급이 기재된')) {
+      const pool = subjects.filter(s => s.grade != null);
+      if (!pool.length) return { 환산등급: null, reliability: 'none', note: '석차등급 과목 없음' };
+      return { 환산등급: average(pool, achievementMap, true), reliability: 'high',
+               반영과목수: pool.length, note: '석차등급 기재 과목만 반영(규정)' };
+    }
+    return _orig전과목(subjects, rule, achievementMap);
+  };
+  for (const key of Object.keys(RULE_DISPATCH)) {
+    if (RULE_DISPATCH[key] === _orig전과목) RULE_DISPATCH[key] = compute전과목;
+  }
 
   const _orig가산 = compute가산점만상위N;
   compute가산점만상위N = function(subjects, rule, achievementMap) {
