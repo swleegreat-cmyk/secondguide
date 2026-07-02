@@ -2847,6 +2847,210 @@ function computeScore(studentSubjects, ruleDict, achievementMap = null) {
   }
 })();
 
+// Patch 2: Fix 43 failing universities — handle all uncomputable rule types
+(function() {
+  Object.assign(SUBJECT_GROUP_ALIASES, {
+    '과학또는사회': ['과학', '사회'],
+    '사회(한국사,역사,도덕포함)': ['사회', '한국사'],
+    '탐구(한국사포함)': ['사회', '과학', '한국사'],
+    '사회(한국사/역사/도덕 포함)': ['사회', '한국사'],
+  });
+
+  function parseSelCount(val, ruleItem) {
+    if (typeof val === 'number') return val;
+    if (typeof val !== 'string') return null;
+    let m;
+    m = val.match(/총\s*(\d+)/);
+    if (m) return parseInt(m[1]);
+    m = val.match(/최대\s*(\d+)/);
+    if (m) return parseInt(m[1]);
+    m = val.match(/학년별\s*상위\s*(\d+)/);
+    if (m) return parseInt(m[1]) * 3;
+    m = val.match(/교과별\s*(?:상위\s*|각\s*)?(\d+)/);
+    if (m) {
+      const per = parseInt(m[1]);
+      const groups = (ruleItem && Array.isArray(ruleItem.교과군)) ? ruleItem.교과군.length : 4;
+      return per * groups;
+    }
+    m = val.match(/상위\s*(\d+)/);
+    if (m) return parseInt(m[1]);
+    if (val.includes('전과목') || val.includes('상위N 아님')) return 9999;
+    m = val.match(/(\d+)/);
+    if (m) return parseInt(m[1]);
+    return null;
+  }
+
+  const _origSimple = compute단순상위N;
+  compute단순상위N = function(subjects, rule, achievementMap) {
+    if (!Array.isArray(rule.규칙)) return _origSimple(subjects, rule, achievementMap);
+    const flatItems = [];
+    for (const r of rule.규칙) {
+      if (Array.isArray(r.규칙)) {
+        flatItems.push(...r.규칙);
+      } else if (Array.isArray(r.교과군) && r.교과군.length > 0 && typeof r.교과군[0] === 'object' && !Array.isArray(r.교과군[0])) {
+        for (const d of r.교과군) {
+          for (const [k, v] of Object.entries(d)) flatItems.push({ 교과군: [k], 선택수: v });
+        }
+      } else {
+        flatItems.push(r);
+      }
+    }
+    const pickedAll = [];
+    const warnings = [];
+    let parsedAny = false;
+    for (const r of flatItems) {
+      let 교과군 = r.교과군;
+      if (typeof 교과군 === 'string') 교과군 = null;
+      let n = r.선택수;
+      if (typeof n !== 'number') {
+        n = parseSelCount(n, r);
+        if (n == null) continue;
+        parsedAny = true;
+      }
+      const isCareerFilter = r.진로선택 === '미반영' ? false : null;
+      const candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: isCareerFilter, warnings });
+      if (n >= 9999) pickedAll.push(...candidates);
+      else pickedAll.push(...pickTopN(candidates, n, achievementMap));
+    }
+    if (pickedAll.length === 0) {
+      const totalN = parseSelCount(rule.총반영과목수);
+      if (totalN != null && totalN < 9999) {
+        const nc = filterSubjects(subjects, { isCareer: false });
+        const picked = pickTopN(nc, totalN, achievementMap);
+        return { 환산등급: average(picked, achievementMap, false), reliability: 'low', 반영과목수: picked.length, note: '총반영과목수 기준' };
+      }
+      return _origSimple(subjects, rule, achievementMap);
+    }
+    const useWeighted = pickedAll.length > 15;
+    const result = { 환산등급: average(pickedAll, achievementMap, useWeighted), reliability: parsedAny ? 'medium' : 'high', 반영과목수: pickedAll.length };
+    if (warnings.length > 0) { result.reliability = 'low'; result.warnings = warnings; }
+    return result;
+  };
+  for (const key of Object.keys(RULE_DISPATCH)) {
+    if (RULE_DISPATCH[key] === _origSimple) RULE_DISPATCH[key] = compute단순상위N;
+  }
+  compute교과군별상위N = compute단순상위N;
+
+  const _orig가산 = compute가산점만상위N;
+  compute가산점만상위N = function(subjects, rule, achievementMap) {
+    const nonCareer = filterSubjects(subjects, { isCareer: false });
+    const base = average(nonCareer, achievementMap, true);
+    if (base == null) return { 환산등급: null, reliability: 'none' };
+    return { 환산등급: base, 기본환산등급: base, reliability: 'medium', 반영과목수: nonCareer.length, note: '가산점 미적용 기본등급' };
+  };
+  for (const key of Object.keys(RULE_DISPATCH)) {
+    if (RULE_DISPATCH[key] === _orig가산) RULE_DISPATCH[key] = compute가산점만상위N;
+  }
+
+  function selectBestRule(rules) {
+    if (!Array.isArray(rules)) return null;
+    let best = null, bestScore = -1;
+    for (const r of rules) {
+      let score = 0;
+      const label = String(r.적용학과 || r.적용 || r.적용계열 || '');
+      if (/그외|전 모집단위|전체모집단위|전체\(|나머지|전체\s*학과|일반학과|일반전형/.test(label)) score += 10;
+      if (/의예|약학|의학/.test(label) && !label.includes('제외')) score -= 5;
+      if (label.includes('제외') && !/그외|전 모집|전체/.test(label)) score -= 3;
+      if (Array.isArray(r.교과군)) score += 3;
+      if (typeof r.선택수 === 'number') score += 5;
+      else if (typeof r.선택수 === 'string' && parseSelCount(r.선택수, r) != null) score += 3;
+      if (r.총반영과목수 && typeof r.총반영과목수 === 'number') score += 2;
+      if (r.비고 && /전과목\s*반영/.test(r.비고)) score += 1;
+      if (score > bestScore) { bestScore = score; best = r; }
+    }
+    return best;
+  }
+
+  function computeBranching(subjects, rule, achievementMap) {
+    const rules = rule.규칙;
+    if (!rules || typeof rules === 'string') {
+      const nc = filterSubjects(subjects, { isCareer: false });
+      return { 환산등급: average(nc.length > 0 ? nc : subjects, achievementMap, true), reliability: 'none', 반영과목수: nc.length || subjects.length, note: rule.특이사항 || '자유서술형 규칙' };
+    }
+    if (!Array.isArray(rules)) {
+      const nc = filterSubjects(subjects, { isCareer: false });
+      return { 환산등급: average(nc, achievementMap, true), reliability: 'low', 반영과목수: nc.length, note: '분기형 - 전과목 기준' };
+    }
+    const best = selectBestRule(rules);
+    if (!best) {
+      const nc = filterSubjects(subjects, { isCareer: false });
+      return { 환산등급: average(nc, achievementMap, true), reliability: 'low', 반영과목수: nc.length, note: '기본규칙 없음' };
+    }
+    const warnings = [];
+    let 교과목록 = null, isCareer = null;
+    if (Array.isArray(best.교과군)) { 교과목록 = best.교과군; isCareer = false; }
+    else if (typeof best.교과군 === 'string' && best.교과군.includes('진로선택')) { isCareer = true; }
+    let n = typeof best.선택수 === 'number' ? best.선택수 : parseSelCount(best.선택수, best);
+    if (n == null && best.총반영과목수) n = typeof best.총반영과목수 === 'number' ? best.총반영과목수 : parseSelCount(String(best.총반영과목수), best);
+    if (n == null) n = 9999;
+    const candidates = filterSubjects(subjects, { 교과목록, isCareer, warnings });
+    if (candidates.length === 0 && 교과목록) {
+      const all = filterSubjects(subjects, { isCareer: false });
+      const picked = n >= 9999 ? all : pickTopN(all, n, achievementMap);
+      return { 환산등급: average(picked, achievementMap, n >= 9999), reliability: 'low', 반영과목수: picked.length, note: `분기형 (${best.적용학과||best.적용||best.적용계열||''})` };
+    }
+    const picked = n >= 9999 ? candidates : pickTopN(candidates, n, achievementMap);
+    return {
+      환산등급: average(picked, achievementMap, n >= 9999),
+      reliability: picked.length > 8 ? 'medium' : 'low',
+      반영과목수: picked.length,
+      note: `분기형 (${best.적용학과||best.적용||best.적용계열||'일반'} 기준)`,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  }
+  RULE_DISPATCH['학과별_상이'] = computeBranching;
+  RULE_DISPATCH['학과별_상이_복잡'] = computeBranching;
+  RULE_DISPATCH['전형별_상이'] = computeBranching;
+  RULE_DISPATCH['복합_학과별상이'] = computeBranching;
+  RULE_DISPATCH['복합_전형별상이'] = computeBranching;
+  RULE_DISPATCH['복합_전형별학과별상이'] = computeBranching;
+
+  RULE_DISPATCH['유형비교_우수성적채택'] = function(subjects, rule, achievementMap) {
+    const nc = filterSubjects(subjects, { isCareer: false });
+    const allAvg = average(nc, achievementMap, true);
+    const top10 = pickTopN(nc, 10, achievementMap);
+    const topAvg = average(top10, achievementMap, false);
+    const best = Math.min(allAvg || 9, topAvg || 9);
+    return {
+      환산등급: best, reliability: 'medium',
+      반영과목수: best === topAvg ? 10 : nc.length,
+      note: `유형비교(전과목=${(allAvg||0).toFixed(2)}, 상위10=${(topAvg||0).toFixed(2)})`
+    };
+  };
+
+  function compute전과목진로상위N(subjects, rule, achievementMap) {
+    const nc = filterSubjects(subjects, { isCareer: false });
+    const career = filterSubjects(subjects, { isCareer: true });
+    const base = average(nc, achievementMap, true);
+    let careerN = 3;
+    if (rule.규칙 && typeof rule.규칙 === 'object' && !Array.isArray(rule.규칙)) {
+      const desc = rule.규칙.진로선택 || '';
+      const m = desc.match(/상위\s*(\d+)/);
+      if (m) careerN = parseInt(m[1]);
+    }
+    const topCareer = pickTopN(career, careerN, achievementMap);
+    const careerAvg = average(topCareer, achievementMap, false);
+    if (base == null) return { 환산등급: null, reliability: 'none' };
+    const combined = careerAvg != null ? base * 0.85 + careerAvg * 0.15 : base;
+    return {
+      환산등급: Math.round(combined * 10000) / 10000, reliability: 'medium',
+      반영과목수: nc.length + topCareer.length,
+      note: `전과목(${base.toFixed(2)})+진로상위${careerN}(${(careerAvg||0).toFixed(2)})`
+    };
+  }
+  RULE_DISPATCH['전과목+진로선택상위N'] = compute전과목진로상위N;
+  RULE_DISPATCH['전과목+진로선택상위N_계열별상이'] = compute전과목진로상위N;
+
+  function computeFallback(subjects, rule, achievementMap) {
+    const nc = filterSubjects(subjects, { isCareer: false });
+    const avg = average(nc.length > 0 ? nc : subjects, achievementMap, true);
+    if (avg == null) return { 환산등급: null, reliability: 'none' };
+    return { 환산등급: avg, reliability: 'none', 반영과목수: nc.length || subjects.length, note: rule.특이사항 || '원문 확인 필요' };
+  }
+  RULE_DISPATCH['재검토_필요'] = computeFallback;
+  RULE_DISPATCH['불명확_과목분류표만확인'] = computeFallback;
+})();
+
 // ═══════════════════════════════════════════════
 // COMBO DEFINITIONS
 // ═══════════════════════════════════════════════
@@ -3934,8 +4138,11 @@ function inferComboFromRule(univName) {
   const allGroups = new Set();
   arr.forEach(r => {
     if (!r) return;
-    const g = Array.isArray(r.교과군) ? r.교과군 : (r.교과군 ? [r.교과군] : []);
+    if (Array.isArray(r.규칙)) { r.규칙.forEach(sr => arr.push(sr)); return; }
+    let g = Array.isArray(r.교과군) ? r.교과군 : (r.교과군 ? [r.교과군] : []);
+    g = g.flatMap(x => typeof x === 'object' && x !== null ? Object.keys(x) : [x]);
     g.forEach(s => {
+      if (typeof s !== 'string') return;
       const norm = s.replace(/\s/g, '').toLowerCase();
       if (norm.includes('국어')) allGroups.add('국어');
       if (norm.includes('수학')) allGroups.add('수학');
