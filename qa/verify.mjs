@@ -270,6 +270,48 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 4구간 최종 판정 (안정/적정/소신/상향) — classifyBand
+// 사다리: s<g50 안정 · g50≤s≤g70 적정 · g70<s≤g70+0.2 소신 · s>g70+0.2 상향
+// ═══════════════════════════════════════════════
+{
+  const b = await page.evaluate(() => ({
+    안정: classifyBand(2.5, 3.0, 3.3),   // 등급50(3.0)보다 유리
+    적정: classifyBand(3.15, 3.0, 3.3),  // 등급50~등급70 사이
+    소신: classifyBand(3.45, 3.0, 3.3),  // 등급70 초과 +0.2 이내 (컷 근처 완충)
+    상향: classifyBand(3.6, 3.0, 3.3),   // 완충 범위 밖으로 불리
+    결측: classifyBand(3.0, null, null), // 둘 다 결측 → 판정 강제 안 함
+    g50만: classifyBand(3.1, 3.0, null), // 70컷 결측 → 등급50 기반
+  }));
+  assert("4구간#1: s=2.5 < g50=3.0 → 안정", b.안정 === '안정', JSON.stringify(b));
+  assert("4구간#2: g50=3.0 ≤ s=3.15 ≤ g70=3.3 → 적정", b.적정 === '적정', JSON.stringify(b));
+  assert("4구간#3: g70=3.3 < s=3.45 ≤ 3.5 → 소신", b.소신 === '소신', JSON.stringify(b));
+  assert("4구간#4: s=3.6 > g70+0.2 → 상향", b.상향 === '상향', JSON.stringify(b));
+}
+// 4구간#5: 컷 결측 — band=null 유지 + 추천 결과의 '컷 정보 없음' 표시 보존
+{
+  const r = await page.evaluate(() => {
+    const nullBand = classifyBand(3.0, null, null);
+    // 실제 데이터에서 등급50/70 모두 결측(noCut)인 추천 항목을 찾아 band가 강제되지 않는지 확인
+    let sample = null;
+    for (let si = 0; si < STUDENTS.length && !sample; si++) {
+      const s = STUDENTS[si]; const a = ANALYSIS[s.seat] || {};
+      for (const ur of runAllUniversities(s)) {
+        if (ur.noCut) {
+          const comp = calcCompositeScore(ur, s, a);
+          sample = { univ: ur.univ, note: ur.note, band: comp.band, label: comp.bandNoCutLabel };
+          break;
+        }
+      }
+    }
+    return { nullBand, sample };
+  });
+  const sampleOk = r.sample === null ||
+    (r.sample.band === null && String(r.sample.label || r.sample.note).includes('컷 정보 없음'));
+  assert("4구간#5: 컷 결측 → 판정 null + '컷 정보 없음' 표시 유지 (강제 판정 없음)",
+    r.nullBand === null && sampleOk, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.
