@@ -1234,6 +1234,93 @@ function getCards(student, filters = {}) {
 }
 
 // ═══════════════════════════════════════════════
+// 카드 보드 컴포넌트 — getCards() 기반 학과×전형 단위 목록
+// (수도권 매칭 / 컷라인 비교 / 전체 환산 결과 화면 공용)
+// ═══════════════════════════════════════════════
+const _boardState = {};
+function initCardBoard(id, student, opts = {}) {
+  const prev = _boardState[id] || {};
+  _boardState[id] = { jt: prev.jt ?? null, region: prev.region ?? null, band: prev.band ?? null,
+                      limit: 50, student, onlyWithCut: !!opts.onlyWithCut };
+}
+function setBoardFilter(id, key, val) {
+  const st = _boardState[id]; if (!st) return;
+  st[key] = st[key] === val ? null : val;   // 같은 칩 재클릭 = 해제
+  st.limit = 50;
+  renderCardBoard(id);
+}
+function boardMore(id) {
+  const st = _boardState[id]; if (!st) return;
+  st.limit += 50;                            // 화면당 50건 단위 추가 렌더링
+  renderCardBoard(id);
+}
+function _boardChip(id, key, val, label, on) {
+  const v = val === null ? 'null' : `'${String(val).replace(/'/g, "\\'")}'`;
+  return `<span onclick="setBoardFilter('${id}','${key}',${val === null ? 'null' : `'${val}'`})"
+    style="cursor:pointer;font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};
+    background:${on ? 'var(--teal)' : 'var(--card)'};color:${on ? '#fff' : 'var(--sub)'};font-weight:${on ? 700 : 400};white-space:nowrap">${label}</span>`;
+}
+function cardRowHtml(c) {
+  const bs = BAND_STYLE[c.band] || {};
+  const bandCell = c.band
+    ? `<span style="padding:1px 8px;border-radius:8px;background:${bs.color};color:#fff;font-size:10px;font-weight:800;white-space:nowrap">${c.bandAdjusted ? '충원 감안 시 ' + c.band : c.band}</span>`
+    : `<span style="font-size:9px;color:var(--muted)">${esc(c.noCutLabel || '컷 정보 없음')}</span>`;
+  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;flex-wrap:wrap">
+    <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
+    <span class="mono" style="white-space:nowrap">환산 ${c.score} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
+    ${bandCell}
+    <span class="mono" style="font-size:10px;color:var(--sub);white-space:nowrap">${c.cw != null ? '충원 ' + c.cw.toFixed(1) + '배수' : '충원 -'}</span>
+    ${judgeRelBadge(c.rel)}
+  </div>`;
+}
+function renderCardBoard(id) {
+  const st = _boardState[id]; if (!st) return;
+  const el = document.getElementById('board-' + id); if (!el) return;
+  let cards = getCards(st.student, { jt: st.jt, region: st.region, band: st.band }); // 기본 정렬: 지역 우선순위 → 구간
+  if (st.onlyWithCut) cards = cards.filter(c => !c.noCut);
+  let h = '';
+  // 필터 칩 3줄: 유형 / 지역 / 구간
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">'
+    + _boardChip(id, 'jt', null, '유형 전체', st.jt == null)
+    + ['교과', '종합', '논술'].map(v => _boardChip(id, 'jt', v, v, st.jt === v)).join('') + '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">'
+    + _boardChip(id, 'region', null, '지역 전체', st.region == null)
+    + ['서울', '경기인천', '충청', '기타'].map(v => _boardChip(id, 'region', v, REGION_LABEL[v] || v, st.region === v)).join('') + '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">'
+    + _boardChip(id, 'band', null, '구간 전체', st.band == null)
+    + ['안정', '적정', '소신', '상향'].map(v => _boardChip(id, 'band', v, v, st.band === v)).join('') + '</div>';
+  h += `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${cards.length}건 · 인서울→인경기→충남권→기타 순, 지역 내 구간·신뢰도 순 · 대학명 클릭으로 접기/펼치기</div>`;
+  // 대학별 그룹 (정렬 등장 순서 유지)
+  const groups = []; const gmap = {};
+  for (const c of cards) {
+    let g = gmap[c.univ];
+    if (!g) { g = gmap[c.univ] = { univ: c.univ, region: c.region, rows: [] }; groups.push(g); }
+    g.rows.push(c);
+  }
+  let shown = 0;
+  for (const g of groups) {
+    if (shown >= st.limit) break;
+    const take = g.rows.slice(0, st.limit - shown);
+    const best = g.rows.reduce((b, c) => (_BAND_RANK[c.band] ?? -1) > (_BAND_RANK[b] ?? -1) ? c.band : b, null);
+    const rc = REGION_COLOR[g.region] || 'var(--muted)';
+    h += `<details open style="margin-bottom:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <summary style="cursor:pointer;padding:6px 10px;background:var(--cream);font-size:12px;font-weight:700;color:var(--teal)">
+        ${esc(g.univ)} <span style="font-size:10px;padding:1px 7px;border-radius:8px;background:${rc}22;color:${rc};font-weight:600">${REGION_LABEL[g.region] || g.region}</span>
+        <span style="font-size:10px;color:var(--muted);font-weight:400">카드 ${g.rows.length}장${best ? ' · 최고 ' + best : ''}</span>
+      </summary>
+      <div>${take.map(cardRowHtml).join('')}</div>
+      ${take.length < g.rows.length ? `<div style="font-size:10px;color:var(--muted);padding:4px 10px">외 ${g.rows.length - take.length}행 — 더보기로 표시</div>` : ''}
+    </details>`;
+    shown += take.length;
+  }
+  if (shown < cards.length) {
+    h += `<div style="text-align:center;margin-top:8px"><button onclick="boardMore('${id}')"
+      style="padding:7px 22px;border-radius:10px;border:1px solid var(--teal);background:var(--card);color:var(--teal);font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">더보기 (${shown} / ${cards.length}건)</button></div>`;
+  }
+  el.innerHTML = h;
+}
+
+// ═══════════════════════════════════════════════
 // 세특 문장 태깅 엔진 (신호 사전은 별도 데이터 파일 signal_dictionary.js에서 주입)
 // ═══════════════════════════════════════════════
 __SIGNAL_DICT__
@@ -4255,22 +4342,6 @@ function renderSusiTab(student, analysis) {
   html += `<div class="stat-box"><div class="num">${withDeptCut}</div><div class="label">학과컷 비교</div></div>`;
   html += '</div>';
 
-  // Search & filter
-  html += `<div class="search-bar">
-    <input class="search-input" id="univSearch" placeholder="대학명 검색..." oninput="filterUnivResults()">
-  </div>`;
-  html += `<div class="sort-controls">
-    <button class="sort-btn active" data-sort="prob" onclick="sortUnivResults(this,'prob')">판정순</button>
-    <button class="sort-btn" data-sort="score" onclick="sortUnivResults(this,'score')">환산등급순</button>
-    <button class="sort-btn" data-sort="name" onclick="sortUnivResults(this,'name')">이름순</button>
-    <button class="sort-btn" data-sort="reliability" onclick="sortUnivResults(this,'reliability')">신뢰도순</button>
-  </div>`;
-  html += `<div class="sort-controls" style="margin-bottom:14px">
-    <button class="filter-btn active" data-filter="all" onclick="filterUnivBand(this,'all')">전체</button>
-    <button class="filter-btn" data-filter="cutline" onclick="filterUnivBand(this,'cutline')">컷라인 비교</button>
-    <button class="filter-btn" data-filter="high" onclick="filterUnivBand(this,'high')">고신뢰만</button>
-    <button class="filter-btn" data-filter="interview" onclick="filterUnivBand(this,'interview')">면접문항 있음</button>
-  </div>`;
   html += '</div>';
 
   // ── 지역 목표 + 실제 합격선 매칭 (수박/어디가 자료) ──
@@ -4319,67 +4390,15 @@ function renderSusiTab(student, analysis) {
     </div>`;
   };
 
-  html += `<div class="glass"><h3>실제 합격선 기반 대학 매칭 — ${targetLabel}</h3>`;
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">수박·어디가 실제 합격 성적(등록자 70%컷/평균)과 학생 전과목 평균을 비교한 합격 가능성입니다.</p>';
-  if (targetMatches.length > 0) {
-    const tSafe = targetMatches.filter(m => m.bestProb >= 65).length;
-    const tFit = targetMatches.filter(m => m.bestProb >= 40 && m.bestProb < 65).length;
-    const tReach = targetMatches.filter(m => m.bestProb >= 15 && m.bestProb < 40).length;
-    html += `<div style="display:flex;gap:6px;margin-bottom:10px;font-size:11px">
-      <span style="padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:8px;font-weight:600">안정 ${tSafe}</span>
-      <span style="padding:3px 10px;background:var(--blue-light);color:var(--blue);border-radius:8px;font-weight:600">적정 ${tFit}</span>
-      <span style="padding:3px 10px;background:var(--orange-light);color:var(--orange);border-radius:8px;font-weight:600">소신 ${tReach}</span>
-      <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">총 ${targetMatches.length}교</span>
-    </div>`;
-    targetMatches.slice(0, 20).forEach(m => { html += renderRealRow(m); });
-    if (targetMatches.length > 20) {
-      html += `<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px">외 ${targetMatches.length - 20}교 — 검색으로 확인</div>`;
-    }
-  } else {
-    html += '<div style="font-size:12px;color:var(--muted)">목표 지역 내 실제 합격선 자료가 없습니다.</div>';
-  }
-  // 타 지역 접기
-  if (otherMatches.length > 0) {
-    const topOther = otherMatches.filter(m => m.bestProb >= 40).slice(0, 8);
-    if (topOther.length > 0) {
-      html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--sub)">타 지역 합격 유력 대학 ${topOther.length}교 보기</summary><div style="margin-top:8px">`;
-      topOther.forEach(m => { html += renderRealRow(m); });
-      html += '</div></details>';
-    }
-  }
-  html += '</div>';
+  // [카드 전환] 수도권 매칭 — getCards() 기반 학과×전형 단위 보드
+  html += `<div class="glass"><h3>수도권 매칭 — 실제 합격선 (학과·전형 단위)</h3>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:8px">어디가 학과별 등급50/70과 학생 평균등급(${stAvg.toFixed(2)})을 비교한 카드 목록입니다. 목표 권역: <strong>${targetLabel}</strong></p>
+    <div id="board-realmatch"></div></div>`;
 
-  // Cutline matches (top section) with composite probability — 인서울>인경기>충남권 순
-  const cutlineResults = sortByRegionPriority(
-    results.filter(r => r.cutline), regionOf, (a, b) => a.score - b.score);
-  if (cutlineResults.length > 0) {
-    html += '<div class="glass"><h3>합격 가능성 분석 (컷라인 비교)</h3>';
-    html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">내신 환산, 경쟁률, 성적 추세, 전공적합성을 종합한 합격 확률 예측입니다.</p>';
-    cutlineResults.forEach(r => {
-      const b = r.band;
-      const comp = calcCompositeScore(r, student, analysis);
-      const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
-      const comboLabel = comp.comboUsed ? ` · 반영: ${comp.comboUsed}` : '';
-      const minBadge = r.cutline.min ? ' ' + minReqBadge(student, r.cutline.min) : '';
-      const trBadge = ' ' + trendBadge(getDeptTrend(r.univ, null, student, r.jeonType));
-      const cBadge = ' ' + confBadge(r.univ);
-      const fbText = factorBreakdownText(comp, 5);
-      html += `<div class="match-row" style="flex-wrap:wrap" onclick="showUnivDetail('${esc(r.univ)}')">
-        <span class="match-badge ${b.cls}">${b.label}</span>
-        <div class="match-body">
-          <div class="univ">${esc(r.univ)}${ADMISSIONS_INFO[r.univ] ? ' <span style="font-size:10px;color:var(--blue);font-weight:600">' + esc(Object.keys(ADMISSIONS_INFO[r.univ])[0]) + '</span>' : ''}${minBadge}${trBadge}${cBadge}</div>
-          <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}${comboLabel}</div>
-          ${fbText ? `<div class="factor-line" style="font-size:10px;color:var(--sub);margin-top:3px">기여도: ${esc(fbText)}</div>` : ''}
-          ${comp.bandReason ? `<div style="font-size:10px;color:var(--teal);margin-top:2px">판정 근거: ${esc(comp.bandReason)}</div>` : ''}
-        </div>
-        <div class="match-num">
-          <div>${bandBadge(comp.band, comp.bandNoCutLabel, comp)}</div>
-          <div class="unit">${r.score.toFixed(2)}등급 (컷 ${r.cutline.cut})</div>
-        </div>
-      </div>`;
-    });
-    html += '</div>';
-  }
+  // [카드 전환] 컷라인 비교 — getCards() 기반 (컷 보유 카드만)
+  html += `<div class="glass"><h3>합격 가능성 분석 — 컷라인 비교 (학과·전형 단위)</h3>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:8px">등급50/70 컷이 있는 지원 카드만 표시합니다. 행 형식: 학과 · 전형(유형) — 환산 vs 50/70컷 — 구간 — 충원배수 — 신뢰도</p>
+    <div id="board-cutcmp"></div></div>`;
 
   // All results table
   // Strategic portfolio recommendation (auto-analysis for all students)
@@ -4667,28 +4686,10 @@ function renderSusiTab(student, analysis) {
   html += '<div id="whatifResult" style="display:none;padding:10px;background:var(--cream);border-radius:10px;font-size:12px;line-height:1.6"></div>';
   html += '</div>';
 
-  // All results table with probability column
-  html += '<div class="glass" id="allUnivSection"><h3>전체 대학 환산 결과 (<span id="univCount">' + results.length + '</span>개)</h3>';
-  html += '<div class="scroll-table"><table class="g-table" id="univTable"><thead><tr>';
-  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>구간 판정</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
-  html += '</tr></thead><tbody id="univTableBody">';
-
-  allComps.forEach((r, i) => {
-    const c = gradeColor(r.score);
-    const relCls = r.reliability === 'high' ? 'rel-high' : r.reliability === 'medium' ? 'rel-medium' : r.reliability === 'low' ? 'rel-low' : 'rel-none';
-    const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '참고';
-    html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}" data-prob="${r.prob}">
-      <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
-      <td style="font-size:12px">${esc(r.jeonType)}</td>
-      <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
-      <td title="${esc(r.comp.bandReason || '')}"><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || (r.comp.bandNoCutLabel ? '컷없음' : '-')}${r.comp.cwMultiple != null ? ' <span style="font-size:9px;color:var(--muted);font-weight:400">충원 ' + r.comp.cwMultiple.toFixed(1) + '배수</span>' : ''}</span> ${judgeRelBadge(r.comp.judgeReliability)}</td>
-      <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
-      <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
-      <td><button style="background:none;border:none;color:var(--teal-mid);cursor:pointer;font-family:inherit;font-size:12px" onclick="showUnivDetail('${esc(r.univ)}')">상세보기</button></td>
-    </tr>`;
-  });
-
-  html += '</tbody></table></div></div>';
+  // [카드 전환] 전체 환산 결과 — getCards() 기반 (컷 정보 없음 카드 포함)
+  html += `<div class="glass" id="allUnivSection"><h3>전체 환산 결과 (학과·전형 단위 카드)</h3>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:8px">전체 지원 카드입니다. 컷 정보가 없는 카드는 '컷 정보 없음 — 경쟁률 참고'로 표시됩니다.</p>
+    <div id="board-allresults"></div></div>`;
 
   // Portfolio section (favorites)
   const favKey = `fav_${student.seat}`;
@@ -4735,6 +4736,14 @@ function renderSusiTab(student, analysis) {
   }
 
   el.innerHTML = html;
+
+  // 카드 보드 3종 렌더 (수도권 매칭 / 컷라인 비교 / 전체 환산 결과)
+  initCardBoard('realmatch', student, { onlyWithCut: true });
+  initCardBoard('cutcmp', student, { onlyWithCut: true });
+  initCardBoard('allresults', student, {});
+  renderCardBoard('realmatch');
+  renderCardBoard('cutcmp');
+  renderCardBoard('allresults');
 }
 
 function filterUnivResults() {
