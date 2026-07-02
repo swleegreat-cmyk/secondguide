@@ -3283,6 +3283,30 @@ function runAllUniversities(student) {
       }
     } catch(e) {}
   }
+
+  // 환산규칙 미보유 대학 편입: 어디가 학과 컷 보유 대학은 전과목 평균으로 직접 비교
+  // (어디가 공시 컷은 등록자 학생부 등급이므로 전과목 평균과 스케일 일치)
+  const stAvgAll = calcWeightedAvg(student);
+  for (const univName of Object.keys(UNIV_DEPTS)) {
+    if (NAESIN_RULES[univName]) continue;
+    const deptCut = getDeptCutline(univName, student, null, '교과')
+                 || getDeptCutline(univName, student, null, '종합');
+    if (!deptCut || deptCut.cut == null) continue;
+    results.push({
+      univ: univName,
+      ruleType: '어디가 실적 기반',
+      jeonType: deptCut.jt || '교과',
+      score: stAvgAll,
+      reliability: 'medium',
+      count: 0,
+      note: '환산규칙 미보유 — 전과목 평균등급을 어디가 학과 컷과 직접 비교',
+      cutline: null, diff: null, band: null,
+      hasInterviews: !!INTERVIEW_BANK[univName],
+      deptCut,
+      warnings: [], reflect: null
+    });
+  }
+
   results.sort((a,b) => a.score - b.score);
   return results;
 }
@@ -5758,12 +5782,14 @@ function renderSusiTab(student, analysis) {
 
   // Stats
   const highRel = results.filter(r => r.reliability === 'high').length;
-  const withCut = results.filter(r => r.cutline).length;
+  const ruleCnt = results.filter(r => r.ruleType !== '어디가 실적 기반').length;
+  const adigaCnt = results.length - ruleCnt;
+  const withDeptCut = results.filter(r => r.deptCut && r.deptCut.cut != null).length;
   html += '<div class="glass"><h3>대학별 내신 환산 결과</h3>';
   html += '<div class="stat-grid">';
-  html += `<div class="stat-box"><div class="num">${results.length}</div><div class="label">환산 가능 대학</div></div>`;
-  html += `<div class="stat-box"><div class="num">${highRel}</div><div class="label">고신뢰 결과</div></div>`;
-  html += `<div class="stat-box"><div class="num">${withCut}</div><div class="label">컷라인 비교</div></div>`;
+  html += `<div class="stat-box"><div class="num">${results.length}</div><div class="label">분석 대상 대학</div><div style="font-size:9px;color:var(--muted);margin-top:2px">환산 ${ruleCnt} + 실적기반 ${adigaCnt}</div></div>`;
+  html += `<div class="stat-box"><div class="num">${highRel}</div><div class="label">고신뢰 환산</div></div>`;
+  html += `<div class="stat-box"><div class="num">${withDeptCut}</div><div class="label">학과컷 비교</div></div>`;
   html += '</div>';
 
   // Search & filter
@@ -6429,7 +6455,7 @@ function getDeptCutline(univName, student, analysis, jeonType) {
   const track = getStudentTrack(student, a);
   const jt = (jeonType||'').includes('종합') ? '종합' : (jeonType||'').includes('논술') ? '논술' : '교과';
   const wanted = (ra.deptMatch||[]).map(_deptNorm).filter(Boolean);
-  const matchedCuts = [], trackCuts = [];
+  const matchedCuts = [], trackCuts = [], anyCuts = [];
   let matchedName = null;
   for (const d of depts) {
     const entries = DEPT_CUTLINES[univName + '|' + d] || [];
@@ -6441,10 +6467,12 @@ function getDeptCutline(univName, student, analysis, jeonType) {
       if (e.jt && e.jt !== jt) continue;
       if (isMatch) { matchedCuts.push(cut); if (!matchedName) matchedName = d; }
       if (!e.gy || e.gy === track || e.gy === '통합' || e.gy === '공통') trackCuts.push(cut);
+      if (e.gy !== '예체능') anyCuts.push(cut);
     }
   }
   if (matchedCuts.length) return { cut: Math.round(_median(matchedCuts)*100)/100, dept: matchedName, n: matchedCuts.length, matched: true, jt };
   if (trackCuts.length) return { cut: Math.round(_median(trackCuts)*100)/100, dept: null, n: trackCuts.length, matched: false, jt };
+  if (anyCuts.length) return { cut: Math.round(_median(anyCuts)*100)/100, dept: null, n: anyCuts.length, matched: false, crossTrack: true, jt };
   return null;
 }
 
@@ -6708,7 +6736,7 @@ function showUnivDetail(univName) {
   html += '<div class="glass" style="box-shadow:none;margin-bottom:12px">';
   html += `<h3>${esc(student.name)} 학생의 환산 결과</h3>`;
   html += `<div class="stat-grid">`;
-  html += `<div class="stat-box"><div class="num" style="color:${gradeColor(result.score)}">${result.score.toFixed(2)}</div><div class="label">환산등급</div></div>`;
+  html += `<div class="stat-box"><div class="num" style="color:${gradeColor(result.score)}">${result.score.toFixed(2)}</div><div class="label">${result.ruleType === '어디가 실적 기반' ? '전과목 평균' : '환산등급'}</div></div>`;
   html += `<div class="stat-box"><div class="num" style="color:${pColor};font-size:28px">${comp.probability}%</div><div class="label">종합 합격 확률</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${comp.probLow}~${comp.probHigh}% 범위</div></div>`;
   html += `<div class="stat-box"><div class="num">${result.count}</div><div class="label">반영과목수</div></div>`;
 
