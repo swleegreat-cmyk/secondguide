@@ -648,12 +648,21 @@ __NAESIN_ENGINE__
     // 전부 합산(중복 반영)하지 않고 첫 번째 변형(대표)만 적용, 라벨 없는 공통 항목은 항상 적용
     const isVariantItem = it => it && (it.적용 !== undefined || it.적용계열 !== undefined || it.적용학과 !== undefined);
     let variantUsed = false;
-    // 규정 보정 2: 진로선택 전용 블록이 있으면 일반 블록에서 진로선택 제외 (별도 반영 규정)
-    const hasCareerBlock = flatItems.some(it => typeof it.교과군 === 'string' && it.교과군.includes('진로'));
+    // 규정 보정 2: 진로선택 '전용' 블록이 있으면 일반 블록에서 진로선택 제외 (별도 반영 규정)
+    // 전용 블록 판별: '진로'를 포함하되 '포함/제외' 수식이 아닌 경우만
+    // (예: '진로선택', '진로선택(전체)'는 전용 블록 ○ / '전과목(진로선택 포함)'은 일반 블록 ×)
+    const isCareerDesignator = t => typeof t === 'string' && t.includes('진로') && !t.includes('포함') && !t.includes('제외');
+    const hasCareerBlock = flatItems.some(it => isCareerDesignator(it.교과군));
     // 규정 보정 3: 비고에 진로선택 포함 상한 명시 시 적용 (예: '최대 2과목', '3과목 포함가능')
-    const capText = (rule.비고 || '') + ' ' + flatItems.map(it => it.비고 || '').join(' ');
+    const capText = (rule.비고 || '') + ' ' + flatItems.map(it =>
+      (it.비고 || '') + ' ' + (typeof it.교과군 === 'string' ? it.교과군 : '')).join(' ');
     const capMatch = capText.match(/진로선택[^\d]*(\d+)\s*과목/);
     const careerCap = capMatch ? parseInt(capMatch[1]) : null;
+    // 규정 보정 3b: 진로선택(성취평가 A/B/C) 과목은 규칙·비고에 '진로선택 … 포함/환산/최대/대체'가
+    // 명시된 대학만 일반 블록에 합류시킨다 (예: 가야대 '최대 2과목 환산', 평택대 '3과목 포함가능').
+    // 명시가 없으면 석차등급 과목만 반영 — 성취 A=1 환산 과목(미술·음악·과학탐구실험 등)이
+    // 상위N을 점령해 환산 1.00으로 왜곡되는 것을 막는다 (김나경 사례: A 9과목 → 상위3이 전부 1).
+    const explicitCareer = /진로선택[^,.\n]*?(포함|환산|최대|대체)/.test(capText);
     let careerPicked = 0;
     const isCareerSubj = s => !!s.is_career || (s.grade == null && s.achievement != null);
     // 상위 N 선발 + 진로선택 총 상한 준수 (등급 우수 순, 동점 시 단위수 큰 과목)
@@ -676,8 +685,15 @@ __NAESIN_ENGINE__
       if (isVariantItem(r)) { if (variantUsed) continue; variantUsed = true; }
       let 교과군 = r.교과군;
       let isCareerBlockItem = false;
+      let 제외교과 = null;
       if (typeof 교과군 === 'string') {
-        if (교과군.includes('진로')) isCareerBlockItem = true;
+        if (isCareerDesignator(교과군)) isCareerBlockItem = true;
+        // '○○ 제외' 패턴: 제외 대상 교과군 추출 (예: '체육예술 제외 전과목' → 체육·예술 제외)
+        if (교과군.includes('제외')) {
+          const head = 교과군.split('제외')[0];
+          const ex = ['체육', '예술', '음악', '미술', '교양'].filter(g => head.includes(g));
+          if (ex.length) 제외교과 = ex;
+        }
         교과군 = null;
       }
       let n = r.선택수;
@@ -691,14 +707,14 @@ __NAESIN_ENGINE__
       // 배제 조항 없으면 규정 문언대로 포함 (A=1·B=3·C=5 환산, 상한은 careerCap)
       let candidates;
       if (r.진로선택 === '미반영') {
-        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings });
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, 제외교과, warnings });
       } else if (isCareerBlockItem) {
-        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: true });
-      } else if (hasCareerBlock) {
-        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings });
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: true, 제외교과 });
+      } else if (hasCareerBlock || !explicitCareer) {
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, 제외교과, warnings });
       } else {
-        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, warnings })
-          .concat(filterSubjects(subjects, { 교과목록: 교과군, isCareer: true }));
+        candidates = filterSubjects(subjects, { 교과목록: 교과군, isCareer: false, 제외교과, warnings })
+          .concat(filterSubjects(subjects, { 교과목록: 교과군, isCareer: true, 제외교과 }));
       }
       if (n >= 9999) pickedAll.push(...candidates);
       else pickedAll.push(...pickTopNCapped(candidates, n));
@@ -4048,10 +4064,11 @@ function renderSusiTab(student, analysis) {
     return { ...r, prob: comp.probability, comp };
   }).sort((a, b) => b.prob - a.prob);
 
-  const safeUnis = allComps.filter(r => r.prob >= 65);
-  const fitUnis = allComps.filter(r => r.prob >= 40 && r.prob < 65);
-  const reachUnis = allComps.filter(r => r.prob >= 15 && r.prob < 40);
-  const hardUnis = allComps.filter(r => r.prob < 15);
+  // 4구간 band(최신 판정 로직)와 동일 기준으로 그룹핑 — 배지·그룹 헤더 불일치 방지
+  const safeUnis = allComps.filter(r => r.comp.band === '안정');
+  const fitUnis = allComps.filter(r => r.comp.band === '적정');
+  const reachUnis = allComps.filter(r => r.comp.band === '소신');
+  const hardUnis = allComps.filter(r => r.comp.band === '상향');
 
   html += '<div class="glass"><h3>전략적 지원 추천</h3>';
   html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">합격 확률, 전공적합성, 전형 유형을 종합하여 안정-적정-상향 포트폴리오를 자동 분석합니다.</p>';
@@ -4329,21 +4346,18 @@ function renderSusiTab(student, analysis) {
   // All results table with probability column
   html += '<div class="glass" id="allUnivSection"><h3>전체 대학 환산 결과 (<span id="univCount">' + results.length + '</span>개)</h3>';
   html += '<div class="scroll-table"><table class="g-table" id="univTable"><thead><tr>';
-  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>구간 판정</th><th>판정</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
+  html += '<th>대학명</th><th>전형</th><th>환산등급</th><th>구간 판정</th><th>신뢰도</th><th>규칙</th><th>상세</th>';
   html += '</tr></thead><tbody id="univTableBody">';
 
   allComps.forEach((r, i) => {
     const c = gradeColor(r.score);
     const relCls = r.reliability === 'high' ? 'rel-high' : r.reliability === 'medium' ? 'rel-medium' : r.reliability === 'low' ? 'rel-low' : 'rel-none';
     const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '참고';
-    const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
-    const rec = getCounselingRecommendation(r.comp, r);
     html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}" data-prob="${r.prob}">
       <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
       <td style="font-size:12px">${esc(r.jeonType)}</td>
       <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
       <td title="${esc(r.comp.bandReason || '')}"><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || (r.comp.bandNoCutLabel ? '컷없음' : '-')}${r.comp.cwMultiple != null ? ' <span style="font-size:9px;color:var(--muted);font-weight:400">충원 ' + r.comp.cwMultiple.toFixed(1) + '배수</span>' : ''}</span> ${judgeRelBadge(r.comp.judgeReliability)}</td>
-      <td><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${rec.categoryColor};color:#fff">${esc(rec.emoji)}</span></td>
       <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
       <td><button style="background:none;border:none;color:var(--teal-mid);cursor:pointer;font-family:inherit;font-size:12px" onclick="showUnivDetail('${esc(r.univ)}')">상세보기</button></td>

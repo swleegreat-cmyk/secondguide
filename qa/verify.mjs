@@ -386,6 +386,39 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 상위N 선택 과목 수 + 판정 방향 검증 (김나경 1.00 버그 회귀 방지)
+// ═══════════════════════════════════════════════
+{
+  // 골든 샘플 성적표(석차등급 20과목 + 진로선택 A·B 2과목)로 상위N 선택 검증
+  const sample = JSON.parse(_rf(_jn(_SCRATCH, 'golden_cases.json'), 'utf8'))[0].입력성적;
+  const r = await page.evaluate((subj) => {
+    const 상명 = computeScore(subj, NAESIN_RULES['상명대학교'], {A:1,B:3,C:5});
+    const 수원 = computeScore(subj, NAESIN_RULES['수원대학교'], {A:1,B:3,C:5});
+    return { 상명: { v: 상명.환산등급, n: 상명.반영과목수 }, 수원: { v: 수원.환산등급, n: 수원.반영과목수 } };
+  }, sample);
+  // 규정: 진로선택 포함 명시 없음 → 석차등급 과목만. 샘플 석차 상위3 = [2,2,2] → 2.0 / 상위5 = [2,2,2,2,2] → 2.0
+  assert(`상위N#1: 상명대 상위3 — 석차등급 과목만 3개 선택, 환산 2.0 (성취 A=1 미점령)`,
+    r.상명.n === 3 && Math.abs(r.상명.v - 2.0) <= 0.01 && r.상명.v > 1.01, JSON.stringify(r));
+  assert(`상위N#2: 수원대 상위5 — 선택 수 = 규칙 N(5), 환산 2.0 (1.00 아님)`,
+    r.수원.n === 5 && Math.abs(r.수원.v - 2.0) <= 0.01 && r.수원.v > 1.01, JSON.stringify(r));
+}
+{
+  // 판정 방향: 등급 스케일(낮을수록 우수)에서 단조성 확인
+  const r = await page.evaluate(() => {
+    const rank = { '상향': 0, '소신': 1, '적정': 2, '안정': 3 };
+    // (i) 학생 성적이 좋아질수록(수치↓) 판정은 같거나 유리
+    const sweepS = [4.0, 3.6, 3.45, 3.15, 2.5].map(s => classifyBand(s, 3.0, 3.3));
+    const monoS = sweepS.every((b, i) => i === 0 || rank[b] >= rank[sweepS[i-1]]);
+    // (ii) 같은 학생, 컷이 관대해질수록(수치↑) 판정은 같거나 유리 (김나경 평균 5.25 시나리오)
+    const sweepC = [2.0, 4.0, 5.2, 5.5, 6.5].map(c => classifyBand(5.25, c, c));
+    const monoC = sweepC.every((b, i) => i === 0 || rank[b] >= rank[sweepC[i-1]]);
+    return { sweepS, monoS, sweepC, monoC };
+  });
+  assert(`판정방향#1: 성적 우수할수록 판정 유리 — [${r.sweepS.join('→')}]`, r.monoS, JSON.stringify(r));
+  assert(`판정방향#2: 컷 관대할수록 판정 유리 (s=5.25) — [${r.sweepC.join('→')}]`, r.monoC, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.
