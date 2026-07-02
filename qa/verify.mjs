@@ -419,6 +419,65 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 세특 문장 태깅 엔진 + 주제 스레드 검증
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const 상 = tagSentence('『코스모스』를 읽고 3회에 걸쳐 토론 보고서를 작성함');       // 고유+정량+산출물
+    const 중 = tagSentence('설문지를 제작하여 학급에 배포함');                            // 산출물 1종
+    const 하 = tagSentence('수업에 성실히 참여하고 적극적인 태도를 보임');                // 0종 + 상투어
+    const 부정 = tagSentence('『코스모스』를 읽었으나 단순 요약에 그침');                 // 고유 있으나 부정 문맥
+    const 과목유래 = tagSentence('물리 법칙에 큰 흥미를 보임', { subjectName: '물리학Ⅰ' }); // '물리 법칙' 제외
+    const 복붙 = detectCopyPaste([
+      { seat: 901, records: [{ y: 1, t: '세부능력및특기사항', b: '지역 하천의 수질 오염 원인을 조사하고 개선 방안을 제안하는 캠페인을 진행함.' }] },
+      { seat: 902, records: [{ y: 2, t: '세부능력및특기사항', b: '지역 하천의 수질 오염 원인을 조사하고 개선 방안을 제안하는 캠페인을 진행함.' }] },
+      { seat: 903, records: [{ y: 1, t: '세부능력및특기사항', b: '독자적인 주제로 발표를 준비하여 급우들의 호응을 얻음.' }] },
+    ]);
+    return { 상: 상.grade, 중: 중.grade, 하: [하.grade, 하.cliche],
+             부정: [부정.grade, 부정.negated, 부정.signals.고유],
+             과목유래: [과목유래.grade, 과목유래.subjectDerived],
+             복붙쌍: 복붙.pairs.length, 복붙좌석: 복붙.pairs[0] ? 복붙.pairs[0].seats : [] };
+  });
+  assert("태깅#1(상): 고유(『』)+정량(3회)+산출물(보고서) ≥2종 → 상", r.상 === '상', JSON.stringify(r));
+  assert("태깅#2(중): 산출물(설문지) 1종 → 중", r.중 === '중', JSON.stringify(r));
+  assert("태깅#3(하): 신호 0종 + 상투어 감지 → 하", r.하[0] === '하' && r.하[1] === true, JSON.stringify(r));
+  assert("태깅#4(부정 무효): '~에 그침' 문맥 → 고유 신호 무효, 하", r.부정[0] === '하' && r.부정[1] === true, JSON.stringify(r));
+  assert("태깅#5(과목유래 제외): 물리학Ⅰ 세특의 '물리 법칙' → 신호 미인정 (subjectDerived 기록)",
+    r.과목유래[0] === '하' && r.과목유래[1].length >= 1, JSON.stringify(r));
+  assert("태깅#6(복붙 감지): 30자 이상 동일 문장 2개 학생 → 복붙 의심 1쌍 (seats 901·902)",
+    r.복붙쌍 === 1 && r.복붙좌석.includes(901) && r.복붙좌석.includes(902), JSON.stringify(r));
+}
+{
+  const r = await page.evaluate(() => {
+    const mk = (y, b) => ({ y, t: '세부능력및특기사항', b });
+    // 3년 연속 심화형: 1학년 하 → 3학년 상
+    const 심화 = extractTopicThreads([
+      mk(1, '미세먼지에 관심을 가짐. 미세먼지 기사를 찾아봄'),
+      mk(2, '미세먼지 측정 설문지를 제작함'),
+      mk(3, '미세먼지 농도를 30회 측정하여 분석 보고서를 작성함'),
+    ]);
+    // 단발: 한 학년에서만 등장
+    const 단발 = extractTopicThreads([
+      mk(2, '로봇 동아리에서 로봇 구조를 탐구함'),
+      mk(3, '문학 작품 감상문을 제출함'),
+    ]);
+    // 계열 정합: deptKeywords와 겹치는 주제
+    const 정합 = extractTopicThreads([
+      mk(2, '간호 직업 탐색 활동에서 간호사의 역할을 조사함'),
+      mk(3, '간호 관련 봉사를 12회 수행하고 보고서를 작성함'),
+    ], { deptKeywords: ['간호', '보건'] });
+    const f = (arr, tok) => arr.find(t => t.topic === tok) || null;
+    return { 심화: f(심화, '미세먼지'), 단발: f(단발, '로봇'), 정합: f(정합, '간호') };
+  });
+  assert(`스레드#1(3년 연속 심화형): 미세먼지 1·2·3학년 + 하→상 — ${r.심화 && r.심화.continuity}/${r.심화 && r.심화.depth}`,
+    r.심화 && r.심화.continuity === '1→2→3학년 연속' && r.심화.depth === '심화형', JSON.stringify(r.심화));
+  assert("스레드#2(단발): 로봇 2학년만 등장 → 단발",
+    r.단발 && r.단발.continuity === '단발', JSON.stringify(r.단발));
+  assert("스레드#3(계열 정합): '간호' 주제 ↔ deptKeywords ['간호','보건'] → aligned",
+    r.정합 && r.정합.aligned === true && r.정합.continuity === '2→3학년 연속', JSON.stringify(r.정합));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.

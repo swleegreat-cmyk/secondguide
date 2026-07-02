@@ -3441,6 +3441,239 @@ function runAllUniversities(student) {
 }
 
 // ═══════════════════════════════════════════════
+// 세특 문장 태깅 엔진 (신호 사전은 별도 데이터 파일 signal_dictionary.js에서 주입)
+// ═══════════════════════════════════════════════
+// signal_dictionary.js — 세특 문장 태깅용 신호 사전 (데이터 파일, 엔진과 분리)
+// 카테고리:
+//  정량   : 수치+단위, 횟수, 기간 패턴 (구체성 판정 요소)
+//  고유   : 책·이론·법칙·도구·프로그램명 — 따옴표류·『』·영문 병기 (구체성 판정 요소)
+//  산출물 : 보고서·모형·코드·설문 등 결과물 명사 (구체성 판정 요소)
+//  과정   : 과정 연결어 — 탐구의 흐름을 보여주는 표현 (참고 신호)
+//  주도성 : 주도성 동사 (참고 신호)
+//  상투어 : 관찰 근거 없는 범용 표현 (구체성 없음의 지표)
+//  부정   : 부정·한계 문맥 — 이 패턴이 잡히면 해당 문장의 신호를 무효 처리
+const SIGNAL_DICT = {
+  정량: [
+    /\d+(?:\.\d+)?\s*(?:회|번|차례|시간|분|일간|주간|개월|년간|명|개|편|권|장|쪽|페이지|문항|종|가지|단계|km|m|cm|mm|kg|g|mL|L|℃|점|위|%|퍼센트|배)/,
+    /(?:매주|매일|매달|격주|주\s*\d+회|월\s*\d+회|연\s*\d+회)/,
+    /\d+\s*(?:주|개월|학기)\s*(?:간|동안|에 걸쳐)/,
+  ],
+  고유: [
+    /『[^』]{2,40}』/, /「[^」]{2,40}」/, /《[^》]{2,40}》/,
+    /[‘'][^'’]{2,30}[’']/, /[“"][^"”]{2,40}[”"]/,
+    /\([A-Za-z][A-Za-z0-9 +#.\-]{1,30}\)/,                    // 영문 병기: 한글(English)
+    /\b[A-Z][A-Za-z0-9]*(?:[ .\-+#][A-Za-z0-9]+){0,3}\b/,     // 영문 고유명 (Python, GeoGebra 등)
+    /[가-힣A-Za-z·\s]{2,20}(?:의\s*)?(?:이론|법칙|원리|정리|방정식|불평등|효과|모형|모델|지수|계수)/,
+  ],
+  산출물: [
+    /(?:보고서|소논문|논문|발표\s*자료|포트폴리오|모형|모델링|코드|프로그램|앱|어플리케이션|웹사이트|홈페이지|설문|설문지|통계\s*자료|영상|동영상|카드뉴스|포스터|인포그래픽|팸플릿|리플릿|에세이|기사문|시나리오|대본|작품|전시|실험\s*설계서|계획서|제안서|데이터셋)/,
+  ],
+  과정: [
+    /(?:의문을\s*갖고|의문을\s*품고|궁금증을\s*가지고|호기심을\s*갖고|검증하기\s*위해|확인하기\s*위해|해결하기\s*위해|비교하기\s*위해|한계를\s*발견|보완하기\s*위해|원인을\s*분석|가설을\s*세우|가설을\s*설정|근거를\s*들어|자료를\s*조사|추가로\s*탐구|후속\s*(?:활동|탐구)|이를\s*토대로|이를\s*바탕으로|심화\s*탐구)/,
+  ],
+  주도성: [
+    /(?:설계하|설계함|제안하|제안함|기획하|기획함|주도하|주도함|조직하|조직함|비교\s*분석|분석함|구현하|구현함|제작하|제작함|개발하|개발함|고안하|고안함|수립하|수립함|검증하|검증함|실험을\s*진행|직접\s*(?:제작|조사|실험|설계)|자발적으로|스스로)/,
+  ],
+  상투어: [
+    /(?:성실히\s*참여|성실하게\s*참여|적극적인\s*태도|적극적으로\s*참여|열심히\s*참여|바른\s*인성|밝은\s*성격|교우\s*관계가\s*원만|원만한\s*교우|책임감이\s*강|성실한\s*자세|모범적|착실히|꾸준히\s*노력|최선을\s*다하)/,
+  ],
+  부정: [
+    /(?:하지\s*못함|하지\s*못하|지\s*못했|에\s*그침|에\s*그쳤|그치는\s*수준|미흡|부족함|않았음|아쉬움이\s*남|한계를\s*보임|소극적)/,
+  ],
+};
+// 주제 추출 시 제외할 불용어 (주제 스레드 분석용)
+const TOPIC_STOPWORDS = new Set([
+  '학생', '수업', '활동', '시간', '내용', '자신', '생각', '모습', '과정', '이해',
+  '발표', '친구', '학습', '태도', '관심', '노력', '참여', '능력', '부분', '문제',
+  '주제', '다양', '통해', '대한', '위해', '바탕', '이후', '함께', '관련', '작성',
+]);
+
+
+// 문장 분리 — 개조식('~함.', '~음.') 및 일반 문장 모두 처리
+function splitSentences(text) {
+  if (!text) return [];
+  return String(text).split(/(?<=[.!?])\s+|(?<=[함음됨임봄줌])\.\s*/)
+    .map(t => t.trim().replace(/\.$/, ''))
+    .filter(t => t.length >= 8);
+}
+
+function _normSubjName(name) {
+  return String(name || '').replace(/[ⅠⅡⅢIVX0-9\s()·]/g, '');
+}
+
+// 문장 1개 태깅.
+// opts.subjectName: 해당 세특의 과목명 — 과목명 유래 키워드는 계열 매칭 신호로 인정하지 않음
+function tagSentence(sentence, opts = {}) {
+  const subjNorm = _normSubjName(opts.subjectName);
+  const negated = SIGNAL_DICT.부정.some(re => re.test(sentence));
+  const signals = {};
+  const subjectDerived = [];
+  for (const cat of ['정량', '고유', '산출물', '과정', '주도성', '상투어']) {
+    let hit = false;
+    for (const re of SIGNAL_DICT[cat]) {
+      const m = sentence.match(re);
+      if (!m) continue;
+      // 오탐 방지 (b): 과목명에서 유래한 토큰은 신호로 인정하지 않음
+      if ((cat === '고유') && subjNorm) {
+        const core = _normSubjName(m[0]).replace(/(이론|법칙|원리|정리|방정식|효과|모형|모델|지수|계수)$/, '');
+        if (core && (subjNorm.includes(core) || core.includes(subjNorm))) {
+          subjectDerived.push(m[0].trim());
+          continue;
+        }
+      }
+      hit = true;
+      break;
+    }
+    signals[cat] = hit;
+  }
+  // 오탐 방지 (a): 부정·한계 문맥이면 문장 내 모든 구체성 신호 무효
+  const effective = negated ? { 정량: false, 고유: false, 산출물: false } : signals;
+  const kinds = ['정량', '고유', '산출물'].filter(k => effective[k]).length;
+  const grade = kinds >= 2 ? '상' : kinds === 1 ? '중' : '하';
+  return { text: sentence, negated, signals, subjectDerived, kinds, grade,
+           cliche: signals.상투어 };
+}
+
+const TAG_GRADE_RANK = { '하': 0, '중': 1, '상': 2 };
+
+// 학생 전체 레코드(세특+창체) 태깅 — 과목별 집계 포함
+const _tagCache = {};
+function tagStudentRecords(student) {
+  if (_tagCache[student.seat]) return _tagCache[student.seat];
+  const bySubject = {}; // 과목명 → { sentences, highCount, allLow, years }
+  const all = [];
+  for (const rec of (student.records || [])) {
+    if (!rec.b) continue;
+    const isSetuk = rec.t === '세부능력및특기사항';
+    const subj = isSetuk ? (rec.c || '(과목미상)') : '창체:' + (rec.b.slice(0, 0) || rec.t);
+    for (const sent of splitSentences(rec.b)) {
+      const tag = tagSentence(sent, { subjectName: isSetuk ? rec.c : '' });
+      tag.year = rec.y; tag.subject = subj; tag.recType = rec.t;
+      all.push(tag);
+      if (isSetuk) {
+        const g = bySubject[subj] = bySubject[subj] || { sentences: [], highCount: 0, years: new Set() };
+        g.sentences.push(tag);
+        if (tag.grade === '상') g.highCount++;
+        g.years.add(rec.y);
+      }
+    }
+  }
+  for (const subj of Object.keys(bySubject)) {
+    const g = bySubject[subj];
+    g.allLow = g.sentences.length > 0 && g.sentences.every(t => t.grade === '하');
+  }
+  const result = { bySubject, all };
+  _tagCache[student.seat] = result;
+  return result;
+}
+
+// 세특↔성적 교차검증: 구체성 상 문장 2개 이상인 과목의 등급이
+// 학생 평균보다 1.5등급 이상 나쁘면 '일관성 주의'
+function crossCheckSetukGrades(student, tagging) {
+  const stAvg = calcWeightedAvg(student);
+  const flags = [];
+  for (const [subj, g] of Object.entries(tagging.bySubject)) {
+    if (g.highCount < 2) continue;
+    const matches = student.subjects.filter(x => x.g != null &&
+      (_normSubjName(x.n) === _normSubjName(subj) || _normSubjName(x.c) === _normSubjName(subj)));
+    if (!matches.length) continue;
+    const avg = matches.reduce((a, x) => a + x.g, 0) / matches.length;
+    if (avg - stAvg >= 1.5) {
+      flags.push({ subject: subj, subjGrade: Math.round(avg * 100) / 100,
+                   stAvg: Math.round(stAvg * 100) / 100, highCount: g.highCount });
+    }
+  }
+  return flags;
+}
+
+// 학생 간 복붙 감지: 30자 이상 동일 문장(공백 제거 기준)이 서로 다른 학생에 등장
+// studentsArr 주입 가능(테스트용) — 기본은 전체 STUDENTS
+let _copyPasteCache = null;
+function detectCopyPaste(studentsArr) {
+  if (!studentsArr && _copyPasteCache) return _copyPasteCache;
+  const pool = studentsArr || STUDENTS;
+  const map = {}; // norm → Set(seat)
+  for (const st of pool) {
+    for (const rec of (st.records || [])) {
+      for (const sent of splitSentences(rec.b || '')) {
+        const norm = sent.replace(/\s+/g, '');
+        if (norm.length < 30) continue;
+        (map[norm] = map[norm] || new Set()).add(st.seat);
+      }
+    }
+  }
+  const dup = new Set();
+  const pairs = [];
+  for (const [norm, seats] of Object.entries(map)) {
+    if (seats.size >= 2) { dup.add(norm); pairs.push({ text: norm.slice(0, 60), seats: [...seats] }); }
+  }
+  const result = { dupNorms: dup, pairs };
+  if (!studentsArr) _copyPasteCache = result;
+  return result;
+}
+function isCopyPasteSentence(text, cp) {
+  return (cp || detectCopyPaste()).dupNorms.has(String(text).replace(/\s+/g, ''));
+}
+
+// ═══════════════════════════════════════════════
+// 학년간 주제 스레드 분석 (태깅 엔진 위에 구축)
+// ═══════════════════════════════════════════════
+// records: [{y, b, c?, t?}] — 세특·창체 텍스트. opts.deptKeywords: 계열 정합 판정용 키워드 배열
+function extractTopicThreads(records, opts = {}) {
+  const clicheRe = SIGNAL_DICT.상투어[0];
+  const occur = {}; // token → { count, years:Set, gradeByYear: {y: bestRank} }
+  for (const rec of records) {
+    if (!rec.b) continue;
+    const subjNorm = _normSubjName(rec.c);
+    for (const sent of splitSentences(rec.b)) {
+      if (clicheRe.test(sent) && sent.length < 20) continue;
+      const tag = tagSentence(sent, { subjectName: rec.c });
+      for (const tok of (sent.match(/[가-힣]{2,6}/g) || [])) {
+        if (TOPIC_STOPWORDS.has(tok)) continue;
+        if (subjNorm && (subjNorm.includes(tok) || tok.includes(subjNorm))) continue; // 과목명 유래 제외
+        const o = occur[tok] = occur[tok] || { count: 0, years: new Set(), gradeByYear: {} };
+        o.count++;
+        o.years.add(rec.y);
+        const r = TAG_GRADE_RANK[tag.grade];
+        if (o.gradeByYear[rec.y] == null || r > o.gradeByYear[rec.y]) o.gradeByYear[rec.y] = r;
+      }
+    }
+  }
+  const threads = [];
+  const kws = (opts.deptKeywords || []).map(k => String(k).replace(/\s+/g, ''));
+  for (const [tok, o] of Object.entries(occur)) {
+    if (o.count < 2) continue; // 주제 자격: 2회 이상 등장
+    const ys = [...o.years].sort();
+    let continuity;
+    if (o.years.has(1) && o.years.has(2) && o.years.has(3)) continuity = '1→2→3학년 연속';
+    else if (o.years.has(2) && o.years.has(3)) continuity = '2→3학년 연속';
+    else continuity = '단발';
+    let depth = null;
+    if (continuity !== '단발') {
+      const first = o.gradeByYear[ys[0]] ?? 0, last = o.gradeByYear[ys[ys.length - 1]] ?? 0;
+      depth = last > first ? '심화형' : last === first ? '유지형' : '약화형';
+    }
+    const aligned = kws.some(k => k && (k.includes(tok) || tok.includes(k)));
+    threads.push({ topic: tok, count: o.count, years: ys, continuity, depth, aligned });
+  }
+  // 연속 > 등장 횟수 순 정렬
+  const contRank = { '1→2→3학년 연속': 0, '2→3학년 연속': 1, '단발': 2 };
+  threads.sort((a, b) => (contRank[a.continuity] - contRank[b.continuity]) || (b.count - a.count));
+  return threads;
+}
+
+// 학생의 지원 소계열 키워드(추천학과 DEPT_KEYWORDS 합집합) 기반 스레드 분석
+function studentTopicThreads(student, ra) {
+  const kws = [];
+  for (const dept of (ra.deptMatch || []).slice(0, 6)) {
+    const base = dept.replace(/(학과|학부|과|전공|계열)$/, '');
+    kws.push(base);
+    for (const k of (DEPT_KEYWORDS[dept] || [])) kws.push(k);
+  }
+  return extractTopicThreads(student.records || [], { deptKeywords: kws });
+}
+
+// ═══════════════════════════════════════════════
 // 생기부 ANALYSIS ENGINE
 // ═══════════════════════════════════════════════
 function analyzeRecord(student, analysis) {
@@ -8423,6 +8656,82 @@ function renderRecordTab(student, analysis) {
     html += '</div>';
   }
 
+  // ═══ 세특 문장 태깅 + 주제 스레드 + 보완 필요 (단일 점수화 없음 — 문장 인용·태그만) ═══
+  {
+    const tagging = tagStudentRecords(student);
+    const cp = detectCopyPaste();
+    const consistFlags = crossCheckSetukGrades(student, tagging);
+    const consistSet = new Set(consistFlags.map(f => f.subject));
+    const threads = studentTopicThreads(student, ra);
+    const gradeChip = g => {
+      const c = g === '상' ? 'var(--green)' : g === '중' ? 'var(--blue)' : 'var(--muted)';
+      return `<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:${c};color:#fff;font-weight:700">구체성 ${g}</span>`;
+    };
+    const sigChips = t => {
+      const parts = [];
+      for (const k of ['정량', '고유', '산출물', '과정', '주도성']) if (t.signals[k])
+        parts.push(`<span style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--cream);color:var(--teal);font-weight:600">${k}</span>`);
+      if (t.signals.상투어) parts.push('<span style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--orange-light);color:var(--orange);font-weight:600">상투어</span>');
+      if (t.negated) parts.push('<span style="font-size:9px;padding:1px 5px;border-radius:6px;border:1px solid var(--red);color:var(--red);font-weight:600">부정문맥 — 신호 무효</span>');
+      if (isCopyPasteSentence(t.text, cp)) parts.push('<span style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--red);color:#fff;font-weight:700">복붙 의심</span>');
+      return parts.join(' ');
+    };
+
+    // 1) 세특 문장 태깅 (과목별 인용)
+    const subjKeys = Object.keys(tagging.bySubject);
+    if (subjKeys.length) {
+      html += '<div class="glass"><h3>세특 문장 태깅</h3>';
+      html += '<p style="font-size:11px;color:var(--muted);margin-bottom:8px">문장별 구체성(정량·고유·산출물 중 2종 이상=상, 1종=중, 0종=하)과 신호 태그입니다. 단일 점수는 산출하지 않습니다.</p>';
+      subjKeys.forEach(subj => {
+        const g = tagging.bySubject[subj];
+        const warn = consistSet.has(subj);
+        html += `<div style="margin-bottom:10px;padding:8px 10px;background:var(--cream);border-radius:8px">
+          <div style="font-size:12px;font-weight:700;color:var(--teal)">${esc(subj)}
+            <span style="font-size:10px;color:var(--muted);font-weight:400">(상 ${g.highCount} / 총 ${g.sentences.length}문장)</span>
+            ${warn ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:var(--orange);color:#fff;font-weight:700">일관성 주의 — 세특은 구체적이나 등급 부진</span>' : ''}
+          </div>`;
+        g.sentences.slice(0, 4).forEach(t => {
+          html += `<div style="margin-top:5px;font-size:11px;line-height:1.5;color:var(--sub)">
+            <span style="color:var(--ink)">“${esc(t.text.length > 90 ? t.text.slice(0, 90) + '…' : t.text)}”</span><br>
+            ${gradeChip(t.grade)} ${sigChips(t)}</div>`;
+        });
+        if (g.sentences.length > 4) html += `<div style="font-size:10px;color:var(--muted);margin-top:3px">외 ${g.sentences.length - 4}문장</div>`;
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    // 2) 주제 스레드 타임라인 (학년간 연속성)
+    if (threads.length) {
+      html += '<div class="glass"><h3>주제 스레드 타임라인</h3>';
+      html += '<p style="font-size:11px;color:var(--muted);margin-bottom:8px">2회 이상 등장한 주제의 학년간 연속성과 지원 소계열 정합 여부입니다.</p>';
+      html += '<div class="scroll-table"><table class="g-table" style="font-size:11px"><thead><tr><th>주제</th><th>1학년</th><th>2학년</th><th>3학년</th><th>연속성</th><th>심화/유지</th><th>계열 정합</th></tr></thead><tbody>';
+      threads.slice(0, 12).forEach(t => {
+        const dot = y => t.years.includes(y) ? '●' : '<span style="color:var(--border)">○</span>';
+        html += `<tr>
+          <td style="font-weight:600">${esc(t.topic)} <span style="font-size:9px;color:var(--muted)">×${t.count}</span></td>
+          <td style="text-align:center">${dot(1)}</td><td style="text-align:center">${dot(2)}</td><td style="text-align:center">${dot(3)}</td>
+          <td style="font-size:10px;${t.continuity !== '단발' ? 'color:var(--teal);font-weight:700' : 'color:var(--muted)'}">${t.continuity}</td>
+          <td style="font-size:10px">${t.depth ? (t.depth === '심화형' ? '<span style="color:var(--green);font-weight:700">심화형</span>' : t.depth) : '-'}</td>
+          <td style="text-align:center">${t.aligned ? '<span style="color:var(--green);font-weight:800">✓</span>' : '-'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div></div>';
+    }
+
+    // 3) 보완 필요 목록
+    const lowSubjects = subjKeys.filter(k => tagging.bySubject[k].allLow);
+    const hasAligned = threads.some(t => t.aligned && t.continuity !== '단발');
+    const needs = [];
+    if (!hasAligned) needs.push('<strong style="color:var(--red)">지원 계열 관련 연속 활동 없음</strong> — 지원 소계열과 연결되는 학년간 연속 주제가 발견되지 않았습니다.');
+    lowSubjects.forEach(k => needs.push(`<strong>${esc(k)}</strong> — 구체성 하 문장만으로 구성 (정량·고유·산출물 신호 없음)`));
+    consistFlags.forEach(f => needs.push(`<strong>${esc(f.subject)}</strong> — 일관성 주의: 세특 구체성 상 ${f.highCount}문장이나 등급 ${f.subjGrade} (평균 ${f.stAvg} 대비 +1.5 이상)`));
+    if (needs.length) {
+      html += '<div class="glass"><h3>보완 필요</h3><ul style="font-size:12px;line-height:1.8;padding-left:18px">';
+      needs.forEach(n => html += `<li>${n}</li>`);
+      html += '</ul></div>';
+    }
+  }
 
   el.innerHTML = html;
 }

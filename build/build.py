@@ -188,6 +188,8 @@ html = html.replace('__DEPT_CONFIDENCE_JSON__', dept_confidence_json)
 html = html.replace('__UNIV_CONFIDENCE_JSON__', univ_confidence_json)
 html = html.replace('__COMPOSITE_WEIGHTS_JSON__', composite_weights_json)
 html = html.replace('__NAESIN_ENGINE__', naesin_engine)
+with open(f'{SCRATCH}/signal_dictionary.js', encoding='utf-8') as f:
+    html = html.replace('__SIGNAL_DICT__', f.read())
 
 with open(OUTPUT, 'w', encoding='utf-8') as f:
     f.write(html)
