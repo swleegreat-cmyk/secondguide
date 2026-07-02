@@ -1,0 +1,5702 @@
+[
+ {
+  "대학명": "건양대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 단순_상위N\n[반영교과] 국어·수학·영어·탐구(사/과) 중 6과목 / 총 6과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 단순 상위N — 반영과목수만 지정\n[엔진현재값(참고)] 2.167 (reliability=high, 반영 6과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "동국대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 단순_상위N\n[반영교과] 국어·수학·사회·영어·한국사 중 10과목 / 국어·수학·과학·영어·한국사 중 10과목 / 총 10과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 단순 상위N — 수도권 상위권 교과\n[엔진현재값(참고)] 2.500 (reliability=high, 반영 20과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "안양대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 단순_상위N_계열별상이\n[반영교과] 국어·수학·영어·사회(한국사포함) 중 12과목 / 국어·수학·영어·과학 중 12과목 / 국어·수학·영어·사회(한국사)·과학 중 15과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 단순 상위N — 계열별 반영교과 상이\n[엔진현재값(참고)] 2.795 (reliability=low, 반영 39과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "평택대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 단순_상위N_전형별상이\n[반영교과] 국어·수학·영어·사회(역사/도덕)·과학·한국사 중 9과목 / 동일 중 3과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 단순 상위N — 전형별 반영수 상이\n[엔진현재값(참고)] 2.083 (reliability=high, 반영 12과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "청운대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 학기별_상위N\n[반영교과] 국어·수학·영어·사회·과학 중 각 학기별 교과당 상위1과목 선택 후 그중 상위3과목, 총5학기 15과목 / 총 15과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 학기별 상위N — 학기 단위 선택\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "한남대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 계열별_상위N\n[반영교과] 상위 15과목 / 상위 15과목 / 상위 10과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 계열별 상위N\n[엔진현재값(참고)] 2.475 (reliability=high, 반영 40과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "가야대학교(김해)",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N\n[반영교과] 국어·영어·수학 중 6과목 / 사회·과학·한국사·체육 중 2과목 / 총 8과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[비고] 진로선택과목 최대 2과목(A:1,B:3,C:5 환산)\n[선정사유] 교과군별 상위N — 국영수 6 + 탐구 2\n[엔진현재값(참고)] 2.250 (reliability=low, 반영 8과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "안동대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N\n[반영교과] 국어·수학·영어 중 7과목 / 사회·과학·한국사 중 2과목 / 진로선택(전체) 중 3과목 / 총 12과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 교과군별 상위N — 국립대형\n[엔진현재값(참고)] 2.167 (reliability=high, 반영 12과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "한림대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N_학과별상이\n[반영교과] 국어·영어·수학·사회또는과학 중 4개 교과목 중 상위3개 교과 / 영어필수+국수사과 중 상위2개교과 중 undefined / 진로선택 중 3과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 교과군별 상위N — 학과별 교과군 상이\n[엔진현재값(참고)] 1.667 (reliability=high, 반영 3과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "계명대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N_계열별상이\n[반영교과] 국어·수학·영어·사회(한국사) 중 상위 3개 교과(교과별 전과목) / 국어·수학·영어·과학 중 상위 3개 교과(교과별 전과목) / 국어·영어 중 전과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 교과군별 상위N — 계열별 교과군 상이\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "대전대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N_전형별상이\n[반영교과] 국어·영어·수학·사회·과학 중 교과군별 최우수 6과목(교과당 최대2과목), 총8과목 / 국어·영어·수학·사회·과학 중 교과군별 최우수2과목, 총8과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 교과군별 상위N — 전형별 상이\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "한밭대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N_전형별상이\n[반영교과] 국수영 각3과목+사회과학4과목 중 13과목 / 국영 각3과목+수학사회과학4과목 중 10과목 / 진로선택 중 3과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[선정사유] 교과군별 상위N — 국립산업대형\n[엔진현재값(참고)] 2.308 (reliability=high, 반영 26과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "김천대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 교과군별_상위N_진로선택대체\n[반영교과] 국어·영어·수학 중 교과당 상위 2과목 / 사회·과학 중 상위 1교과 2과목 / 총 4과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영교과에서 상위N 과목 선발 후 등급 단순평균 (단위수 미가중, 진로선택 A=1·B=3·C=5 환산)\n[비고] 진로선택 교과별 상위1과목(최대4과목)을 일반교과 성적보다 높을 경우 대체 반영\n[선정사유] 교과군별 상위N — 진로선택과목 대체 허용\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "남서울대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 복합_공통선택+진로선택_별도\n[반영교과] 국어·수학·영어·사회·과학·한국사 중 12과목 / 진로선택 중 3과목 / 총 15과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 공통선택 상위N + 진로선택 별도 반영\n[엔진현재값(참고)] 2.500 (reliability=high, 반영 14과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "백석대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 복합_공통선택+진로선택_별도\n[반영교과] 국어·영어·수학·사회·한국사·과학 중 15과목 / 전교과중 진로과목 중 3과목 / 총 18과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 공통선택 상위N + 진로선택 별도 반영\n[엔진현재값(참고)] 2.556 (reliability=high, 반영 18과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "장로회신학대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 학년별_상위N\n[반영교과] 국어·영어·수학·사회(과학) 중 각 학년별로 최고등급과목, 총12과목(학년별4과목) / 총 12과목\n[학년비율] 학년별 반영수 별도 지정 (규칙 참조)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 학년별 상위N — 학년마다 선택수 지정\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "대전신학대학교",
+  "전형명": "교과 (일반전형/특별전형)",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 학년별_상위N_별도가중\n[반영교과] 국어·영어·사회 중 1학년 상위3과목 / 국어·영어·사회 중 2학년 상위3과목 / 국어·영어·사회 중 3학년 상위3과목 / 총 9과목\n[학년비율] 학년별 반영수 별도 지정 (규칙 참조)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[비고] 학년별 가중치 다름(일반전형: 1학년40%+2학년40%+3학년20%)\n[선정사유] 학년별 상위N + 학년별 가중치\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "루터대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 학년무관_상위N_별도\n[반영교과] 국어·수학·영어·한국사·사회·과학 중 4과목 / 진로선택 중 2과목 / 총 6과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 학년무관 상위N — 일반/진로 분리 선택\n[엔진현재값(참고)] 2.000 (reliability=high, 반영 6과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "경상국립대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 가산점만_상위N\n[반영교과] 계열별 상이 중 3과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 전과목 단위수 가중평균 (진로선택 가산점 공식은 별도 — 엔진은 미적용, reliability=medium)\n[선정사유] 전과목 반영 + 진로선택 가산점(별도 공식)\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "조선대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 전과목+진로선택가산점\n[반영교과] {\"기본산출\":\"국어,수학,영어,사회,과학,한국사 전과목 가중평균(80%, 상위N 아님)\",\"가산점\":\"진로선택 상위3과목(20% 또는 10%)\"}\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 전과목 단위수 가중평균 (진로선택 가산점 공식은 별도 — 엔진은 미적용, reliability=medium)\n[선정사유] 전과목 반영 + 진로선택 가산점\n[엔진현재값(참고)] 자동계산 불가(수동 검산 필수) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "부산대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 전과목\n[반영교과] 전과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영과목 등급 × 단위수 합 ÷ 단위수 합 (단위수 가중평균)\n[선정사유] 전과목 단위수 가중평균\n[엔진현재값(참고)] 3.025 (reliability=high, 반영 22과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "숭실대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 전과목\n[반영교과] 전과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영과목 등급 × 단위수 합 ÷ 단위수 합 (단위수 가중평균)\n[선정사유] 전과목 단위수 가중평균\n[엔진현재값(참고)] 3.025 (reliability=high, 반영 22과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "경희대학교",
+  "전형명": "교과",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 전과목_가중평균\n[반영교과] 전과목_가중평균\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 반영과목 등급 × 단위수 합 ÷ 단위수 합 (단위수 가중평균)\n[선정사유] 전과목 가중평균 — 상위권 종합대\n[엔진현재값(참고)] 3.025 (reliability=high, 반영 22과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "인하대학교",
+  "전형명": "교과 (지역균형)",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 공통선택_전과목+진로선택_상위N\n[반영교과] 전형별,계열별 반영교과 중 3과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 공통·일반선택 전과목 + 진로선택 상위N\n[엔진현재값(참고)] 1.667 (reliability=high, 반영 3과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ },
+ {
+  "대학명": "아주대학교",
+  "전형명": "교과 (고교추천전형)",
+  "입력성적": [
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "통합사회",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "통합과학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "국어",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 1,
+    "학기": 2,
+    "교과": "한국사",
+    "과목명": "한국사",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "문학",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "수학Ⅰ",
+    "grade": 5,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어Ⅰ",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "생활과 윤리",
+    "grade": 2,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "국어",
+    "과목명": "독서",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "수학",
+    "과목명": "수학Ⅱ",
+    "grade": 4,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "영어",
+    "과목명": "영어Ⅱ",
+    "grade": 2,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 2,
+    "학기": 2,
+    "교과": "사회",
+    "과목명": "사회·문화",
+    "grade": 3,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "국어",
+    "과목명": "화법과 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "수학",
+    "과목명": "확률과 통계",
+    "grade": 4,
+    "achievement": null,
+    "unit": 3,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "영어",
+    "과목명": "영어 독해와 작문",
+    "grade": 3,
+    "achievement": null,
+    "unit": 4,
+    "is_career": false
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "사회",
+    "과목명": "사회문제 탐구",
+    "grade": null,
+    "achievement": "A",
+    "unit": 3,
+    "is_career": true
+   },
+   {
+    "학년": 3,
+    "학기": 1,
+    "교과": "과학",
+    "과목명": "생활과 과학",
+    "grade": null,
+    "achievement": "B",
+    "unit": 3,
+    "is_career": true
+   }
+  ],
+  "기대환산점수": null,
+  "검산근거": "[규칙유형] 복합_공통선택전과목+진로선택_상위N\n[반영교과] 국어·영어·수학·사회·과학 중 5과목\n[학년비율] 학년비율 없음 (전 학년 동일 취급)\n[계산식] 구간(공통선택/진로선택/학년)별로 상위N 선발 후 전체 선발과목 등급의 단순평균 (진로선택 A=1·B=3·C=5 환산)\n[선정사유] 공통·일반선택 전과목 + 진로선택 상위N(변형)\n[엔진현재값(참고)] 2.000 (reliability=high, 반영 5과목) — 모집요강과 대조해 기대환산점수를 채우세요"
+ }
+]
