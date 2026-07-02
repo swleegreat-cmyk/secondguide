@@ -436,6 +436,7 @@ body {
       <p>병점고등학교 3학년 4반 · 34명</p>
     </div>
     <button class="home-link" id="homeBtn">&#127968; 학급 현황 대시보드</button>
+    <button class="home-link" id="downloadBtn" style="background:rgba(199,123,60,0.25);border:1px solid rgba(199,123,60,0.4)" onclick="downloadFile()">&#128229; 파일 다운로드</button>
     <div class="sidebar-search">
       <input type="text" id="searchInput" placeholder="학생 검색...">
     </div>
@@ -5680,7 +5681,7 @@ function renderSusiTab(student, analysis) {
   allComps.forEach((r, i) => {
     const c = gradeColor(r.score);
     const relCls = r.reliability === 'high' ? 'rel-high' : r.reliability === 'medium' ? 'rel-medium' : r.reliability === 'low' ? 'rel-low' : 'rel-none';
-    const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '불가';
+    const relLabel = r.reliability === 'high' ? '높음' : r.reliability === 'medium' ? '보통' : r.reliability === 'low' ? '낮음' : '참고';
     const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
     const rec = getCounselingRecommendation(r.comp, r);
     html += `<tr class="univ-row" data-univ="${esc(r.univ)}" data-score="${r.score}" data-rel="${r.reliability}" data-hasint="${r.hasInterviews}" data-prob="${r.prob}">
@@ -5933,9 +5934,11 @@ function showUnivDetail(univName) {
   html += `<div style="font-size:13px;margin-bottom:8px"><strong>전형 유형:</strong> ${esc(result.jeonType)}</div>`;
   html += `<div style="font-size:13px;margin-bottom:8px"><strong>규칙 종류:</strong> ${esc(result.ruleType)}</div>`;
   html += `<div style="font-size:13px;margin-bottom:8px"><strong>대학 성격:</strong> ${esc(getUnivCharacter(univName, result.ruleType))}</div>`;
-  if (result.reliability !== 'none') {
-    const relCls = result.reliability === 'high' ? 'rel-high' : result.reliability === 'medium' ? 'rel-medium' : 'rel-low';
-    html += `<div style="font-size:13px"><strong>계산 신뢰도:</strong> <span class="rel-badge ${relCls}">${result.reliability}</span></div>`;
+  {
+    const relMap = { high: ['rel-high','높음'], medium: ['rel-medium','보통 (근사치)'], low: ['rel-low','낮음 (대략 산출)'], none: ['rel-none','참고용'] };
+    const [relCls, relLabel] = relMap[result.reliability] || relMap.none;
+    html += `<div style="font-size:13px"><strong>계산 신뢰도:</strong> <span class="rel-badge ${relCls}">${relLabel}</span></div>`;
+    if (result.note) html += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(result.note)}</div>`;
   }
 
   // Additional admission info (5 detailed universities)
@@ -7257,6 +7260,16 @@ document.getElementById('homeBtn').addEventListener('click', () => {
   renderDashboard();
   renderRoster();
 });
+
+function downloadFile() {
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '수시상담프로그램_2027_병점고3-4.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 // Mobile menu
 document.getElementById('menuToggle').addEventListener('click', () => {
