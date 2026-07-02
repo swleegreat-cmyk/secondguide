@@ -2920,24 +2920,31 @@ function calcCompositeScore(univResult, student, analysis) {
   // ── 최종 출력: 4구간 분류 (안정/적정/소신/상향) ──
   // 연속 확률값 대신 어디가 등급50/70과 학생 전과목 평균등급(동일 스케일) 비교로 판정.
   // 경계 정의·근거는 classifyBand() 주석 참조. 컷 결측이면 band=null(판정 강제 안 함).
-  let band = null, bandNoCutLabel = null;
+  let band = null, bandNoCutLabel = null, bandBase = null, bandAdjusted = false, cwMultiple = null;
   {
     const dcB = univResult.deptCut;
     if (dcB && (dcB.g50 != null || dcB.g70 != null)) {
-      band = classifyBand(calcWeightedAvg(student), dcB.g50, dcB.g70);
+      const sAvg = calcWeightedAvg(student);
+      cwMultiple = dcB.cw != null ? dcB.cw : null;
+      bandBase = classifyBand(sAvg, dcB.g50, dcB.g70);            // 보정 전
+      band = classifyBand(sAvg, dcB.g50, dcB.g70, cwMultiple);    // 충원배수 보정 후 (기준: classifyBand 주석)
+      bandAdjusted = band !== bandBase;
     } else if (dcB && dcB.noCut) {
       bandNoCutLabel = dcB.label || '컷 정보 없음';
     } else if (univResult.cutline && univResult.cutline.cut != null) {
       // 어디가 학과컷은 없지만 레거시 컷라인(반영교과 환산 기준)이 있는 대학:
-      // 같은 4구간 사다리를 환산등급 vs 컷에 적용 (등급50/70 구분 없음 → 단일 컷 기준)
-      band = classifyBand(univResult.score, univResult.cutline.cut, univResult.cutline.cut);
+      // 같은 4구간 사다리를 환산등급 vs 컷에 적용 (등급50/70 구분 없음 → 단일 컷 기준,
+      // 충원배수 자료 없음 → 보정 미적용)
+      band = bandBase = classifyBand(univResult.score, univResult.cutline.cut, univResult.cutline.cut);
     } else {
       bandNoCutLabel = '컷 정보 없음';
     }
   }
+  // 텍스트 표시용 라벨 — 보정 적용 시 사실을 드러낸다
+  const bandLabel = band ? (bandAdjusted ? `충원 감안 시 ${band}` : band) : null;
 
   return {
-    band, bandNoCutLabel,
+    band, bandBase, bandAdjusted, bandLabel, cwMultiple, bandNoCutLabel,
     // probability 이하 수치는 내부 계산용(정렬·포트폴리오 통계·신뢰구간)으로만 사용하며
     // 추천 화면에는 표시하지 않는다 (구간 배지로 대체)
     probability: raw, probLow, probHigh,
@@ -3642,7 +3649,7 @@ function renderScoreTab(student, analysis) {
     const ranked = univResults
       .map(r => {
         const comp = calcCompositeScore(r, student, analysis);
-        return { name: r.univ, prob: comp.probability, band: comp.band, noCutLabel: comp.bandNoCutLabel, combo: comp.comboUsed, jeon: r.jeonType };
+        return { name: r.univ, prob: comp.probability, band: comp.band, bandLabel: comp.bandLabel, noCutLabel: comp.bandNoCutLabel, combo: comp.comboUsed, jeon: r.jeonType };
       })
       .filter(r => r.prob != null)
       .sort((a, b) => b.prob - a.prob);
@@ -3660,7 +3667,7 @@ function renderScoreTab(student, analysis) {
           <div style="flex:1;height:14px;background:var(--bg2);border-radius:4px;overflow:hidden">
             <div style="height:100%;width:${barW}%;background:${c};border-radius:4px;transition:width 0.3s"></div>
           </div>
-          <span style="width:36px;font-size:10px;font-weight:700;color:${r.band ? (BAND_STYLE[r.band] || {}).color : 'var(--muted)'};text-align:right">${r.band || '컷없음'}</span>
+          <span style="width:86px;font-size:10px;font-weight:700;color:${r.band ? (BAND_STYLE[r.band] || {}).color : 'var(--muted)'};text-align:right;white-space:nowrap">${r.bandLabel || r.band || '컷없음'}</span>
         </div>`;
       });
       if (ranked.length > 15) {
@@ -4004,7 +4011,7 @@ function renderSusiTab(student, analysis) {
           ${fbText ? `<div class="factor-line" style="font-size:10px;color:var(--sub);margin-top:3px">기여도: ${esc(fbText)}</div>` : ''}
         </div>
         <div class="match-num">
-          <div>${bandBadge(comp.band, comp.bandNoCutLabel)}</div>
+          <div>${bandBadge(comp.band, comp.bandNoCutLabel, comp)}</div>
           <div class="unit">${r.score.toFixed(2)}등급 (컷 ${r.cutline.cut})</div>
         </div>
       </div>`;
@@ -4060,7 +4067,7 @@ function renderSusiTab(student, analysis) {
           <div class="jeon">${esc(jeonShort)} · ${r.score.toFixed(2)}등급${fitLabel ? ' · ' + fitLabel : ''}</div>
         </div>
         <div class="match-num">
-          <div>${bandBadge(r.comp.band, r.comp.bandNoCutLabel)}</div>
+          <div>${bandBadge(r.comp.band, r.comp.bandNoCutLabel, r.comp)}</div>
           <div class="unit">구간 판정</div>
         </div>
       </div>`;
@@ -4154,7 +4161,7 @@ function renderSusiTab(student, analysis) {
         const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
         html += `<div style="padding:5px 10px;background:var(--cream);border-radius:8px;cursor:pointer;border:1px solid var(--border);min-width:80px;text-align:center" onclick="showUnivDetail('${esc(r.univ)}')">
           <div style="font-size:11px;font-weight:600">${esc(r.univ)}</div>
-          <div style="font-size:11px;font-weight:800;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.band || '컷없음'}</div>
+          <div style="font-size:11px;font-weight:800;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || '컷없음'}</div>
           <div style="font-size:10px;color:var(--muted)">${r.score.toFixed(2)}등급</div>
         </div>`;
       });
@@ -4217,7 +4224,7 @@ function renderSusiTab(student, analysis) {
           <span style="font-size:9px;color:var(--muted)">${typeTag}</span>
         </div>
         <div style="font-size:12px;font-weight:600;margin:2px 0">${esc(p.univ)}</div>
-        <div style="font-size:13px;font-weight:800;color:${p.comp.band ? (BAND_STYLE[p.comp.band] || {}).color : 'var(--muted)'}">${p.comp.band || '컷없음'}</div>
+        <div style="font-size:13px;font-weight:800;color:${p.comp.band ? (BAND_STYLE[p.comp.band] || {}).color : 'var(--muted)'}">${p.comp.bandLabel || '컷없음'}</div>
         <div style="font-size:10px;color:var(--muted)">${esc((p.jeonType||'').substring(0,6))}</div>
       </div>`;
     });
@@ -4313,7 +4320,7 @@ function renderSusiTab(student, analysis) {
       <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
       <td style="font-size:12px">${esc(r.jeonType)}</td>
       <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
-      <td><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.band || (r.comp.bandNoCutLabel ? '컷없음' : '-')}</span></td>
+      <td><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || (r.comp.bandNoCutLabel ? '컷없음' : '-')}${r.comp.cwMultiple != null ? ' <span style="font-size:9px;color:var(--muted);font-weight:400">충원 ' + r.comp.cwMultiple.toFixed(1) + '배수</span>' : ''}</span></td>
       <td><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${rec.categoryColor};color:#fff">${esc(rec.emoji)}</span></td>
       <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
@@ -4351,7 +4358,7 @@ function renderSusiTab(student, analysis) {
             <div class="jeon">${esc(r.jeonType)} · ${r.score.toFixed(2)}등급${comp.comboUsed ? ' · 반영: ' + comp.comboUsed : ''}</div>
           </div>
           <div class="match-num">
-            <div>${bandBadge(comp.band, comp.bandNoCutLabel)}</div>
+            <div>${bandBadge(comp.band, comp.bandNoCutLabel, comp)}</div>
             <div class="unit">구간 판정</div>
           </div>
         </div>`;
@@ -4583,15 +4590,30 @@ function deptCutFallback(e) {
 //  - 등급70 결측 시 등급50만으로(g70=g50 취급, STEP 5의 '70컷 정보 없음' 플래그 유지),
 //    등급50 결측 시 등급70만으로 판정한다.
 //  - 둘 다 결측이면 판정하지 않는다(null 반환) — '컷 정보 없음 — 경쟁률 참고' 표시 유지.
-function classifyBand(s, g50, g70) {
+// cw(충원배수 = 추합 ÷ 모집인원)를 넘기면 충원 보정을 적용한 구간을 반환한다.
+// ── 충원배수 보정 발동 기준·근거 ──
+//  - 발동 기준: cw ≥ 1.0 (추가합격 인원이 모집인원 이상 = 예비번호가 최소 1배수 소진)
+//  - 근거: 어디가 공시 등급50/70은 '등록자' 컷이지만, 충원이 1배수 이상 도는 학과는
+//    최초 합격선보다 실질 합격선이 한 배수만큼 아래(수치상 높은 등급)까지 내려간다.
+//    따라서 컷 경계 부근 판정을 한 단계 유리하게 본다: 소신→적정, 적정→안정.
+//  - 안정은 그대로(더 올릴 단계 없음), 상향은 보정하지 않는다(컷 완충 밖 미달은
+//    충원으로 뒤집힌다는 데이터 근거가 없으므로 보수 유지).
+//  - cw가 null(추합·모집인원 결측 또는 모집인원 0 — 전체의 약 14%)이면 보정하지 않는다.
+function classifyBand(s, g50, g70, cw) {
   if (s == null || isNaN(s)) return null;
   if (g50 == null && g70 == null) return null;   // 컷 정보 없음 → 4구간 판정 강제하지 않음
   const lo = g50 != null ? g50 : g70;             // 엄격한 컷 (수치 작음)
   const hi = g70 != null ? g70 : g50;             // 관대한 컷 (수치 큼)
-  if (s < lo) return '안정';
-  if (s <= hi) return '적정';
-  if (s <= hi + 0.2) return '소신';
-  return '상향';
+  let band;
+  if (s < lo) band = '안정';
+  else if (s <= hi) band = '적정';
+  else if (s <= hi + 0.2) band = '소신';
+  else band = '상향';
+  if (cw != null && !isNaN(cw) && cw >= 1.0) {
+    if (band === '소신') band = '적정';
+    else if (band === '적정') band = '안정';
+  }
+  return band;
 }
 const BAND_STYLE = {
   '안정': { color: 'var(--green)',  emoji: '&#128994;' },
@@ -4600,12 +4622,18 @@ const BAND_STYLE = {
   '상향': { color: 'var(--red)',    emoji: '&#128308;' },
 };
 // 추천 화면용 구간 배지 — 정밀 확률 수치 대신 표시. band null이면 '컷 정보 없음'
-function bandBadge(band, noCutLabel) {
+// comp를 넘기면 충원 보정 여부('충원 감안 시 X')와 충원배수를 함께 표시한다.
+function bandBadge(band, noCutLabel, comp) {
   if (!band) {
     return `<span style="font-size:10px;color:var(--muted);font-weight:600">${esc(noCutLabel || '컷 정보 없음')}</span>`;
   }
   const st = BAND_STYLE[band] || BAND_STYLE['적정'];
-  return `<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-weight:800;font-size:13px;color:#fff;background:${st.color}">${st.emoji} ${band}</span>`;
+  const label = (comp && comp.bandAdjusted) ? `충원 감안 시 ${band}` : band;
+  let h = `<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-weight:800;font-size:${comp && comp.bandAdjusted ? 11 : 13}px;color:#fff;background:${st.color}">${st.emoji} ${label}</span>`;
+  if (comp && comp.cwMultiple != null) {
+    h += `<div style="font-size:9px;color:var(--muted);margin-top:2px">충원 ${comp.cwMultiple.toFixed(1)}배수</div>`;
+  }
+  return h;
 }
 
 function getDeptCutline(univName, student, analysis, jeonType) {
@@ -4618,6 +4646,7 @@ function getDeptCutline(univName, student, analysis, jeonType) {
   const wanted = (ra.deptMatch||[]).map(_deptNorm).filter(Boolean);
   const matchedCuts = [], trackCuts = [], anyCuts = [];
   const matched50 = [], matched70 = [], track50 = [], track70 = [], any50 = [], any70 = [];
+  const matchedCw = [], trackCw = [], anyCw = [];   // 충원배수 (추합÷모집인원)
   let matchedName = null;
   let no70Used = 0;            // 등급50 폴백으로 판정한 레코드 수
   const noCutRatios = [];      // 둘 다 결측 레코드의 경쟁률 (판정불가 참고용)
@@ -4639,30 +4668,34 @@ function getDeptCutline(univName, student, analysis, jeonType) {
         matchedCuts.push(cut); if (!matchedName) matchedName = d;
         if (e.g50 != null) matched50.push(e.g50);
         if (e.g70 != null) matched70.push(e.g70);
+        if (e.cw != null) matchedCw.push(e.cw);
       }
       if (!e.gy || e.gy === track || e.gy === '통합' || e.gy === '공통') {
         trackCuts.push(cut);
         if (e.g50 != null) track50.push(e.g50);
         if (e.g70 != null) track70.push(e.g70);
+        if (e.cw != null) trackCw.push(e.cw);
       }
       if (e.gy !== '예체능') {
         anyCuts.push(cut);
         if (e.g50 != null) any50.push(e.g50);
         if (e.g70 != null) any70.push(e.g70);
+        if (e.cw != null) anyCw.push(e.cw);
       }
     }
   }
   const no70 = no70Used > 0;
   // 4구간 판정용 등급50/등급70 중앙값 (선택된 버킷과 동일한 우선순위: 매칭학과 > 계열 > 전체)
-  const _mk = (cuts, g50s, g70s, extra) => Object.assign({
+  const _mk = (cuts, g50s, g70s, cws, extra) => Object.assign({
     cut: Math.round(_median(cuts)*100)/100,
     g50: g50s.length ? Math.round(_median(g50s)*100)/100 : null,
     g70: g70s.length ? Math.round(_median(g70s)*100)/100 : null,
+    cw: cws.length ? Math.round(_median(cws)*100)/100 : null,
     jt, no70, no70Used
   }, extra);
-  if (matchedCuts.length) return _mk(matchedCuts, matched50, matched70, { dept: matchedName, n: matchedCuts.length, matched: true });
-  if (trackCuts.length) return _mk(trackCuts, track50, track70, { dept: null, n: trackCuts.length, matched: false });
-  if (anyCuts.length) return _mk(anyCuts, any50, any70, { dept: null, n: anyCuts.length, matched: false, crossTrack: true });
+  if (matchedCuts.length) return _mk(matchedCuts, matched50, matched70, matchedCw, { dept: matchedName, n: matchedCuts.length, matched: true });
+  if (trackCuts.length) return _mk(trackCuts, track50, track70, trackCw, { dept: null, n: trackCuts.length, matched: false });
+  if (anyCuts.length) return _mk(anyCuts, any50, any70, anyCw, { dept: null, n: anyCuts.length, matched: false, crossTrack: true });
   // 등급 있는 레코드가 하나도 없음 → 판정 불가 (경쟁률 참고값과 함께 반환, 제외하지 않음)
   if (noCutRatios.length) {
     const ratioRef = Math.round(_median(noCutRatios) * 10) / 10;
@@ -4854,7 +4887,7 @@ function renderDeptCutSection(univName, student) {
     h += '</div>';
   }
   h += `<input class="search-input" placeholder="학과명 검색... (${depts.length}개 학과)" oninput="filterDeptRows(this)" style="margin-bottom:8px;width:100%">`;
-  h += '<div style="max-height:340px;overflow-y:auto"><table class="g-table" style="font-size:11px"><thead><tr><th>학과</th><th>전형</th><th>계열</th><th>모집</th><th>경쟁률</th><th>50%컷</th><th>70%컷</th><th>예측</th></tr></thead><tbody id="deptCutBody">';
+  h += '<div style="max-height:340px;overflow-y:auto"><table class="g-table" style="font-size:11px"><thead><tr><th>학과</th><th>전형</th><th>계열</th><th>모집</th><th>경쟁률</th><th>충원</th><th>50%컷</th><th>70%컷</th><th>예측</th></tr></thead><tbody id="deptCutBody">';
   rows.forEach(e => {
     const fb = deptCutFallback(e);
     const cut = fb.cut;
@@ -4877,6 +4910,7 @@ function renderDeptCutSection(univName, student) {
       <td>${esc(e.gy||'')}</td>
       <td class="mono">${e.num ?? '-'}</td>
       <td class="mono">${e.ratio ?? '-'}</td>
+      <td class="mono"${e.cw != null && e.cw >= 1.0 ? ' style="color:var(--green);font-weight:700"' : ''}>${e.cw != null ? '충원 ' + e.cw.toFixed(1) + '배수' : '-'}</td>
       <td class="mono">${e.g50 ?? '-'}</td>
       <td class="mono" style="font-weight:700">${e.g70 ?? '-'}</td>
       <td>${probCell}</td>

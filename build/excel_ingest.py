@@ -265,6 +265,14 @@ print(f'결측: ' + ' · '.join(f'{f} {n}건' for f, n in _miss.items()))
 print(f'등급50·70 둘 다 결측: {_both_missing}건 ({_both_missing/max(1,len(adiga_clean))*100:.1f}%) — 판정불가(경쟁률 참고 표시)')
 print(f'등급70만 결측: {_only70_missing}건 — 등급50 기반 판정 + "70컷 정보 없음" 플래그')
 print(f'등급 1~9 범위 밖 이상치: {_oob}건' + (' (제외 처리)' if _oob else ''))
+def _cw_ok(_r):
+    try:
+        return float(_r.get('모집인원')) > 0 and float(_r.get('추합')) >= 0
+    except (TypeError, ValueError):
+        return False
+_cw_n = sum(1 for _r in adiga_clean if _cw_ok(_r))
+print(f'충원배수(추합÷모집인원) 계산 가능: {_cw_n}건 · null(보정 미적용) {len(adiga_clean)-_cw_n}건 '
+      f'({(len(adiga_clean)-_cw_n)/max(1,len(adiga_clean))*100:.1f}%)')
 print(f'중복 탈락 레코드 목록 ({len(_dropped)}건):')
 for _d in _dropped:
     print(f"  [탈락] {_d['key']} — drop(등급50 {_d['drop']['등급50']}, 등급70 {_d['drop']['등급70']}, "
@@ -290,11 +298,20 @@ for r in adiga:
         except (TypeError, ValueError):
             return None
     g50, g70 = _g(g50), _g(g70)
+    # 충원배수 = 추합 ÷ 모집인원 (추합·모집인원 결측 또는 모집인원 0이면 null — 보정 미적용)
+    def _cw(chu, num):
+        try:
+            chu = float(chu); num = float(num)
+            if num <= 0: return None
+            return round(chu / num, 2)
+        except (TypeError, ValueError):
+            return None
     entry = {
         'jn': str(r.get('전형') or ''), 'jt': str(r.get('유형') or ''),
         'gy': str(r.get('계열') or ''), 'sub': str(r.get('소계열') or ''),
         'num': r.get('모집인원'), 'ratio': r.get('경쟁률'),
         'g50': g50, 'g70': g70, 'chu': r.get('추합'),
+        'cw': _cw(r.get('추합'), r.get('모집인원')),
         'year': 2026,  # 어디가 최신 공시 (연도별 배열 확장 대비)
     }
     key = u + '|' + dept
