@@ -5738,6 +5738,29 @@ function inTargetRegion(region, target) {
 const REGION_LABEL = { '서울': '서울', '경기인천': '경기·인천', '충청': '충청권', '기타': '기타' };
 const REGION_COLOR = { '서울': 'var(--teal)', '경기인천': 'var(--blue)', '충청': 'var(--copper)', '기타': 'var(--muted)' };
 
+// 지역 우선순위: 인서울(서울) > 인경기(경기·인천) > 충남권(충청) > 기타
+const REGION_PRIORITY = { '서울': 0, '경기인천': 1, '충청': 2, '기타': 3 };
+
+// 항목에서 지역 코드 추출 (문자열 대학명 / {region} / {univ} 모두 지원)
+function regionOf(item) {
+  if (item == null) return '기타';
+  if (typeof item === 'string') return UNIV_REGION[item] || '기타';
+  if (item.region) return item.region;
+  if (item.univ) return UNIV_REGION[item.univ] || '기타';
+  return '기타';
+}
+
+// ★ 공통 지역 정렬: 인서울→인경기→충남권→기타. 동일 지역 내에서는 secondaryCmp(기본: 기존 순서 유지)
+function sortByRegionPriority(items, getRegion, secondaryCmp) {
+  const rg = getRegion || regionOf;
+  return [...items].sort((a, b) => {
+    const ra = REGION_PRIORITY[rg(a)] ?? 3;
+    const rb = REGION_PRIORITY[rg(b)] ?? 3;
+    if (ra !== rb) return ra - rb;
+    return secondaryCmp ? secondaryCmp(a, b) : 0;
+  });
+}
+
 // 학생별 실제 합격선 매칭 결과
 function matchRealAdmissions(student, analysis) {
   const track = getStudentTrack(student, analysis);
@@ -5830,9 +5853,12 @@ function renderSusiTab(student, analysis) {
     <div style="font-size:11px;color:var(--muted)">학생 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 계열 판정 <strong>${stTrack}</strong> · 실제 합격선 자료(2025~2026 수박/어디가) 기준</div>
   </div>`;
 
-  // 실제 합격선 기반 대학 매칭 — 목표 지역 우선
-  const targetMatches = realMatches.filter(m => inTargetRegion(m.region, target));
-  const otherMatches = realMatches.filter(m => !inTargetRegion(m.region, target));
+  // 실제 합격선 기반 대학 매칭 — 인서울>인경기>충남권 순, 동일 지역 내 합격확률순
+  const byRegionThenProb = (a, b) => b.bestProb - a.bestProb;
+  const targetMatches = sortByRegionPriority(
+    realMatches.filter(m => inTargetRegion(m.region, target)), regionOf, byRegionThenProb);
+  const otherMatches = sortByRegionPriority(
+    realMatches.filter(m => !inTargetRegion(m.region, target)), regionOf, byRegionThenProb);
 
   const renderRealRow = (m) => {
     const band = realBand(m.bestProb);
@@ -5881,8 +5907,9 @@ function renderSusiTab(student, analysis) {
   }
   html += '</div>';
 
-  // Cutline matches (top section) with composite probability
-  const cutlineResults = results.filter(r => r.cutline);
+  // Cutline matches (top section) with composite probability — 인서울>인경기>충남권 순
+  const cutlineResults = sortByRegionPriority(
+    results.filter(r => r.cutline), regionOf, (a, b) => a.score - b.score);
   if (cutlineResults.length > 0) {
     html += '<div class="glass"><h3>합격 가능성 분석 (컷라인 비교)</h3>';
     html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">내신 환산, 경쟁률, 성적 추세, 전공적합성을 종합한 합격 확률 예측입니다.</p>';
@@ -5937,11 +5964,12 @@ function renderSusiTab(student, analysis) {
     <div style="font-size:11px;color:var(--muted)">도전 (15%↓)</div></div>`;
   html += '</div>';
 
-  // Top recommendations per tier
+  // Top recommendations per tier — 각 티어 내 인서울>인경기>충남권 순 (동일 지역 합격확률순)
   const recommend = [];
-  const topSafe = safeUnis.slice(0, 3);
-  const topFit = fitUnis.slice(0, 3);
-  const topReach = reachUnis.slice(0, 2);
+  const probDesc = (a, b) => b.prob - a.prob;
+  const topSafe = sortByRegionPriority(safeUnis, regionOf, probDesc).slice(0, 3);
+  const topFit = sortByRegionPriority(fitUnis, regionOf, probDesc).slice(0, 3);
+  const topReach = sortByRegionPriority(reachUnis, regionOf, probDesc).slice(0, 2);
 
   const buildRec = (items, tier, tierColor) => {
     items.forEach(r => {
@@ -6040,7 +6068,8 @@ function renderSusiTab(student, analysis) {
 
     const renderTypeSection = (label, color, items, maxShow) => {
       if (items.length === 0) return;
-      const top = items.slice(0, maxShow);
+      // 인서울>인경기>충남권 순 (동일 지역 합격확률순)
+      const top = sortByRegionPriority(items, regionOf, (a, b) => b.prob - a.prob).slice(0, maxShow);
       html += `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:${color};margin-bottom:5px">${label} (${items.length}교)</div>`;
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
       top.forEach(r => {
@@ -7365,10 +7394,13 @@ function renderRecordTab(student, analysis) {
     }
 
     // Match recommended departments to universities with good scores
-    const goodUnivs = univResults.filter(r => r.reliability === 'high' && r.score <= 4.0).slice(0, 8);
+    // 인서울>인경기>충남권 순 (동일 지역 환산등급 우수순)
+    const goodUnivs = sortByRegionPriority(
+      univResults.filter(r => r.reliability === 'high' && r.score <= 4.0),
+      regionOf, (a, b) => a.score - b.score).slice(0, 8);
     if (goodUnivs.length > 0) {
       html += '<div style="margin-top:8px;padding:10px 14px;background:var(--cream);border-radius:10px;font-size:12px">';
-      html += '<div style="font-weight:600;margin-bottom:6px">관련 학과가 있을 수 있는 환산등급 상위 대학</div>';
+      html += '<div style="font-weight:600;margin-bottom:6px">관련 학과가 있을 수 있는 상위 대학 (인서울·인경기·충남권 순)</div>';
       goodUnivs.forEach(u => {
         const c = gradeColor(u.score);
         html += `<span style="display:inline-block;padding:3px 10px;margin:2px 4px 2px 0;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px" onclick="showUnivDetail('${esc(u.univ)}')">
