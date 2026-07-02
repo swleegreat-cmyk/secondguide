@@ -6940,8 +6940,11 @@ function deptCutFallback(e) {
 function classifyBand(s, g50, g70, cw) {
   if (s == null || isNaN(s)) return null;
   if (g50 == null && g70 == null) return null;   // 컷 정보 없음 → 4구간 판정 강제하지 않음
-  const lo = g50 != null ? g50 : g70;             // 엄격한 컷 (수치 작음)
-  const hi = g70 != null ? g70 : g50;             // 관대한 컷 (수치 큼)
+  // 어디가 원자료에 등급50 > 등급70인 역전 레코드가 3.6% 존재(공시 특성)하므로
+  // min/max로 정규화해 사다리의 전제(엄격컷 ≤ 관대컷)를 항상 보장한다
+  const a = g50 != null ? g50 : g70, b = g70 != null ? g70 : g50;
+  const lo = Math.min(a, b);                      // 엄격한 컷 (수치 작음)
+  const hi = Math.max(a, b);                      // 관대한 컷 (수치 큼)
   let band;
   if (s < lo) band = '안정';
   else if (s <= hi) band = '적정';
