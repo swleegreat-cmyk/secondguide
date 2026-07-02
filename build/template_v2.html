@@ -2921,6 +2921,8 @@ function calcCompositeScore(univResult, student, analysis) {
   // 연속 확률값 대신 어디가 등급50/70과 학생 전과목 평균등급(동일 스케일) 비교로 판정.
   // 경계 정의·근거는 classifyBand() 주석 참조. 컷 결측이면 band=null(판정 강제 안 함).
   let band = null, bandNoCutLabel = null, bandBase = null, bandAdjusted = false, cwMultiple = null;
+  let bandReason = null;        // 상담사용 판정 근거 문자열
+  let judgeReliability = null;  // 학과별 판정 신뢰도 (빌드 단계 산출: 높음/보통/낮음)
   {
     const dcB = univResult.deptCut;
     if (dcB && (dcB.g50 != null || dcB.g70 != null)) {
@@ -2929,15 +2931,33 @@ function calcCompositeScore(univResult, student, analysis) {
       bandBase = classifyBand(sAvg, dcB.g50, dcB.g70);            // 보정 전
       band = classifyBand(sAvg, dcB.g50, dcB.g70, cwMultiple);    // 충원배수 보정 후 (기준: classifyBand 주석)
       bandAdjusted = band !== bandBase;
+      judgeReliability = dcB.rel || '보통';
+      // 판정 근거: 컷 비교 → 기본 구간 → 충원 보정 → 생기부 매칭 순으로 읽히게 구성
+      const cutsTxt = [dcB.g50 != null ? `50컷 ${dcB.g50}` : null, dcB.g70 != null ? `70컷 ${dcB.g70}` : null]
+        .filter(Boolean).join('·');
+      const parts = [`평균등급 ${sAvg.toFixed(2)} vs ${cutsTxt} → ${bandBase}`];
+      if (bandAdjusted) parts.push(`충원 ${cwMultiple.toFixed(1)}배수 감안 시 ${band}`);
+      else if (cwMultiple != null) parts.push(cwMultiple >= 1.0
+        ? `충원 ${cwMultiple.toFixed(1)}배수(${bandBase} 구간은 보정 대상 아님)`
+        : `충원 ${cwMultiple.toFixed(1)}배수(보정 기준 1.0 미만)`);
+      if (fitBonus) parts.push(`생기부 매칭 ${fitBonus > 0 ? '+' : ''}${fitBonus}점`);
+      bandReason = parts.join(', ');
     } else if (dcB && dcB.noCut) {
       bandNoCutLabel = dcB.label || '컷 정보 없음';
+      judgeReliability = '낮음';  // 등급50·70 모두 결측
+      bandReason = bandNoCutLabel;
     } else if (univResult.cutline && univResult.cutline.cut != null) {
       // 어디가 학과컷은 없지만 레거시 컷라인(반영교과 환산 기준)이 있는 대학:
       // 같은 4구간 사다리를 환산등급 vs 컷에 적용 (등급50/70 구분 없음 → 단일 컷 기준,
       // 충원배수 자료 없음 → 보정 미적용)
       band = bandBase = classifyBand(univResult.score, univResult.cutline.cut, univResult.cutline.cut);
+      judgeReliability = '보통';  // 컷 정보는 있으나 등급50/70·충원 자료 없음
+      bandReason = `환산내신 ${univResult.score.toFixed(2)} vs 컷 ${univResult.cutline.cut} → ${band}`
+        + (fitBonus ? `, 생기부 매칭 ${fitBonus > 0 ? '+' : ''}${fitBonus}점` : '');
     } else {
       bandNoCutLabel = '컷 정보 없음';
+      judgeReliability = null;
+      bandReason = null;
     }
   }
   // 텍스트 표시용 라벨 — 보정 적용 시 사실을 드러낸다
@@ -2945,6 +2965,7 @@ function calcCompositeScore(univResult, student, analysis) {
 
   return {
     band, bandBase, bandAdjusted, bandLabel, cwMultiple, bandNoCutLabel,
+    bandReason, judgeReliability,
     // probability 이하 수치는 내부 계산용(정렬·포트폴리오 통계·신뢰구간)으로만 사용하며
     // 추천 화면에는 표시하지 않는다 (구간 배지로 대체)
     probability: raw, probLow, probHigh,
@@ -4009,6 +4030,7 @@ function renderSusiTab(student, analysis) {
           <div class="univ">${esc(r.univ)}${ADMISSIONS_INFO[r.univ] ? ' <span style="font-size:10px;color:var(--blue);font-weight:600">' + esc(Object.keys(ADMISSIONS_INFO[r.univ])[0]) + '</span>' : ''}${minBadge}${trBadge}${cBadge}</div>
           <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}${comboLabel}</div>
           ${fbText ? `<div class="factor-line" style="font-size:10px;color:var(--sub);margin-top:3px">기여도: ${esc(fbText)}</div>` : ''}
+          ${comp.bandReason ? `<div style="font-size:10px;color:var(--teal);margin-top:2px">판정 근거: ${esc(comp.bandReason)}</div>` : ''}
         </div>
         <div class="match-num">
           <div>${bandBadge(comp.band, comp.bandNoCutLabel, comp)}</div>
@@ -4320,7 +4342,7 @@ function renderSusiTab(student, analysis) {
       <td style="font-weight:600;cursor:pointer" onclick="showUnivDetail('${esc(r.univ)}')">${esc(r.univ)}</td>
       <td style="font-size:12px">${esc(r.jeonType)}</td>
       <td><span class="mono" style="font-weight:700;color:${c}">${r.score.toFixed(2)}</span></td>
-      <td><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || (r.comp.bandNoCutLabel ? '컷없음' : '-')}${r.comp.cwMultiple != null ? ' <span style="font-size:9px;color:var(--muted);font-weight:400">충원 ' + r.comp.cwMultiple.toFixed(1) + '배수</span>' : ''}</span></td>
+      <td title="${esc(r.comp.bandReason || '')}"><span style="font-weight:800;font-size:11px;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || (r.comp.bandNoCutLabel ? '컷없음' : '-')}${r.comp.cwMultiple != null ? ' <span style="font-size:9px;color:var(--muted);font-weight:400">충원 ' + r.comp.cwMultiple.toFixed(1) + '배수</span>' : ''}</span> ${judgeRelBadge(r.comp.judgeReliability)}</td>
       <td><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${rec.categoryColor};color:#fff">${esc(rec.emoji)}</span></td>
       <td><span class="rel-badge ${relCls}">${relLabel}</span></td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.ruleType)}</td>
@@ -4356,6 +4378,7 @@ function renderSusiTab(student, analysis) {
           <div class="match-body">
             <div class="univ">${esc(r.univ)}</div>
             <div class="jeon">${esc(r.jeonType)} · ${r.score.toFixed(2)}등급${comp.comboUsed ? ' · 반영: ' + comp.comboUsed : ''}</div>
+            ${comp.bandReason ? `<div style="font-size:10px;color:var(--teal);margin-top:2px">판정 근거: ${esc(comp.bandReason)}</div>` : ''}
           </div>
           <div class="match-num">
             <div>${bandBadge(comp.band, comp.bandNoCutLabel, comp)}</div>
@@ -4633,7 +4656,18 @@ function bandBadge(band, noCutLabel, comp) {
   if (comp && comp.cwMultiple != null) {
     h += `<div style="font-size:9px;color:var(--muted);margin-top:2px">충원 ${comp.cwMultiple.toFixed(1)}배수</div>`;
   }
+  if (comp && comp.judgeReliability) {
+    h += `<div style="margin-top:2px">${judgeRelBadge(comp.judgeReliability)}</div>`;
+  }
   return h;
+}
+
+// 판정 신뢰도 배지 (빌드 단계 기준: 높음=컷·충원·모집 완비 & 모집 10명↑ / 보통=일부 결측·소수모집 / 낮음=컷 결측)
+const JUDGE_REL_COLOR = { '높음': 'var(--green)', '보통': 'var(--orange)', '낮음': 'var(--red)' };
+function judgeRelBadge(rel) {
+  if (!rel) return '';
+  const c = JUDGE_REL_COLOR[rel] || 'var(--muted)';
+  return `<span style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid ${c};color:${c};font-weight:700;white-space:nowrap">신뢰도: ${rel}</span>`;
 }
 
 function getDeptCutline(univName, student, analysis, jeonType) {
@@ -4647,6 +4681,7 @@ function getDeptCutline(univName, student, analysis, jeonType) {
   const matchedCuts = [], trackCuts = [], anyCuts = [];
   const matched50 = [], matched70 = [], track50 = [], track70 = [], any50 = [], any70 = [];
   const matchedCw = [], trackCw = [], anyCw = [];   // 충원배수 (추합÷모집인원)
+  const matchedRel = [], trackRel = [], anyRel = []; // 판정 신뢰도 (빌드 단계 산출: 높음/보통/낮음)
   let matchedName = null;
   let no70Used = 0;            // 등급50 폴백으로 판정한 레코드 수
   const noCutRatios = [];      // 둘 다 결측 레코드의 경쟁률 (판정불가 참고용)
@@ -4669,37 +4704,45 @@ function getDeptCutline(univName, student, analysis, jeonType) {
         if (e.g50 != null) matched50.push(e.g50);
         if (e.g70 != null) matched70.push(e.g70);
         if (e.cw != null) matchedCw.push(e.cw);
+        if (e.rel) matchedRel.push(e.rel);
       }
       if (!e.gy || e.gy === track || e.gy === '통합' || e.gy === '공통') {
         trackCuts.push(cut);
         if (e.g50 != null) track50.push(e.g50);
         if (e.g70 != null) track70.push(e.g70);
         if (e.cw != null) trackCw.push(e.cw);
+        if (e.rel) trackRel.push(e.rel);
       }
       if (e.gy !== '예체능') {
         anyCuts.push(cut);
         if (e.g50 != null) any50.push(e.g50);
         if (e.g70 != null) any70.push(e.g70);
         if (e.cw != null) anyCw.push(e.cw);
+        if (e.rel) anyRel.push(e.rel);
       }
     }
   }
   const no70 = no70Used > 0;
   // 4구간 판정용 등급50/등급70 중앙값 (선택된 버킷과 동일한 우선순위: 매칭학과 > 계열 > 전체)
-  const _mk = (cuts, g50s, g70s, cws, extra) => Object.assign({
+  // 버킷 판정 신뢰도: 기여 레코드들의 등급 중 가장 보수적인 값 (낮음 < 보통 < 높음)
+  const _relRank = { '낮음': 0, '보통': 1, '높음': 2 };
+  const _relAgg = rels => rels.length ? rels.reduce((a, b) => (_relRank[b] < _relRank[a] ? b : a)) : null;
+  const _mk = (cuts, g50s, g70s, cws, rels, extra) => Object.assign({
     cut: Math.round(_median(cuts)*100)/100,
     g50: g50s.length ? Math.round(_median(g50s)*100)/100 : null,
     g70: g70s.length ? Math.round(_median(g70s)*100)/100 : null,
     cw: cws.length ? Math.round(_median(cws)*100)/100 : null,
+    rel: _relAgg(rels),
     jt, no70, no70Used
   }, extra);
-  if (matchedCuts.length) return _mk(matchedCuts, matched50, matched70, matchedCw, { dept: matchedName, n: matchedCuts.length, matched: true });
-  if (trackCuts.length) return _mk(trackCuts, track50, track70, trackCw, { dept: null, n: trackCuts.length, matched: false });
-  if (anyCuts.length) return _mk(anyCuts, any50, any70, anyCw, { dept: null, n: anyCuts.length, matched: false, crossTrack: true });
+  if (matchedCuts.length) return _mk(matchedCuts, matched50, matched70, matchedCw, matchedRel, { dept: matchedName, n: matchedCuts.length, matched: true });
+  if (trackCuts.length) return _mk(trackCuts, track50, track70, trackCw, trackRel, { dept: null, n: trackCuts.length, matched: false });
+  if (anyCuts.length) return _mk(anyCuts, any50, any70, anyCw, anyRel, { dept: null, n: anyCuts.length, matched: false, crossTrack: true });
   // 등급 있는 레코드가 하나도 없음 → 판정 불가 (경쟁률 참고값과 함께 반환, 제외하지 않음)
   if (noCutRatios.length) {
     const ratioRef = Math.round(_median(noCutRatios) * 10) / 10;
     return { cut: null, noCut: true, ratioRef, n: noCutRatios.length, dept: null, matched: false, jt,
+             rel: '낮음',  // 등급50·70 모두 결측 → 판정 신뢰도 낮음
              label: `컷 정보 없음 — 경쟁률 ${ratioRef}:1 참고` };
   }
   return null;
@@ -4913,7 +4956,7 @@ function renderDeptCutSection(univName, student) {
       <td class="mono"${e.cw != null && e.cw >= 1.0 ? ' style="color:var(--green);font-weight:700"' : ''}>${e.cw != null ? '충원 ' + e.cw.toFixed(1) + '배수' : '-'}</td>
       <td class="mono">${e.g50 ?? '-'}</td>
       <td class="mono" style="font-weight:700">${e.g70 ?? '-'}</td>
-      <td>${probCell}</td>
+      <td>${probCell}${e.rel ? ' ' + judgeRelBadge(e.rel) : ''}</td>
     </tr>`;
   });
   h += '</tbody></table></div>';

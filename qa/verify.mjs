@@ -336,6 +336,56 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 학과별 판정 신뢰도 등급 (빌드 단계 산출 rel 필드) + 판정 근거 문자열
+// 기준: 높음=등급50·70·추합·모집인원 완비 & 모집≥10 / 보통=컷 있으나 일부 결측·모집<10 / 낮음=컷 모두 결측
+// ═══════════════════════════════════════════════
+{
+  const rel = await page.evaluate(() => {
+    const ruleOf = e => {
+      const numOk = e.num != null && !isNaN(parseFloat(e.num));
+      const chuOk = e.chu != null && !isNaN(parseFloat(e.chu));
+      if (e.g50 == null && e.g70 == null) return '낮음';
+      if (e.g50 != null && e.g70 != null && chuOk && numOk && parseFloat(e.num) >= 10) return '높음';
+      return '보통';
+    };
+    const found = { 높음: null, 보통: null, 낮음: null };
+    let checked = 0, mismatch = 0;
+    for (const [key, list] of Object.entries(DEPT_CUTLINES)) {
+      for (const e of list) {
+        checked++;
+        if (ruleOf(e) !== e.rel) mismatch++;
+        if (!found[e.rel]) found[e.rel] = { key, g50: e.g50, g70: e.g70, chu: e.chu, num: e.num, rel: e.rel };
+      }
+    }
+    return { found, checked, mismatch };
+  });
+  const f = rel.found;
+  assert(`신뢰도등급#1(높음): 컷·추합·모집 완비 & 모집≥10 — 예: ${f.높음 && f.높음.key}`,
+    f.높음 && f.높음.g50 != null && f.높음.g70 != null && parseFloat(f.높음.num) >= 10, JSON.stringify(f.높음));
+  assert(`신뢰도등급#2(보통): 컷 있으나 일부 결측/모집<10 — 예: ${f.보통 && f.보통.key}`,
+    f.보통 && (f.보통.g50 != null || f.보통.g70 != null), JSON.stringify(f.보통));
+  assert(`신뢰도등급#3(낮음): 등급50·70 모두 결측 — 예: ${f.낮음 && f.낮음.key} · 전수 ${rel.checked}건 규칙 일치(불일치 ${rel.mismatch})`,
+    f.낮음 && f.낮음.g50 == null && f.낮음.g70 == null && rel.mismatch === 0, JSON.stringify(f.낮음));
+}
+// 판정근거#1: calcCompositeScore가 상담사용 근거 문자열을 생성하는지
+{
+  const r = await page.evaluate(() => {
+    for (let si = 0; si < STUDENTS.length; si++) {
+      const s = STUDENTS[si], a = ANALYSIS[s.seat] || {};
+      for (const ur of runAllUniversities(s)) {
+        const comp = calcCompositeScore(ur, s, a);
+        if (comp.band && comp.bandReason && ur.deptCut && ur.deptCut.g70 != null) {
+          return { univ: ur.univ, band: comp.band, reason: comp.bandReason, rel: comp.judgeReliability };
+        }
+      }
+    }
+    return null;
+  });
+  const ok = r && /평균등급 [\d.]+ vs .*컷 [\d.]+ → (안정|적정|소신|상향)/.test(r.reason) && r.rel;
+  assert(`판정근거#1: "평균등급 X vs 컷 Y → 구간" 형식 생성 — 예: ${r && r.reason}`, !!ok, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.

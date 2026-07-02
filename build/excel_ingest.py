@@ -306,12 +306,36 @@ for r in adiga:
             return round(chu / num, 2)
         except (TypeError, ValueError):
             return None
+
+    # ── 학과별 판정 신뢰도 등급 ──
+    # 기준:
+    #   높음: 등급50·등급70·추합·모집인원 4개 필드 모두 유효 AND 모집인원 10명 이상
+    #         (충분한 표본과 완전한 컷·충원 정보 → 판정을 그대로 신뢰 가능)
+    #   보통: 컷 정보(등급50 또는 등급70)는 있으나 일부 필드 결측 또는 모집인원 10명 미만
+    #         (판정은 가능하지만 소수 모집·정보 부족으로 오차 가능성)
+    #   낮음: 등급50·등급70 모두 결측 (컷 비교 판정 불가 — 경쟁률 참고만 가능)
+    def _rel(g50v, g70v, chu, num):
+        try:
+            num_f = float(num)
+        except (TypeError, ValueError):
+            num_f = None
+        try:
+            chu_f = float(chu)
+        except (TypeError, ValueError):
+            chu_f = None
+        if g50v is None and g70v is None:
+            return '낮음'
+        if (g50v is not None and g70v is not None and chu_f is not None
+                and num_f is not None and num_f >= 10):
+            return '높음'
+        return '보통'
     entry = {
         'jn': str(r.get('전형') or ''), 'jt': str(r.get('유형') or ''),
         'gy': str(r.get('계열') or ''), 'sub': str(r.get('소계열') or ''),
         'num': r.get('모집인원'), 'ratio': r.get('경쟁률'),
         'g50': g50, 'g70': g70, 'chu': r.get('추합'),
         'cw': _cw(r.get('추합'), r.get('모집인원')),
+        'rel': _rel(g50, g70, r.get('추합'), r.get('모집인원')),
         'year': 2026,  # 어디가 최신 공시 (연도별 배열 확장 대비)
     }
     key = u + '|' + dept
