@@ -478,6 +478,34 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 지원 카드 레이어 (대학×전형×학과 단위) 검증
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS[1];
+    const cards = buildApplicationCards(s);
+    const adigaRows = Object.values(DEPT_CUTLINES).reduce((a, l) => a + l.length, 0);
+    const fieldsOk = cards.slice(0, 500).every(c =>
+      'band' in c && 'cw' in c && 'rel' in c && typeof c.score === 'number' && c.univ && c.dept);
+    const bySub = getCards(s, { subs: ['간호'] });
+    const manualSub = cards.filter(c => c.sub === '간호').length;
+    const byJt = getCards(s, { subs: [], jt: '논술' });
+    const manualJt = cards.filter(c => String(c.jt).includes('논술')).length;
+    return { cards: cards.length, adigaRows, fieldsOk,
+             sub: { got: bySub.length, manual: manualSub, allMatch: bySub.every(c => c.sub === '간호') },
+             jt: { got: byJt.length, manual: manualJt, allMatch: byJt.every(c => String(c.jt).includes('논술')) } };
+  });
+  // adiga 유효 행수(중복 제거 후) — data_quality.json과 3중 대조
+  const dqClean = dq.total_clean;
+  assert(`카드#1: 카드 ${r.cards}장 == DEPT_CUTLINES ${r.adigaRows}행 == adiga 정제 ${dqClean}행 · 필수 필드(판정/충원/신뢰도/환산) 완비`,
+    r.cards === r.adigaRows && r.cards === dqClean && r.fieldsOk, JSON.stringify(r));
+  assert(`카드#2: 소계열 필터 '간호' → ${r.sub.got}장 (수동 대조 ${r.sub.manual}) 전부 일치`,
+    r.sub.got === r.sub.manual && r.sub.got > 0 && r.sub.allMatch, JSON.stringify(r.sub));
+  assert(`카드#3: 유형 필터 '논술' → ${r.jt.got}장 (수동 대조 ${r.jt.manual}) 전부 일치`,
+    r.jt.got === r.jt.manual && r.jt.got > 0 && r.jt.allMatch, JSON.stringify(r.jt));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.

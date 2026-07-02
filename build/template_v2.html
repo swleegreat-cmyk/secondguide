@@ -1140,6 +1140,100 @@ function runAllUniversities(student) {
 }
 
 // ═══════════════════════════════════════════════
+// 지원 카드 레이어 — 추천 기본 단위: 대학 × 전형 × 학과
+// adiga 유효 행(DEPT_CUTLINES에 그대로 적재된 것) 1행 = 카드 1장.
+// 기존 대학 단위 함수(runAllUniversities 등)와 공존한다 (점진 전환용 기반).
+// ═══════════════════════════════════════════════
+const _cardCache2 = {};
+function buildApplicationCards(student) {
+  if (_cardCache2[student.seat]) return _cardCache2[student.seat];
+  const stAvg = calcWeightedAvg(student);
+  const engineSubj = toEngineFormat(student);
+  const univScore = {};  // 대학별 학생 환산등급 (NAESIN 규칙 보유 대학만 환산, 그 외 전과목 평균)
+  const scoreOf = univ => {
+    if (univScore[univ] !== undefined) return univScore[univ];
+    let v = stAvg;
+    if (NAESIN_RULES[univ]) {
+      try {
+        const r = computeScore(engineSubj, NAESIN_RULES[univ], { A: 1, B: 3, C: 5 });
+        if (r && r.환산등급 != null && !isNaN(r.환산등급)) v = r.환산등급;
+      } catch (e) {}
+    }
+    return (univScore[univ] = Math.round(v * 100) / 100);
+  };
+  const cards = [];
+  for (const [key, entries] of Object.entries(DEPT_CUTLINES)) {
+    const bar = key.indexOf('|');
+    const univ = key.slice(0, bar), dept = key.slice(bar + 1);
+    const region = UNIV_REGION[univ] || '기타';
+    for (const e of entries) {
+      // 4구간 판정: 학생 전과목 평균 vs 해당 학과·전형의 등급50/70 (충원배수 보정 포함)
+      const band = classifyBand(stAvg, e.g50, e.g70, e.cw);
+      const bandBase = classifyBand(stAvg, e.g50, e.g70);
+      cards.push({
+        univ, dept, region,
+        jn: e.jn, jt: e.jt, gy: e.gy, sub: e.sub || '',
+        num: e.num, ratio: e.ratio, chu: e.chu,
+        cw: e.cw != null ? e.cw : null,          // 충원배수
+        rel: e.rel || '보통',                     // 판정 신뢰도 (빌드 단계 산출)
+        g50: e.g50, g70: e.g70,
+        score: scoreOf(univ),                      // 학생 환산등급
+        stAvg: Math.round(stAvg * 100) / 100,
+        band, bandBase,
+        bandAdjusted: band !== bandBase,
+        noCut: e.g50 == null && e.g70 == null,
+        noCutLabel: (e.g50 == null && e.g70 == null) ? `컷 정보 없음 — 경쟁률 ${e.ratio ?? '?'}:1 참고` : null,
+      });
+    }
+  }
+  return (_cardCache2[student.seat] = cards);
+}
+
+// ── 학생별 희망 계열(소계열 복수) — localStorage 보존 ──
+function getHopeSubs(seat) {
+  try {
+    const v = localStorage.getItem('hopeSubs_' + seat);
+    return v ? JSON.parse(v) : [];
+  } catch (e) { return []; }
+}
+function setHopeSubs(seat, subs) {
+  try { localStorage.setItem('hopeSubs_' + seat, JSON.stringify(subs || [])); } catch (e) {}
+}
+function allSubTracks() {
+  const set = new Set();
+  for (const list of Object.values(DEPT_CUTLINES)) for (const e of list) if (e.sub) set.add(e.sub);
+  return [...set].sort();
+}
+
+// ── 공통 카드 조회: getCards(student, filters) ──
+// filters:
+//   subs: [소계열...] — 명시하지 않으면 학생의 희망 계열(getHopeSubs) 자동 적용 (빈 배열 = 전체)
+//   jt: '교과'|'종합'|'논술'  · region: '서울'|'경기인천'|'충청'|'기타' · band: '안정'|'적정'|'소신'|'상향'
+//   sort: 'region'(기본: 지역 우선순위→구간→신뢰도) | 'band' | 'rel' | 'score'
+const _BAND_RANK = { '안정': 3, '적정': 2, '소신': 1, '상향': 0 };
+const _REL_RANK = { '높음': 2, '보통': 1, '낮음': 0 };
+function getCards(student, filters = {}) {
+  let cards = buildApplicationCards(student);
+  const subs = filters.subs !== undefined ? filters.subs : getHopeSubs(student.seat);
+  if (subs && subs.length) cards = cards.filter(c => subs.includes(c.sub));
+  if (filters.jt) cards = cards.filter(c => String(c.jt).includes(filters.jt));
+  if (filters.region) cards = cards.filter(c => c.region === filters.region);
+  if (filters.band) cards = cards.filter(c => c.band === filters.band);
+  const sort = filters.sort || 'region';
+  const regionPr = c => REGION_PRIORITY[c.region] ?? 3;
+  cards = cards.slice().sort((a, b) => {
+    if (sort === 'band') return (_BAND_RANK[b.band] ?? -1) - (_BAND_RANK[a.band] ?? -1) || regionPr(a) - regionPr(b);
+    if (sort === 'rel') return (_REL_RANK[b.rel] ?? 0) - (_REL_RANK[a.rel] ?? 0) || (_BAND_RANK[b.band] ?? -1) - (_BAND_RANK[a.band] ?? -1);
+    if (sort === 'score') return (a.g70 ?? a.g50 ?? 99) - (b.g70 ?? b.g50 ?? 99);
+    // 기본: 지역 우선순위 → 구간 유리 → 신뢰도
+    return regionPr(a) - regionPr(b)
+      || (_BAND_RANK[b.band] ?? -1) - (_BAND_RANK[a.band] ?? -1)
+      || (_REL_RANK[b.rel] ?? 0) - (_REL_RANK[a.rel] ?? 0);
+  });
+  return cards;
+}
+
+// ═══════════════════════════════════════════════
 // 세특 문장 태깅 엔진 (신호 사전은 별도 데이터 파일 signal_dictionary.js에서 주입)
 // ═══════════════════════════════════════════════
 __SIGNAL_DICT__
@@ -4108,6 +4202,47 @@ function renderSusiTab(student, analysis) {
 
   let html = '';
 
+  // ═══ 희망 계열(소계열) 설정 + 지원 카드 추천 (대학×전형×학과 단위) ═══
+  {
+    const hope = getHopeSubs(student.seat);
+    const subs = allSubTracks();
+    html += '<div class="glass"><h3>희망 계열 설정 <span style="font-size:10px;color:var(--muted);font-weight:400">(소계열 복수 선택 — 이 브라우저에 저장)</span></h3>';
+    if (!hope.length) {
+      html += '<div style="padding:8px 12px;background:var(--orange-light);border-radius:8px;font-size:12px;color:var(--orange);font-weight:600;margin-bottom:8px">희망 계열을 설정하면 정확한 추천이 가능합니다 — 현재는 전체 계열을 대상으로 표시합니다.</div>';
+    }
+    html += '<div style="display:flex;flex-wrap:wrap;gap:5px;max-height:120px;overflow-y:auto;padding:4px 0">';
+    subs.forEach(sub => {
+      const on = hope.includes(sub);
+      html += `<span onclick="toggleHopeSub(${student.seat}, '${esc(sub).replace(/'/g, "\\'")}')"
+        style="cursor:pointer;font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};
+        background:${on ? 'var(--teal)' : 'var(--card)'};color:${on ? '#fff' : 'var(--sub)'};font-weight:${on ? 700 : 400}">${esc(sub)}</span>`;
+    });
+    html += '</div>';
+    if (hope.length) html += `<div style="font-size:11px;color:var(--teal);margin-top:6px">선택: ${hope.map(esc).join(' · ')} <span style="cursor:pointer;color:var(--red);font-weight:700" onclick="clearHopeSubs(${student.seat})">[전체 해제]</span></div>`;
+    html += '</div>';
+
+    // 지원 카드 추천 목록 (희망 계열 필터 자동 적용, 지역→구간→신뢰도 정렬)
+    const cards = getCards(student).filter(c => !c.noCut);
+    const top = cards.filter(c => c.band === '안정' || c.band === '적정' || c.band === '소신').slice(0, 15);
+    html += `<div class="glass"><h3>지원 카드 추천 <span style="font-size:10px;color:var(--muted);font-weight:400">(대학×전형×학과 단위 · ${hope.length ? '희망 계열 ' + hope.length + '개' : '전체 계열'} 대상 ${cards.length}장)</span></h3>`;
+    if (!top.length) {
+      html += '<p style="font-size:12px;color:var(--muted)">안정·적정·소신 구간 카드가 없습니다. 희망 계열을 넓히거나 상향 카드를 검토하세요.</p>';
+    } else {
+      top.forEach(c => {
+        const bs = BAND_STYLE[c.band] || {};
+        html += `<div class="match-row" onclick="showUnivDetail('${esc(c.univ)}')" style="cursor:pointer">
+          <span class="match-badge" style="background:${bs.color || 'var(--muted)'};color:#fff;min-width:34px">${c.bandAdjusted ? '충원 감안 시 ' + c.band : c.band}</span>
+          <div class="match-body">
+            <div class="univ">${esc(c.univ)} <strong>${esc(c.dept)}</strong> <span style="font-size:10px;color:var(--muted)">${esc(c.jn || c.jt)}</span> ${judgeRelBadge(c.rel)}</div>
+            <div class="jeon">${esc(c.sub || c.gy || '')} · 50컷 ${c.g50 ?? '-'} · 70컷 ${c.g70 ?? '-'} · 경쟁률 ${c.ratio ?? '-'}${c.cw != null ? ' · 충원 ' + c.cw.toFixed(1) + '배수' : ''}</div>
+          </div>
+          <div class="match-num"><div class="unit">평균 ${c.stAvg} / 환산 ${c.score}</div></div>
+        </div>`;
+      });
+    }
+    html += '</div>';
+  }
+
   // Stats
   const highRel = results.filter(r => r.reliability === 'high').length;
   const ruleCnt = results.filter(r => r.ruleType !== '어디가 실적 기반').length;
@@ -5085,6 +5220,19 @@ function cutCurveProb(diff, is종합, is논술) {
 }
 
 // 학과별 합격선 테이블 (모달용) — 필터 검색 지원
+function toggleHopeSub(seat, sub) {
+  const cur = getHopeSubs(seat);
+  const i = cur.indexOf(sub);
+  if (i >= 0) cur.splice(i, 1); else cur.push(sub);
+  setHopeSubs(seat, cur);
+  const s = STUDENTS.find(x => x.seat === seat);
+  if (s) renderSusiTab(s, ANALYSIS[seat] || {});
+}
+function clearHopeSubs(seat) {
+  setHopeSubs(seat, []);
+  const s = STUDENTS.find(x => x.seat === seat);
+  if (s) renderSusiTab(s, ANALYSIS[seat] || {});
+}
 function filterDeptRows(inp) {
   const q = inp.value.trim().toLowerCase();
   const tb = document.getElementById('deptCutBody');
