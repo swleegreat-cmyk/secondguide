@@ -4392,6 +4392,22 @@ function calcCompositeScore(univResult, student, analysis) {
       else if (classPctl >= 75) classAdj = -Math.round(3 * tierScale);
       else if (classPctl >= 60) classAdj = -Math.round(1 * tierScale);
       else if (classPctl >= 55) classAdj = -1;
+
+      // Percentile-based probability correction for score-scale mismatches
+      const pctlProbTable = [
+        [2, 85], [5, 75], [10, 63], [15, 55], [20, 48],
+        [30, 38], [40, 28], [50, 22], [60, 16], [70, 11],
+        [80, 7], [90, 4], [95, 2]
+      ];
+      let pctlBase = interpolateAnchors(classPctl, pctlProbTable, 90);
+      pctlBase = Math.round(pctlBase * (effectiveTier >= 4 ? 0.7 : effectiveTier >= 3 ? 0.8 : effectiveTier >= 2 ? 0.9 : 1.0));
+      const corrGap = pctlBase - (base + classAdj);
+      const absGap = Math.abs(corrGap);
+      if (absGap > 10) {
+        const excess = absGap - 10;
+        const corr = Math.sign(corrGap) * Math.round(excess * 0.15);
+        classAdj += Math.max(-6, Math.min(6, corr));
+      }
     }
   }
 
@@ -4520,6 +4536,7 @@ function calcCompositeScore(univResult, student, analysis) {
   else if (!univResult.cutline) ciHalf += 1;
   if (univResult.reliability === 'none') ciHalf += 4;
   else if (univResult.reliability === 'low') ciHalf += 2;
+  else if (univResult.reliability === 'medium') ciHalf += 1;
   if (univResult.count && univResult.count < 10) ciHalf += 2;
   if (gc.level === 'very_low') ciHalf += 3;
   else if (gc.level === 'low') ciHalf += 1;
