@@ -4939,12 +4939,11 @@ function calcCompositeScore(univResult, student, analysis) {
 
     // 어디가 학과별 컷 반영: 학과 키("대학명|학과명") 조회 결과가 있으면
     // 컷 기반 확률을 티어 추정치와 블렌딩 (학과 컷 55% / 티어 45%)
-    // 상위N 환산 대학은 환산등급이 어디가 공시 기준(대체로 전과목)보다 유리하므로
-    // 환산·전과목 중간값으로 보수 보정
+    // 어디가 등급50/70 컷은 등록자 학생부 전과목 평균등급(1~9) 기준 공시값이므로
+    // 학생 측도 전과목 단위가중 평균등급으로 동일 스케일 비교 (상위N 환산등급 혼용 금지)
     if (univResult.deptCut && univResult.deptCut.cut != null) {
       const stAvgAll = calcWeightedAvg(student);
-      const ref = comboScore < stAvgAll ? (comboScore + stAvgAll) / 2 : comboScore;
-      const dBase = cutCurveProb(ref - univResult.deptCut.cut, is종합, is논술);
+      const dBase = cutCurveProb(stAvgAll - univResult.deptCut.cut, is종합, is논술);
       base = Math.round(dBase * 0.55 + base * 0.45);
     }
 
