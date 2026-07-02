@@ -425,6 +425,13 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 .rel-low { background:var(--red-light); color:var(--red); }
 .rel-none { background:var(--cream); color:var(--muted); }
 
+/* 수능최저 충족 배지 */
+.min-badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:10px; font-weight:700; white-space:nowrap; cursor:help; }
+.min-ok { background:var(--green-light); color:var(--green); }
+.min-fail { background:var(--red-light); color:var(--red); }
+.min-none { background:var(--cream); color:var(--muted); }
+.min-unknown { background:var(--orange-light); color:var(--orange); }
+
 /* Sort controls */
 .sort-controls { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
 .sort-btn {
@@ -4214,6 +4221,153 @@ function parseMinRequirement(minText, studentAvg, student) {
   return { penalty, detail: subjectDetail ? detail + ' [' + subjectDetail + ']' : detail, meetRate, difficulty };
 }
 
+// ═══════════════════════════════════════════════
+// 수능 최저학력기준 충족 판정
+// ═══════════════════════════════════════════════
+// 학생 수능 등급 추출: 실제 데이터(student.suneung) 우선, 없으면 내신 핵심교과로 추정
+function getSuneungGrades(student) {
+  if (student && student.suneung && typeof student.suneung === 'object' && Object.keys(student.suneung).length) {
+    return { grades: Object.assign({}, student.suneung), estimated: false };
+  }
+  const grades = {};
+  try {
+    const sa = calcSubjectAvgs(student);
+    ['국어','수학','영어','사회','과학','한국사'].forEach(n => {
+      const f = sa.find(s => s.name === n);
+      if (f) grades[n] = Math.max(1, Math.min(9, Math.round(f.avg)));
+    });
+  } catch (e) {}
+  return { grades, estimated: true };
+}
+
+// 최저기준 텍스트에서 학과별 조항 선택 ('/'로 구분된 다중 조항 대응)
+function selectMinClause(minText, deptName) {
+  if (!minText.includes('/')) return minText;
+  const clauses = minText.split('/').map(s => s.trim());
+  if (deptName) {
+    const hit = clauses.find(c => c.includes(deptName) || (deptName.length >= 2 && c.includes(deptName.slice(0, 2))));
+    if (hit) return hit;
+  }
+  // 학과 지정이 없거나 매칭 실패 → '학과명:' 접두어 없는 일반 조항 우선
+  const general = clauses.find(c => !/^[가-힣A-Za-z·]+(과|부|학부|전공|계열)\s*[:：]/.test(c));
+  return general || clauses[0];
+}
+
+// ★ 수능 최저학력기준 충족 판정
+// student: 학생 객체(또는 {suneung:{국어,수학,영어,탐구,한국사}}), minSpec: 기준 문자열 또는 {min}, deptName: 학과(선택)
+// 반환: { applicable, meets, required, usedAreas, sumHave, sumNeed, shortfall:[{area,...}], koreanHistory, estimated }
+function checkMinRequirement(student, minSpec, deptName) {
+  const rawText = (typeof minSpec === 'string') ? minSpec
+    : (minSpec && (minSpec.min || minSpec.minText || minSpec.기준)) || '';
+  const dept = deptName || (minSpec && (minSpec.dept || minSpec.jn)) || null;
+  const trimmed = String(rawText).trim();
+  if (!trimmed || /^(미적용|없음|무|x|X|—|-|없)$/.test(trimmed)) {
+    return { applicable: false, meets: true, required: '수능최저 없음', usedAreas: [], shortfall: [], estimated: false };
+  }
+
+  const minText = selectMinClause(trimmed, dept);
+  const sg = getSuneungGrades(student);
+  const g = sg.grades;
+  const estimated = sg.estimated;
+
+  // 사용 가능한 영역 등급 (국/수/영/탐구). 탐구는 명시값 없으면 min(사회,과학)
+  const areaDefs = ['국어', '수학', '영어', '탐구'];
+  const avail = areaDefs.map(a => {
+    let v = g[a];
+    if (a === '탐구' && v == null) {
+      const s = g['사회'], sc = g['과학'];
+      if (s != null || sc != null) v = Math.min(s == null ? 9 : s, sc == null ? 9 : sc);
+    }
+    return (v != null) ? { area: a, grade: v } : null;
+  }).filter(Boolean);
+
+  // 한국사 부가조건
+  let koreanHistory = null;
+  const hm = minText.match(/한국사\s*(\d)\s*등급/);
+  if (hm) {
+    const need = parseInt(hm[1]);
+    const have = g['한국사'];
+    koreanHistory = { need, have, meets: (have == null) ? true : have <= need };
+  }
+
+  const byGrade = [...avail].sort((a, b) => a.grade - b.grade);
+  let meets = true, required = minText, usedAreas = [], sumHave = null, sumNeed = null, shortfall = [];
+
+  const mSum = minText.match(/(\d)\s*개\s*(?:영역\s*)?(?:등급\s*)?합\s*(\d+)/);
+  const mArea = minText.match(/(\d)\s*개\s*영역\s*(\d)\s*등급/);
+  const mSingle = !mSum && !mArea ? minText.match(/(\d)\s*등급\s*이내/) : null;
+
+  if (mSum) {
+    const count = parseInt(mSum[1]), total = parseInt(mSum[2]);
+    required = `${count}개 등급 합 ${total} 이내`;
+    if (byGrade.length < count) {
+      meets = false;
+      shortfall.push({ type: 'insufficient-areas', detail: `반영 영역 ${byGrade.length}개 < 필요 ${count}개` });
+    } else {
+      usedAreas = byGrade.slice(0, count);
+      sumHave = usedAreas.reduce((s, a) => s + a.grade, 0);
+      sumNeed = total;
+      if (sumHave > total) {
+        meets = false;
+        shortfall.push({ type: 'sum-over', over: sumHave - total,
+          detail: `상위 ${count}개 합 ${sumHave} > 기준 ${total} (${sumHave - total}등급 초과)`,
+          areas: usedAreas.map(a => `${a.area} ${a.grade}등급`) });
+      }
+    }
+  } else if (mArea) {
+    const count = parseInt(mArea[1]), gradeMax = parseInt(mArea[2]);
+    required = `${count}개 영역 ${gradeMax}등급 이내`;
+    const qualify = avail.filter(a => a.grade <= gradeMax);
+    usedAreas = qualify;
+    if (qualify.length < count) {
+      meets = false;
+      shortfall.push({ type: 'area-count', detail: `${gradeMax}등급 이내 영역 ${qualify.length}개 < 필요 ${count}개`,
+        areas: avail.map(a => `${a.area} ${a.grade}등급`) });
+    }
+  } else if (mSingle) {
+    const gradeMax = parseInt(mSingle[1]);
+    required = `1개 영역 ${gradeMax}등급 이내`;
+    const best = byGrade[0];
+    usedAreas = best ? [best] : [];
+    if (!best || best.grade > gradeMax) {
+      meets = false;
+      shortfall.push({ type: 'single', detail: `최상위 영역 ${best ? best.grade : '-'}등급 > 기준 ${gradeMax}등급`,
+        areas: best ? [`${best.area} ${best.grade}등급`] : [] });
+    }
+  } else {
+    // 파싱 불가 — 판정 보류
+    return { applicable: true, meets: null, required: minText, usedAreas: [], shortfall: [],
+      note: '기준 형식을 자동 해석하지 못했습니다.', estimated };
+  }
+
+  // 한국사 조건 반영
+  if (koreanHistory && !koreanHistory.meets) {
+    meets = false;
+    shortfall.push({ type: 'korean-history', detail: `한국사 ${koreanHistory.have}등급 > 기준 ${koreanHistory.need}등급` });
+  }
+
+  return { applicable: true, meets, required, usedAreas, sumHave, sumNeed, shortfall, koreanHistory, estimated,
+    studentGrades: g };
+}
+
+// 최저기준 충족 판정 → 배지 HTML
+function minReqBadge(student, minSpec, deptName) {
+  const r = checkMinRequirement(student, minSpec, deptName);
+  if (!r.applicable) {
+    return `<span class="min-badge min-none" title="수능최저 없음">최저 없음</span>`;
+  }
+  if (r.meets === null) {
+    return `<span class="min-badge min-unknown" title="${esc(r.required)}">최저 확인필요</span>`;
+  }
+  const est = r.estimated ? ' (추정)' : '';
+  if (r.meets) {
+    const areas = r.usedAreas.map(a => `${a.area}${a.grade}`).join('·');
+    return `<span class="min-badge min-ok" title="${esc(r.required)} · ${esc(areas)}">✓ 최저 충족${est}</span>`;
+  }
+  const short = r.shortfall[0] ? r.shortfall[0].detail : '기준 미달';
+  return `<span class="min-badge min-fail" title="${esc(r.required)} · ${esc(short)}">✗ 최저 미충족${est}</span>`;
+}
+
 function calcOptimalPortfolio(allComps, count) {
   const sorted = [...allComps].sort((a,b) => b.prob - a.prob);
   const picks = [];
@@ -6007,10 +6161,11 @@ function renderSusiTab(student, analysis) {
       const comp = calcCompositeScore(r, student, analysis);
       const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
       const comboLabel = comp.comboUsed ? ` · 반영: ${comp.comboUsed}` : '';
+      const minBadge = r.cutline.min ? ' ' + minReqBadge(student, r.cutline.min) : '';
       html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')">
         <span class="match-badge ${b.cls}">${b.label}</span>
         <div class="match-body">
-          <div class="univ">${esc(r.univ)}${ADMISSIONS_INFO[r.univ] ? ' <span style="font-size:10px;color:var(--blue);font-weight:600">' + esc(Object.keys(ADMISSIONS_INFO[r.univ])[0]) + '</span>' : ''}</div>
+          <div class="univ">${esc(r.univ)}${ADMISSIONS_INFO[r.univ] ? ' <span style="font-size:10px;color:var(--blue);font-weight:600">' + esc(Object.keys(ADMISSIONS_INFO[r.univ])[0]) + '</span>' : ''}${minBadge}</div>
           <div class="jeon">${esc(r.cutline.type)} · 경쟁률 ${esc(r.cutline.ratio)}${r.cutline.min ? ' · 수능최저 ' + esc(r.cutline.min) : ''}${comboLabel}</div>
         </div>
         <div class="match-num">
@@ -6681,6 +6836,7 @@ function renderDeptCutSection(univName, student) {
 function renderDeptInfoSection(univName) {
   const list = DEPT_INFO[univName];
   if (!list || !list.length) return '';
+  const _student = (typeof selectedIdx === 'number' && STUDENTS[selectedIdx]) ? STUDENTS[selectedIdx] : null;
   // 전형유형별 그룹핑
   const groups = {};
   list.forEach(e => {
@@ -6699,7 +6855,7 @@ function renderDeptInfoSection(univName) {
       h += `<div style="padding:7px 10px;margin:4px 0;background:var(--cream);border-radius:8px;font-size:11px;border-left:2px solid ${gc}">
         <div style="font-weight:600;color:var(--ink)">${esc(e.unit)}${e.num ? ` <span style="color:var(--muted);font-weight:400">· 모집 ${esc(e.num)}명${e.num_prev && e.num_prev !== e.num ? ' (전년 '+esc(e.num_prev)+')' : ''}</span>` : ''}${e.changed ? ` <span style="color:var(--copper);font-size:10px">${esc(e.changed)}</span>` : ''}</div>
         ${e.method ? `<div style="color:var(--sub);margin-top:3px;line-height:1.5">전형방법: ${esc(e.method)}</div>` : ''}
-        ${e.min && e.min !== '미적용' && e.min !== '—' ? `<div style="color:var(--sub);margin-top:2px;line-height:1.5">수능최저: ${esc(e.min)}</div>` : (e.min === '미적용' ? '<div style="color:var(--muted);margin-top:2px">수능최저: 미적용</div>' : '')}
+        ${e.min && e.min !== '미적용' && e.min !== '—' ? `<div style="color:var(--sub);margin-top:2px;line-height:1.5">수능최저: ${esc(e.min)} ${_student ? minReqBadge(_student, e.min, e.unit) : ''}</div>` : (e.min === '미적용' ? '<div style="color:var(--muted);margin-top:2px">수능최저: 미적용</div>' : '')}
       </div>`;
     });
     h += '</div></details>';
@@ -6881,7 +7037,7 @@ function showUnivDetail(univName) {
     html += `<div style="padding:12px;background:var(--cream);border-radius:10px;font-size:13px;margin-top:8px">
       <strong>등급컷:</strong> ${result.cutline.cut}등급 (${esc(result.cutline.source)}) ·
       <strong>차이:</strong> ${result.diff > 0 ? '+' : ''}${result.diff.toFixed(2)}등급
-      ${result.cutline.min ? ' · <strong>수능최저:</strong> ' + esc(result.cutline.min) : ''}
+      ${result.cutline.min ? ' · <strong>수능최저:</strong> ' + esc(result.cutline.min) + ' ' + minReqBadge(student, result.cutline.min) : ''}
       ${result.cutline.ratio ? ' · <strong>경쟁률:</strong> ' + esc(result.cutline.ratio) : ''}
     </div>`;
   }
