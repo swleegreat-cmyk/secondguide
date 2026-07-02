@@ -3323,7 +3323,7 @@ function analyzeRecord(student, analysis) {
 }
 function _analyzeRecordInner(student, analysis) {
   const result = {
-    concept: null, themes: [], deptMatch: [],
+    concept: null, themes: [], deptMatch: [], deptFit: [],
     strengths: [], weaknesses: [],
     storyArc: [], careerInsights: [],
     interviewPredictions: [], counselingPoints: []
@@ -3565,7 +3565,96 @@ function _analyzeRecordInner(student, analysis) {
       seen.add(key); return true;
     }).slice(0, 12);
 
+  // 8. 추천 학과별 매칭 점수(%) + 부족 항목 산출
+  result.deptFit = computeDeptFit(student, analysis, result);
+
   return result;
+}
+
+// 추천 학과별 매칭 점수(%)와 부족 항목 리스트 산출
+// 반환: [{dept, score, matchedKeywords, missingKeywords, subjects, evidence, missing:[{label,detail}], level}]
+function computeDeptFit(student, analysis, ra) {
+  const depts = (ra.deptMatch || []).slice(0, 6);
+  if (!depts.length) return [];
+  const recs = student.records.filter(r => r.t === '세부능력및특기사항' && r.b && r.b.length > 20);
+  const allText = recs.map(r => r.b).join(' ');
+  const opText = (student.opinions || []).map(o => o.b || '').join(' ');
+  const conceptKw = (HL_CAREER_KW[ra.concept] || []);
+  const out = [];
+
+  depts.forEach(dept => {
+    let kws = DEPT_KEYWORDS[dept];
+    if (!kws || !kws.length) {
+      const base = dept.replace(/(학과|학부|과|전공|계열)$/, '');
+      kws = [base].concat(conceptKw.slice(0, 4));
+    }
+    kws = [...new Set(kws)];
+
+    // 키워드 커버리지 + 활동 빈도 + 근거 문장 수집
+    const found = [], missing = [];
+    let recordHits = 0;
+    const subjSet = new Set();
+    const evidence = [];
+    kws.forEach(kw => {
+      const cnt = (allText.split(kw).length - 1) + (opText.split(kw).length - 1);
+      if (cnt > 0) found.push({ kw, cnt }); else missing.push(kw);
+    });
+    recs.forEach(r => {
+      const hit = kws.find(kw => r.b.includes(kw));
+      if (!hit) return;
+      recordHits++;
+      if (r.c) subjSet.add(r.c);
+      if (evidence.length < 2) {
+        const sentences = r.b.split(/(?<=[.。])\s*/);
+        let snip = (sentences.find(s => s.includes(hit)) || r.b.substring(0, 70)).trim();
+        if (snip.length > 90) snip = snip.substring(0, 90) + '…';
+        evidence.push({ subj: r.c || '', year: r.y, kw: hit, text: snip });
+      }
+    });
+
+    // 심화 활동 마커 (탐구/실험/연구/독서/발표 등)
+    const deptText = recs.filter(r => kws.some(kw => r.b.includes(kw))).map(r => r.b).join(' ');
+    const hasInquiry = /탐구|실험|연구|프로젝트|논문|분석|가설/.test(deptText);
+    const hasReading = /[「『"'][^」』"']{2,}[」』"']|독서|읽/.test(deptText);
+    const hasPresent = /발표|토론|프레젠테이션|캠페인/.test(deptText);
+
+    // ── 매칭 점수 (0~100) ──
+    const coverage = found.length / kws.length;                 // 키워드 커버리지
+    const freqNorm = Math.min(recordHits, 6) / 6;               // 활동 빈도
+    const depthCnt = (hasInquiry ? 1 : 0) + (hasReading ? 1 : 0) + (hasPresent ? 1 : 0);
+    let score = Math.round(coverage * 50 + freqNorm * 30 + (depthCnt / 3) * 20);
+    score = Math.max(0, Math.min(100, score));
+
+    // ── 부족 항목 리스트 ──
+    const gaps = [];
+    if (missing.length) {
+      gaps.push({ label: '핵심어 미언급', detail: missing.slice(0, 5).join(', ') + (missing.length > 5 ? ` 외 ${missing.length - 5}개` : '') });
+    }
+    if (recordHits < 2) {
+      gaps.push({ label: '관련 세특 활동 부족', detail: `학과 연관 세특 ${recordHits}건 — 최소 2~3건 확보 권장` });
+    }
+    if (!hasInquiry) {
+      gaps.push({ label: '심화 탐구활동 부족', detail: '탐구·실험·연구 등 심화 활동 근거 미확인' });
+    }
+    if (!hasReading) {
+      gaps.push({ label: '관련 독서 부족', detail: '학과 연계 독서활동 근거 미확인' });
+    }
+    if (subjSet.size === 0) {
+      gaps.push({ label: '연계 교과 없음', detail: '관련 교과 세특에서 근거를 찾지 못함' });
+    }
+
+    const level = score >= 70 ? '우수' : score >= 45 ? '양호' : score >= 25 ? '보통' : '보완필요';
+    out.push({
+      dept, score, level,
+      matchedKeywords: found.map(f => f.kw),
+      missingKeywords: missing,
+      subjects: [...subjSet],
+      evidence,
+      missing: gaps
+    });
+  });
+
+  return out.sort((a, b) => b.score - a.score);
 }
 
 // 전공적합성 vs 학업역량 tagging
@@ -7354,37 +7443,44 @@ function renderRecordTab(student, analysis) {
 
   // Matched departments with university matching
   if (ra.deptMatch.length > 0) {
-    html += '<h3 style="margin-top:16px">추천 학과 & 생기부 연결점</h3>';
+    html += '<h3 style="margin-top:16px">추천 학과 매칭 분석</h3>';
 
-    // 학과 연결점 분석 — 생기부 근거 기반
-    const deptConns = analyzeDeptConnections(student, analysis, ra);
-    if (deptConns.length > 0) {
-      html += '<p style="font-size:11px;color:var(--muted);margin:6px 0 10px">생기부에서 각 학과와 연결되는 활동·키워드를 찾아 매칭 근거를 제시합니다.</p>';
-      deptConns.forEach(dc => {
-        const strength = dc.hits >= 5 ? ['강한 연결','var(--green)'] : dc.hits >= 2 ? ['연결 있음','var(--blue)'] : ['약한 연결','var(--orange)'];
-        html += `<div style="margin-bottom:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;border-left:3px solid ${strength[1]}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span style="font-size:13px;font-weight:700;color:var(--teal)">${esc(dc.dept)}</span>
-            <span style="font-size:11px;font-weight:600;color:${strength[1]}">${strength[0]} · ${dc.hits}건</span>
-          </div>`;
-        if (dc.subjects.length) {
-          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:4px">연계 교과: ${dc.subjects.map(s => esc(s)).join(', ')}</div>`;
+    // 학과별 매칭 점수(%) + 부족 항목 — analyzeRecord().deptFit
+    const deptFit = ra.deptFit || [];
+    if (deptFit.length > 0) {
+      html += '<p style="font-size:11px;color:var(--muted);margin:6px 0 10px">추천 학과별로 생기부 매칭 점수(%)와 <strong>보완이 필요한 부족 항목</strong>을 제시합니다.</p>';
+      deptFit.forEach(df => {
+        const c = df.score >= 70 ? 'var(--green)' : df.score >= 45 ? 'var(--blue)' : df.score >= 25 ? 'var(--orange)' : 'var(--red)';
+        html += `<div style="margin-bottom:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;border-left:3px solid ${c}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:700;color:var(--teal)">${esc(df.dept)}</span>
+            <span style="font-size:14px;font-weight:800;color:${c}">${df.score}<span style="font-size:11px;font-weight:600">% · ${df.level}</span></span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:4px;margin-bottom:6px"><div style="height:100%;width:${df.score}%;background:${c};border-radius:4px;transition:width .3s"></div></div>`;
+        if (df.subjects.length) {
+          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:3px">연계 교과: ${df.subjects.map(s => esc(s)).join(', ')}</div>`;
         }
-        dc.evidence.forEach(ev => {
+        if (df.matchedKeywords.length) {
+          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:4px">매칭 키워드: ${df.matchedKeywords.slice(0,6).map(k => '<mark class="hl-career">'+esc(k)+'</mark>').join(' ')}</div>`;
+        }
+        // 근거 문장
+        df.evidence.forEach(ev => {
           html += `<div style="font-size:11px;color:var(--muted);line-height:1.6;padding:4px 8px;background:var(--cream);border-radius:6px;margin-top:3px">
-            <span style="color:var(--teal);font-weight:600">${ev.year}학년${ev.subj ? ' '+esc(ev.subj) : ''}</span> ·
-            <mark class="hl-career">${esc(ev.kw)}</mark> ${esc(ev.text)}</div>`;
+            <span style="color:var(--teal);font-weight:600">${ev.year}학년${ev.subj ? ' '+esc(ev.subj) : ''}</span> · ${esc(ev.text)}</div>`;
         });
+        // 부족 항목
+        if (df.missing.length) {
+          html += `<div style="margin-top:6px;padding:7px 10px;background:var(--orange-light);border-radius:8px">
+            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:3px">보완 필요 항목 (${df.missing.length})</div>`;
+          df.missing.forEach(g => {
+            html += `<div style="font-size:11px;color:var(--sub);line-height:1.6">· <strong>${esc(g.label)}</strong> — ${esc(g.detail)}</div>`;
+          });
+          html += '</div>';
+        } else {
+          html += `<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600">✓ 주요 항목 충족 — 지원 근거가 충분합니다.</div>`;
+        }
         html += '</div>';
       });
-      // 연결점 없는 나머지 학과는 칩으로
-      const shown = new Set(deptConns.map(d => d.dept));
-      const rest = ra.deptMatch.filter(d => !shown.has(d));
-      if (rest.length) {
-        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">';
-        rest.forEach(d => { html += `<span style="padding:4px 12px;background:var(--blue-light);border-radius:8px;font-size:12px;font-weight:500;color:var(--blue)">${esc(d)}</span>`; });
-        html += '</div>';
-      }
     } else {
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">';
       ra.deptMatch.forEach(d => {
