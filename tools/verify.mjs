@@ -763,6 +763,40 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     r.every(x => x.bad === 0), JSON.stringify(r));
 }
 
+// ═══════════════════════════════════════════════
+// 6지원 시뮬레이션 — 바구니 우선 후보군 · 유보/컷정보없음 제외
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const keyOf = c => c.univ + '|' + (c.jn || c.jt) + '|' + c.dept;
+    // 6지원#3: 바구니 우선 — 기본 조합에 없는 안정 카드 2장을 바구니에 담으면
+    //          같은 구간 슬롯에서 바구니 카드가 우선 선발되어야 한다
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const basePicks = calcOptimalPortfolioCards(s).picks.map(keyOf);
+    const alt = buildApplicationCards(s)
+      .filter(c => !c.noCut && c.band === '안정' && c.rel === '높음' && !basePicks.includes(keyOf(c)))
+      .slice(0, 2);
+    alt.forEach(c => toggleBasketEnc(s.seat, encodeURIComponent(keyOf(c))));
+    const withBasket = calcOptimalPortfolioCards(s, portfolioCandidateCards(s)).picks.map(keyOf);
+    const basketUsed = alt.every(c => withBasket.includes(keyOf(c)));
+    alt.forEach(c => toggleBasketEnc(s.seat, encodeURIComponent(keyOf(c))));
+    const emptyDefault = portfolioCandidateCards(s) === null;   // 바구니 비면 전체 계열 기준
+    // 6지원#4: 전 학생 34명의 조합에 유보(컷 해석주의)·컷정보없음 카드가 없어야 한다
+    let badPicks = 0, checked = 0;
+    for (const st of STUDENTS) {
+      for (const p of calcOptimalPortfolioCards(st).picks) {
+        checked++;
+        if (p.noCut || p.band === '유보' || !['안정', '적정', '소신', '상향'].includes(p.band)) badPicks++;
+      }
+    }
+    return { basketUsed, emptyDefault, altN: alt.length, badPicks, checked };
+  });
+  assert(`6지원#3: 바구니 우선 사용 — 바구니 안정 ${r.altN}장이 조합에 선발 + 비우면 전체 계열 기준`,
+    r.altN === 2 && r.basketUsed === true && r.emptyDefault === true, JSON.stringify(r));
+  assert(`6지원#4: 34명 전원 조합(${r.checked}장)에 유보·컷정보없음 카드 0장`,
+    r.badPicks === 0 && r.checked >= 190, JSON.stringify(r));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');

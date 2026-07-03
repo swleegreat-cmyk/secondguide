@@ -4090,7 +4090,10 @@ function portfolioSimHtml(student) {
   let html = '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:6px">AI 최적 6지원 시뮬레이션 (지원 카드 단위)</div>';
   html += `<p style="font-size:10px;color:var(--sub);margin-bottom:8px">조합 원칙: ${esc(pf.principle)}</p>`;
-  if (basketN) html += `<p style="font-size:10px;color:var(--copper);font-weight:700;margin-bottom:8px">★ 후보 바구니 ${basketN}장을 후보군 선두에 반영해 조합했습니다.</p>`;
+  // 입력 후보군 출처 표시: 바구니 있으면 바구니 우선, 없으면 희망 계열 카드 전체
+  html += basketN
+    ? `<p style="font-size:10px;color:var(--copper);font-weight:700;margin-bottom:8px">입력 후보군: ★ 바구니 ${basketN}장 기준 (바구니 카드를 후보군 선두에 반영)</p>`
+    : `<p style="font-size:10px;color:var(--muted);font-weight:700;margin-bottom:8px">입력 후보군: 전체 계열 기준 (희망 계열 설정 시 자동 적용 · 바구니에 ★를 담으면 우선 반영)</p>`;
   // 사실 기술 요약 (단정 표현 없음)
   html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">
     <span style="padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:8px;font-weight:700">6장 중 안정 구간 ${pf.counts.안정}장</span>
