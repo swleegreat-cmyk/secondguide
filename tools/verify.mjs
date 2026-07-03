@@ -812,6 +812,32 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     r.badPicks === 0 && r.checked >= 190, JSON.stringify(r));
 }
 
+// ═══════════════════════════════════════════════
+// 판정 근거 문구 — 좌변(전과목 평균) 명시 + 환산값 '참고' 구분
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s);
+    // 규칙 보유 대학(환산 표시) 카드와 폴백(평균 복사) 카드 각 1장
+    const withRule = cards.find(c => c.univ === '한국성서대학교' && c.dept === '사회복지학과' && c.jn === '교과(교과성적우수)');
+    const fallback = cards.find(c => c.scoreSrc === '평균' && c.band && !c.noCut);
+    return {
+      ruleReason: cardReasonText(withRule),
+      ruleRow: cardRowHtml(withRule).includes('참고'),
+      fbReason: cardReasonText(fallback),
+      fbRow: cardRowHtml(fallback).includes('참고'),
+    };
+  });
+  assert('판정근거#2: 카드 근거 첫 줄에 좌변(전과목 평균) 명시 + 환산은 "참고(판정 미반영)" 구분',
+    r.ruleReason.startsWith('판정 기준: 전과목 평균')
+      && r.ruleReason.includes('참고: 반영교과 환산') && r.ruleReason.includes('판정 미반영')
+      && r.ruleRow === true
+      && r.fbReason.startsWith('판정 기준: 전과목 평균')
+      && !r.fbReason.includes('반영교과 환산') && r.fbRow === false,
+    JSON.stringify(r));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');
