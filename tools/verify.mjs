@@ -158,25 +158,40 @@ assert(`백테스트#3: 재보정 후(${bt.accuracy}%) ≥ AI-0 기준(${AI0_BAS
 // ═══════════════════════════════════════════════
 // 신뢰도 등급 계산 검증 (표본 수 기반)
 // ═══════════════════════════════════════════════
-// 앱에 baked된 UNIV_CONFIDENCE로 등급 규칙(≥10 높음, 3~9 보통, ≤2 낮음) 검증
+// 판정 신뢰도는 카드 엔트리의 rel 필드(빌드 산출)가 담당한다.
+// (구 UNIV_CONFIDENCE/DEPT_CONFIDENCE 상수는 앱 미사용 대학 단위 잔재로 제거됨)
 const confData = await page.evaluate(() => {
   const rule = n => (n >= 10 ? '높음' : n >= 3 ? '보통' : '낮음');
-  // 실제 baked 데이터 중 각 등급 샘플 추출 + 규칙 일치 검사
-  let allMatch = true, high = 0, mid = 0, low = 0;
-  for (const [u, c] of Object.entries(UNIV_CONFIDENCE)) {
-    if (rule(c.samples) !== c.grade) allMatch = false;
-    if (c.grade === '높음') high++; else if (c.grade === '보통') mid++; else low++;
+  // 대학별 표본 수(엔트리 수) 기반 분포 — 요약 출력용
+  const perUniv = {};
+  for (const [k, list] of Object.entries(DEPT_CUTLINES)) {
+    const u = k.slice(0, k.indexOf('|'));
+    perUniv[u] = (perUniv[u] || 0) + list.length;
   }
-  // 경계값 직접 검증
-  return { allMatch, high, mid, low,
+  let high = 0, mid = 0, low = 0;
+  for (const n of Object.values(perUniv)) {
+    const g = rule(n);
+    if (g === '높음') high++; else if (g === '보통') mid++; else low++;
+  }
+  // 엔트리 rel 규칙 전수 확인 (컷 완비+충원+모집≥10 → 높음 / 컷 있음 → 보통 / 컷 없음 → 낮음)
+  const relRule = e => {
+    const numOk = e.num != null && !isNaN(parseFloat(e.num));
+    const chuOk = e.chu != null && !isNaN(parseFloat(e.chu));
+    if (e.g50 == null && e.g70 == null) return '낮음';
+    if (e.g50 != null && e.g70 != null && chuOk && numOk && parseFloat(e.num) >= 10) return '높음';
+    return '보통';
+  };
+  let relMatch = true;
+  for (const list of Object.values(DEPT_CUTLINES)) for (const e of list) if (relRule(e) !== e.rel) relMatch = false;
+  return { relMatch, high, mid, low,
     b10: rule(10), b9: rule(9), b3: rule(3), b2: rule(2), b0: rule(0) };
 });
 assert('신뢰도#1: 경계값 규칙 (10→높음, 9→보통, 2→낮음)',
   confData.b10 === '높음' && confData.b9 === '보통' && confData.b2 === '낮음', JSON.stringify(confData));
 assert('신뢰도#2: 경계값 규칙 (3→보통, 0→낮음)',
   confData.b3 === '보통' && confData.b0 === '낮음', JSON.stringify(confData));
-assert('신뢰도#3: baked UNIV_CONFIDENCE 전체가 등급규칙과 일치',
-  confData.allMatch === true, JSON.stringify(confData));
+assert('신뢰도#3: 카드 엔트리 rel 필드 전수가 빌드 규칙과 일치',
+  confData.relMatch === true, JSON.stringify(confData));
 
 // ═══════════════════════════════════════════════
 // 요인별 기여도 breakdown 합 = 100% 검증
