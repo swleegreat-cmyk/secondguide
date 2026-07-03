@@ -7738,15 +7738,18 @@ function renderDeptCutSection(univName, student) {
     h += '</div>';
   }
   h += `<input class="search-input" placeholder="학과명 검색... (${depts.length}개 학과)" oninput="filterDeptRows(this)" style="margin-bottom:8px;width:100%">`;
-  h += '<div style="max-height:340px;overflow-y:auto"><table class="g-table" style="font-size:11px"><thead><tr><th>학과</th><th>전형</th><th>계열</th><th>모집</th><th>경쟁률</th><th>충원</th><th>50%컷</th><th>70%컷</th><th>예측</th></tr></thead><tbody id="deptCutBody">';
+  h += '<div style="max-height:340px;overflow-y:auto"><table class="g-table" style="font-size:11px"><thead><tr><th>학과</th><th>전형</th><th>계열</th><th>모집</th><th>경쟁률</th><th>충원</th><th>50%컷</th><th>70%컷</th><th>판정</th></tr></thead><tbody id="deptCutBody">';
   rows.forEach(e => {
     const fb = deptCutFallback(e);
     const cut = fb.cut;
     let probCell;
     if (cut != null) {
-      const prob = Math.max(3, Math.min(97, Math.round(cutCurveProb(refScore - cut, e.jt === '종합', e.jt === '논술'))));
-      const pc = prob >= 65 ? 'var(--green)' : prob >= 40 ? 'var(--blue)' : prob >= 15 ? 'var(--orange)' : 'var(--red)';
-      probCell = `<span class="mono" style="color:${pc};font-weight:700">${prob}%</span>`;
+      // 단일 % 확률 대신 4구간 판정 표시 — 카드와 동일 기준 (stAvg vs 등급50/70 + 충원 보정 + 컷 해석주의)
+      const band = classifyBand(stAvg, e.g50, e.g70, e.cw);
+      const hold = isCutCaution(univName, e.jt, e.g50) && (band === '안정' || band === '적정');
+      const label = hold ? '판정 유보' : band;
+      const bc = (BAND_STYLE[hold ? '유보' : band] || {}).color || 'var(--muted)';
+      probCell = `<span style="color:${bc};font-weight:700;font-size:10px;white-space:nowrap">${label}</span>`;
       if (fb.mode === 'g50-fallback') {
         probCell += ` <span style="font-size:9px;color:var(--orange);white-space:nowrap">${fb.flag}</span>`;
       }
@@ -9082,36 +9085,37 @@ th{background:#f5f5f0;font-weight:700}
   // University matching
   report += `<h2>4. 대학 매칭 결과 (${allComps.length}개 대학)</h2>`;
   report += `<div class="grid2" style="margin-bottom:8px">
-    <div class="box"><span class="safe">안정권 (65%+):</span> ${safeCount}교</div>
-    <div class="box"><span class="fit">적정 (40~64%):</span> ${fitCount}교</div>
-    <div class="box"><span class="reach">소신 (15~39%):</span> ${reachCount}교</div>
-    <div class="box"><strong>도전 (15%↓):</strong> ${allComps.length - safeCount - fitCount - reachCount}교</div>
+    <div class="box"><span class="safe">안정권 판정:</span> ${safeCount}교</div>
+    <div class="box"><span class="fit">적정 판정:</span> ${fitCount}교</div>
+    <div class="box"><span class="reach">소신 판정:</span> ${reachCount}교</div>
+    <div class="box"><strong>상향 판정:</strong> ${allComps.length - safeCount - fitCount - reachCount}교</div>
   </div>`;
 
-  // Optimal 6-university portfolio with risk analysis
-  if (allComps.length >= 6) {
-    const optPort = calcOptimalPortfolio(allComps, 6);
-    report += '<div style="padding:10px;background:#e8f5f0;border-radius:6px;margin-bottom:8px;border:1px solid #c8e0d8">';
-    report += `<div style="font-weight:700;margin-bottom:4px">AI 최적 6지원 포트폴리오</div>`;
-    report += `<div style="font-size:11px;margin-bottom:6px">최소 1개 합격 확률: <strong>${optPort.atLeastOne}%</strong> · 기대 합격 수: <strong>${optPort.expectedCount.toFixed(1)}교</strong> · 위험도: <strong>${optPort.riskLevel}</strong> (안정${optPort.safeCount}/적정${optPort.fitCount}/소신${optPort.reachCount})</div>`;
-    report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>합격확률</th><th>분류</th></tr>';
-    optPort.picks.forEach((r, i) => {
-      const cls = r.prob >= 65 ? 'safe' : r.prob >= 40 ? 'fit' : r.prob >= 15 ? 'reach' : '';
-      const label = r.prob >= 65 ? '안정' : r.prob >= 40 ? '적정' : r.prob >= 15 ? '소신' : '도전';
-      report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td class="${cls}">${r.prob}%</td><td>${label}</td></tr>`;
-    });
-    report += '</table>';
-    if (optPort.dupUnivs.length > 0) report += `<div style="font-size:10px;color:#C77B3C">동일 대학 중복 지원: ${optPort.dupUnivs.join(', ')}</div>`;
-    report += `<div style="font-size:10px;margin-top:4px;color:#666">${optPort.riskAdvice}</div>`;
-    report += '</div>';
+  // AI 최적 6지원 — 지원 카드 단위 (화면과 동일 조합기, % 확률 단정 표현 없이 사실 기술만)
+  {
+    const pfc = calcOptimalPortfolioCards(student, portfolioCandidateCards(student));
+    if (pfc.picks.length) {
+      report += '<div style="padding:10px;background:#e8f5f0;border-radius:6px;margin-bottom:8px;border:1px solid #c8e0d8">';
+      report += `<div style="font-weight:700;margin-bottom:4px">AI 최적 6지원 시뮬레이션 (지원 카드 단위)</div>`;
+      report += `<div style="font-size:11px;margin-bottom:6px">6장 중 안정 구간 <strong>${pfc.counts.안정}장</strong> · 적정 <strong>${pfc.counts.적정}장</strong> · 소신·상향 <strong>${pfc.counts.소신 + pfc.counts.상향}장</strong> · 교과 ${pfc.jtMix.교과}/종합 ${pfc.jtMix.종합}/논술 ${pfc.jtMix.논술} · 수능최저 위험 ${pfc.minRisky}장</div>`;
+      report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>학과</th><th>50/70컷</th><th>구간</th></tr>';
+      pfc.picks.forEach((p, i) => {
+        const cls = p.band === '안정' ? 'safe' : p.band === '적정' ? 'fit' : 'reach';
+        report += `<tr><td>${i + 1}</td><td>${esc(p.univ)}</td><td style="font-size:10px">${esc(p.jn || p.jt)}</td><td style="font-size:10px">${esc(p.dept)}</td><td class="mono">${p.g50 ?? '-'}/${p.g70 ?? '-'}</td><td class="${cls}">${p.band}${p.minInfo && p.minInfo.risky ? ' ⚠최저' : ''}</td></tr>`;
+      });
+      report += '</table>';
+      report += `<div style="font-size:10px;margin-top:4px;color:#666">조합 원칙: ${esc(pfc.principle)}</div>`;
+      report += '</div>';
+    }
   }
 
-  report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>합격확률</th><th>신뢰범위</th><th>모델</th><th>티어</th></tr>';
+  report += '<table><tr><th>순위</th><th>대학명</th><th>전형</th><th>환산등급</th><th>구간 판정</th><th>모델</th><th>티어</th></tr>';
   const tierLabel = {1:'최상위',2:'상위',3:'중상위',4:'중위'};
   allComps.slice(0, 20).forEach((r, i) => {
-    const cls = r.prob >= 65 ? 'safe' : r.prob >= 40 ? 'fit' : r.prob >= 15 ? 'reach' : '';
+    const band = r.comp.band || '-';
+    const cls = band === '안정' ? 'safe' : band === '적정' ? 'fit' : band === '소신' ? 'reach' : '';
     const modelLabel = r.comp.is종합 ? '종합' : r.comp.is논술 ? '논술' : '교과';
-    report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td>${r.score.toFixed(2)}</td><td class="${cls}">${r.prob}%</td><td style="font-size:10px;color:#999">${r.comp.probLow}~${r.comp.probHigh}%</td><td style="font-size:10px">${modelLabel}</td><td style="font-size:10px">${tierLabel[r.comp.tier]||'중위'}</td></tr>`;
+    report += `<tr><td>${i+1}</td><td>${esc(r.univ)}</td><td style="font-size:10px">${esc(r.jeonType)}</td><td>${r.score.toFixed(2)}</td><td class="${cls}">${band}</td><td style="font-size:10px">${modelLabel}</td><td style="font-size:10px">${tierLabel[r.comp.tier]||'중위'}</td></tr>`;
   });
   report += '</table>';
 
@@ -9203,6 +9207,9 @@ function exportClassReport() {
 
     let port = null;
     if (allC.length >= 6) port = calcOptimalPortfolio(allC.map(r => ({...r, comp: {probability: r.prob}})), 6);
+    // 카드 단위 6지원안 — 표시용 통계는 % 확률이 아닌 4구간 장수로만 쓴다
+    let pfc = null;
+    try { pfc = calcOptimalPortfolioCards(s); } catch (e) {}
 
     const strat = calcAdmissionStrategy(s, a);
 
@@ -9211,8 +9218,8 @@ function exportClassReport() {
       concept: ra.concept || '-', bestCombo, bestScore,
       trendDir, safeCount, fitCount, top3,
       riskLevel: port ? port.riskLevel : '-',
-      atLeastOne: port ? port.atLeastOne : 0,
-      expectedCount: port ? port.expectedCount : 0,
+      pfSafe: pfc ? pfc.counts.안정 : 0, pfFit: pfc ? pfc.counts.적정 : 0,
+      pfOk: !!(pfc && pfc.counts.안정 >= 2 && pfc.counts.적정 >= 2),
       bestType: strat.sorted[0][0],
       deptMatch: ra.deptMatch.slice(0, 3),
       counselingPoints: ra.counselingPoints.slice(0, 2)
@@ -9245,20 +9252,20 @@ th{background:#f5f5f0;font-weight:700;white-space:nowrap}
 
   const avgAll = classAvg;
   const safeTotal = rows.reduce((s,x) => s + x.safeCount, 0);
-  const warnStudents = rows.filter(x => x.atLeastOne < 60).length;
-  const highStudents = rows.filter(x => x.atLeastOne >= 95).length;
+  const okStudents = rows.filter(x => x.pfOk).length;          // 6지원 골격(안정2·적정2) 충족
+  const noSafeStudents = rows.filter(x => x.pfSafe === 0).length;
 
   r += `<div class="stat-row">
 <div class="stat-card"><div class="num">${avgAll.toFixed(2)}</div><div class="lbl">학급 평균등급</div></div>
 <div class="stat-card"><div class="num">${STUDENTS.length}</div><div class="lbl">총 학생 수</div></div>
 <div class="stat-card"><div class="num">${safeTotal}</div><div class="lbl">안정권 지원 총합</div></div>
-<div class="stat-card"><div class="num risk-safe">${highStudents}</div><div class="lbl">안정 학생 (95%+)</div></div>
-<div class="stat-card"><div class="num risk-warn">${warnStudents}</div><div class="lbl">주의 학생 (<60%)</div></div>
+<div class="stat-card"><div class="num risk-safe">${okStudents}</div><div class="lbl">6지원 골격 충족 (안정2·적정2)</div></div>
+<div class="stat-card"><div class="num risk-warn">${noSafeStudents}</div><div class="lbl">안정 0장 (보강 필요)</div></div>
 </div>`;
 
   r += `<h2>전체 학생 종합 현황</h2>
 <table>
-<tr><th>번호</th><th>이름</th><th>평균</th><th>최적조합</th><th>추세</th><th>적합성</th><th>진로</th><th>추천전형</th><th>안정/적정</th><th>위험도</th><th>합격률</th><th>TOP 3 대학</th></tr>`;
+<tr><th>번호</th><th>이름</th><th>평균</th><th>최적조합</th><th>추세</th><th>적합성</th><th>진로</th><th>추천전형</th><th>안정/적정</th><th>위험도</th><th>6지원 구성</th><th>TOP 3 대학</th></tr>`;
 
   rows.forEach(s => {
     const gc = s.avg <= 2 ? '#143A40' : s.avg <= 3 ? '#2E7D4A' : s.avg <= 4 ? '#3C6E71' : s.avg <= 5 ? '#C77B3C' : '#c62828';
@@ -9266,7 +9273,7 @@ th{background:#f5f5f0;font-weight:700;white-space:nowrap}
     const tCls = s.trendDir < -0.3 ? 'trend-up' : s.trendDir > 0.3 ? 'trend-down' : 'trend-flat';
     const fitC = s.fit >= 60 ? '#2E7D4A' : s.fit >= 35 ? '#3C6E71' : '#C77B3C';
     const riskCls = s.riskLevel === '안정적' ? 'risk-safe' : s.riskLevel === '균형' || s.riskLevel === '보통' ? 'risk-ok' : s.riskLevel === '주의' ? 'risk-warn' : 'risk-danger';
-    const top3Str = s.top3.map(t => `${t.univ.length > 5 ? t.univ.substring(0,5)+'..' : t.univ}(${t.prob}%)`).join(', ');
+    const top3Str = s.top3.map(t => t.univ.length > 7 ? t.univ.substring(0, 7) + '..' : t.univ).join(', ');
 
     r += `<tr>
 <td style="text-align:center;font-weight:600">${s.seat}</td>
@@ -9274,12 +9281,12 @@ th{background:#f5f5f0;font-weight:700;white-space:nowrap}
 <td class="mono" style="font-weight:700;color:${gc}">${s.avg.toFixed(2)}</td>
 <td style="font-size:9px"><span class="mono" style="font-weight:600">${s.bestScore < 99 ? s.bestScore.toFixed(2) : '-'}</span> ${s.bestCombo ? s.bestCombo.substring(0,4) : ''}</td>
 <td class="${tCls}" style="text-align:center;font-weight:700">${tArrow}</td>
-<td style="text-align:center;font-weight:700;color:${fitC}">${s.fit}</td>
+<td style="text-align:center;font-weight:700;color:${fitC}">${s.fit >= 60 ? '높음' : s.fit >= 35 ? '보통' : '낮음'}</td>
 <td>${s.concept}</td>
 <td style="font-size:9px">${s.bestType}전형</td>
 <td style="text-align:center"><span class="safe">${s.safeCount}</span>/<span class="fit">${s.fitCount}</span></td>
 <td class="${riskCls}" style="font-weight:700">${s.riskLevel}</td>
-<td class="mono" style="font-weight:700">${s.atLeastOne}%</td>
+<td class="mono" style="font-weight:700"><span class="safe">안${s.pfSafe}</span>·<span class="fit">적${s.pfFit}</span></td>
 <td style="font-size:9px">${top3Str}</td>
 </tr>`;
   });
@@ -9290,7 +9297,7 @@ th{background:#f5f5f0;font-weight:700;white-space:nowrap}
   rows.forEach(s => {
     const reasons = [];
     if (s.trendDir > 1.0) reasons.push('성적 하락 ' + s.trendDir.toFixed(1) + '등급');
-    if (s.fit < 30) reasons.push('적합성 낮음 ' + s.fit + '점');
+    if (s.fit < 30) reasons.push('적합성 낮음');
     if (s.concept === '-') reasons.push('진로 미설정');
     if (s.atLeastOne < 60) reasons.push('합격률 주의 ' + s.atLeastOne + '%');
     if (s.safeCount === 0) reasons.push('안정권 없음');
