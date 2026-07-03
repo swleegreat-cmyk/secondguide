@@ -1,0 +1,6 @@
+{
+  "name": "susi-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": { "playwright": "^1.61.1" }
+}
