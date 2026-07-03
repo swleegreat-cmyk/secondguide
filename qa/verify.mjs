@@ -506,6 +506,36 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// 2계층 카드 기여도 표시 — 실사용 요인만, 합 100%
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const out = [];
+    // 실데이터 2케이스: 서로 다른 학생·대학의 실사용 요인 기여도
+    for (const si of [1, 20]) {
+      const s = STUDENTS[si], a = ANALYSIS[s.seat] || {};
+      const ur = runAllUniversities(s).find(x => x.deptCut && x.deptCut.g70 != null);
+      const comp = calcCompositeScore(ur, s, a);
+      const used = usedFactorBreakdown(comp);
+      out.push({ si, univ: ur.univ, n: used.length, total: comp.factorBreakdown.length,
+                 sum: used.reduce((x, f) => x + f.pct, 0),
+                 zeroShown: used.some(f => f.pct <= 0) });
+    }
+    // 합성 케이스: 계산에 쓰이지 않은 요인(기여 0)은 표시 목록에서 제외
+    const synth = buildFactorBreakdown({ 내신: 50, 생기부매칭: 10, 경쟁률: 0, 수능최저: 0, 성적추세: 5 });
+    const used = synth.filter(f => f.pct > 0);
+    return { real: out, synthKeys: used.map(f => f.key), synthSum: used.reduce((x, f) => x + f.pct, 0) };
+  });
+  assert(`기여도표시#1: 학생1(${r.real[0].univ}) 실사용 요인 ${r.real[0].n}/${r.real[0].total}개, 합 ${r.real[0].sum}%`,
+    r.real[0].sum === 100 && !r.real[0].zeroShown, JSON.stringify(r.real[0]));
+  assert(`기여도표시#2: 학생2(${r.real[1].univ}) 실사용 요인 ${r.real[1].n}/${r.real[1].total}개, 합 ${r.real[1].sum}%`,
+    r.real[1].sum === 100 && !r.real[1].zeroShown, JSON.stringify(r.real[1]));
+  assert(`기여도표시#3: 기여 0 요인(경쟁률·수능최저) 미표시 + 표시 합 ${r.synthSum}%`,
+    !r.synthKeys.includes('경쟁률') && !r.synthKeys.includes('수능최저') && r.synthSum === 100 && r.synthKeys.includes('내신'),
+    JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.

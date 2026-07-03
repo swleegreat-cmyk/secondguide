@@ -1321,6 +1321,70 @@ function renderCardBoard(id) {
 }
 
 // ═══════════════════════════════════════════════
+// 2계층 카드 상세 — 1차: 4구간 판정 / 2차(펼침): 판정 근거 + 실사용 요인 기여도
+// ═══════════════════════════════════════════════
+// 판정·확률 계산에 실제 기여한 요인만 반환 (기여 0인 요인은 계산 미사용으로 간주해 제외).
+// buildFactorBreakdown이 전체 합 100을 보장하고 0 기여 요인의 pct는 0이므로,
+// pct>0 필터 후에도 표시 기여도 합은 정확히 100이다.
+function usedFactorBreakdown(comp) {
+  return (comp && comp.factorBreakdown ? comp.factorBreakdown : []).filter(f => f.pct > 0);
+}
+const _compUnivCache = {};
+function compByUniv(student, analysis) {
+  if (_compUnivCache[student.seat]) return _compUnivCache[student.seat];
+  const map = {};
+  for (const r of runAllUniversities(student)) {
+    try { map[r.univ] = calcCompositeScore(r, student, analysis); } catch (e) {}
+  }
+  return (_compUnivCache[student.seat] = map);
+}
+// 카드 단위 판정 근거 문자열 (해당 학과·전형의 컷 기준 — calcCompositeScore와 별개)
+function cardReasonText(c) {
+  if (!c.band) return c.noCutLabel || '컷 정보 없음';
+  const cuts = [c.g50 != null ? `50컷 ${c.g50}` : null, c.g70 != null ? `70컷 ${c.g70}` : null].filter(Boolean).join('·');
+  let t = `평균등급 ${c.stAvg} vs ${cuts} → ${c.bandBase}`;
+  if (c.bandAdjusted) t += `, 충원 ${c.cw.toFixed(1)}배수 감안 시 ${c.band}`;
+  else if (c.cw != null) t += `, 충원 ${c.cw.toFixed(1)}배수(보정 미발동)`;
+  return t;
+}
+function cardDetailHtml(c, comp, extraLines) {
+  const bs = BAND_STYLE[c.band] || {};
+  const head = c.band
+    ? `<span style="padding:2px 9px;border-radius:9px;background:${bs.color};color:#fff;font-size:11px;font-weight:800;white-space:nowrap">${c.bandAdjusted ? '충원 감안 시 ' + c.band : c.band}</span>`
+    : `<span style="font-size:10px;color:var(--muted);font-weight:600">${esc(c.noCutLabel || '컷 정보 없음')}</span>`;
+  const fb = usedFactorBreakdown(comp);
+  const fbLine = fb.length ? fb.map(f => `${f.key} ${f.pct}%`).join(' + ') + ' = 100%' : null;
+  return `<details style="margin-bottom:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <summary style="cursor:pointer;padding:7px 10px;background:var(--card);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">
+      ${head}
+      <strong>${esc(c.univ)}</strong> · ${esc(c.jn || c.jt)} · ${esc(c.dept)}
+      ${judgeRelBadge(c.rel)}
+      <span style="font-size:10px;color:var(--muted);margin-left:auto">펼쳐서 근거 보기 ▾</span>
+    </summary>
+    <div style="padding:8px 12px;background:var(--cream);font-size:11px;line-height:1.7">
+      <div><strong style="color:var(--teal)">판정 근거:</strong> ${esc(cardReasonText(c))}</div>
+      ${fbLine ? `<div><strong style="color:var(--teal)">기여도(실사용 요인):</strong> ${esc(fbLine)}</div>` : ''}
+      ${(extraLines || []).map(l => `<div>${l}</div>`).join('')}
+    </div>
+  </details>`;
+}
+// 전형별 추천 탭 상태
+let _typeTabSel = '교과';
+function setTypeTab(t) {
+  _typeTabSel = t;
+  const s = STUDENTS[selectedIdx];
+  if (s) renderSusiTab(s, ANALYSIS[s.seat] || {});
+}
+// 논술 카드용 수능최저 스펙 조회 (학과 우선, 없으면 대학의 논술 전형 최저)
+function findMinSpec(univ, dept) {
+  const list = DEPT_INFO[univ] || [];
+  const byDept = list.find(e => e.min && e.unit && _deptNorm(e.unit) === _deptNorm(dept));
+  if (byDept) return byDept.min;
+  const byType = list.find(e => e.min && String(e.jt || '').includes('논술'));
+  return byType ? byType.min : null;
+}
+
+// ═══════════════════════════════════════════════
 // 세특 문장 태깅 엔진 (신호 사전은 별도 데이터 파일 signal_dictionary.js에서 주입)
 // ═══════════════════════════════════════════════
 __SIGNAL_DICT__
@@ -3775,7 +3839,7 @@ function renderProfileHeader(student, analysis) {
   if (analysis.str && analysis.str.length) chips += `<span class="chip chip-green">강점: ${esc(analysis.str.join(', '))}</span>`;
   if (latestCareer) chips += `<span class="chip chip-copper">${esc(latestCareer)}</span>`;
   const fitData = calcFitScore(student, analysis, null);
-  chips += `<span class="chip" style="background:${fitData.score >= 60 ? 'var(--green-light)' : fitData.score >= 35 ? 'var(--blue-light)' : 'var(--orange-light)'};color:${fitData.score >= 60 ? 'var(--green)' : fitData.score >= 35 ? 'var(--blue)' : 'var(--orange)'}">전공적합성 ${fitData.score}점</span>`;
+  // 단일 점수(전공적합성 N점) 표시는 제거 — 판정은 4구간 + 근거 문자열로만 표시
 
   el.innerHTML = `<div class="profile-header">
     <div class="profile-avatar">${student.seat}</div>
@@ -4413,76 +4477,27 @@ function renderSusiTab(student, analysis) {
   const reachUnis = allComps.filter(r => r.comp.band === '소신');
   const hardUnis = allComps.filter(r => r.comp.band === '상향');
 
-  html += '<div class="glass"><h3>전략적 지원 추천</h3>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">합격 확률, 전공적합성, 전형 유형을 종합하여 안정-적정-상향 포트폴리오를 자동 분석합니다.</p>';
-
+  // [카드 전환] 전략적 지원 추천 — 지원 카드 단위 + 2계층 판정 표시
+  const hopeSubs = getHopeSubs(student.seat);
+  const stratCards = getCards(student).filter(c => !c.noCut);   // 희망 계열 자동 적용
+  const compMap = compByUniv(student, analysis);
+  const cnt = b => stratCards.filter(c => c.band === b).length;
+  html += '<div class="glass"><h3>전략적 지원 추천 <span style="font-size:10px;color:var(--muted);font-weight:400">(지원 카드 단위 · ' + (hopeSubs.length ? '희망 계열 ' + hopeSubs.length + '개' : '전체 계열') + ')</span></h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">1차 표시는 4구간 판정, 카드를 펼치면 판정 근거와 실사용 요인 기여도가 보입니다.</p>';
   html += '<div class="tier-grid">';
-  html += `<div style="padding:10px;background:var(--green-light);border-radius:8px;text-align:center">
-    <div style="font-size:22px;font-weight:800;color:var(--green)">${safeUnis.length}</div>
-    <div style="font-size:11px;color:var(--muted)">안정권 (65%+)</div></div>`;
-  html += `<div style="padding:10px;background:var(--blue-light);border-radius:8px;text-align:center">
-    <div style="font-size:22px;font-weight:800;color:var(--blue)">${fitUnis.length}</div>
-    <div style="font-size:11px;color:var(--muted)">적정 (40~64%)</div></div>`;
-  html += `<div style="padding:10px;background:var(--orange-light);border-radius:8px;text-align:center">
-    <div style="font-size:22px;font-weight:800;color:var(--orange)">${reachUnis.length}</div>
-    <div style="font-size:11px;color:var(--muted)">소신 (15~39%)</div></div>`;
-  html += `<div style="padding:10px;background:var(--red-light);border-radius:8px;text-align:center">
-    <div style="font-size:22px;font-weight:800;color:var(--red)">${hardUnis.length}</div>
-    <div style="font-size:11px;color:var(--muted)">도전 (15%↓)</div></div>`;
+  [['안정','var(--green)','green'],['적정','var(--blue)','blue'],['소신','var(--orange)','orange'],['상향','var(--red)','red']].forEach(([b, c, k]) => {
+    html += `<div style="padding:10px;background:var(--${k}-light);border-radius:8px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${c}">${cnt(b)}</div>
+      <div style="font-size:11px;color:var(--muted)">${b} 카드</div></div>`;
+  });
   html += '</div>';
-
-  // Top recommendations per tier — 각 티어 내 인서울>인경기>충남권 순 (동일 지역 합격확률순)
-  const recommend = [];
-  const probDesc = (a, b) => b.prob - a.prob;
-  const topSafe = sortByRegionPriority(safeUnis, regionOf, probDesc).slice(0, 3);
-  const topFit = sortByRegionPriority(fitUnis, regionOf, probDesc).slice(0, 3);
-  const topReach = sortByRegionPriority(reachUnis, regionOf, probDesc).slice(0, 2);
-
-  const buildRec = (items, tier, tierColor) => {
-    items.forEach(r => {
-      const fitLabel = (r.comp.fitData && r.comp.fitData.score != null) ? `적합${r.comp.fitData.score}점` : '';
-      const jeonShort = (r.jeonType || '').substring(0, 6);
-      html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')" style="border-left:3px solid ${tierColor}">
-        <span class="match-badge" style="background:${tierColor};color:#fff;min-width:32px">${tier}</span>
-        <div class="match-body">
-          <div class="univ">${esc(r.univ)}</div>
-          <div class="jeon">${esc(jeonShort)} · ${r.score.toFixed(2)}등급${fitLabel ? ' · ' + fitLabel : ''}</div>
-        </div>
-        <div class="match-num">
-          <div>${bandBadge(r.comp.band, r.comp.bandNoCutLabel, r.comp)}</div>
-          <div class="unit">구간 판정</div>
-        </div>
-      </div>`;
-    });
-  };
-
-  if (topSafe.length + topFit.length + topReach.length > 0) {
-    html += '<div style="font-size:13px;font-weight:700;margin-bottom:8px">추천 포트폴리오 (6지망 기준)</div>';
-    buildRec(topSafe, '안정', 'var(--green)');
-    buildRec(topFit, '적정', 'var(--blue)');
-    buildRec(topReach, '소신', 'var(--orange)');
+  const stratPick = [];
+  for (const b of ['안정', '적정', '소신']) {
+    const n = b === '소신' ? 3 : 4;
+    stratPick.push(...stratCards.filter(c => c.band === b).slice(0, n));
   }
-
-  // Strategy advice (always shown)
-  const avgWeighted = calcWeightedAvg(student);
-  let advice = '';
-  if (safeUnis.length >= 5) {
-    advice = '상위권 성적으로 주요 대학 지원이 가능합니다. 소신 지원으로 상위 대학 도전을 추천합니다.';
-  } else if (fitUnis.length >= 3) {
-    advice = '적정 범위 대학이 충분합니다. 안정 2~3교 + 적정 2교 + 소신 1교로 균형 잡힌 포트폴리오를 구성하세요.';
-  } else if (reachUnis.length >= 3) {
-    advice = '소신 지원 범위가 넓습니다. 안정권 확보를 최우선으로 하고 전공적합성이 높은 대학에 소신 지원하세요.';
-  } else {
-    advice = '안정권 확보가 중요합니다. 교과전형 위주로 안정 3~4교를 확보하고 종합전형 1~2교를 병행하세요.';
-  }
-
-  if (avgWeighted > 5.5) {
-    advice += ' 내신 평균이 높으므로 학생부종합전형에서 생기부 강점을 적극 활용하는 전략이 유효합니다.';
-  }
-
-  html += `<div style="margin-top:10px;padding:10px 14px;background:var(--cream);border-radius:10px;font-size:12px;line-height:1.6">
-    <strong>상담 포인트:</strong> ${advice}
-  </div>`;
+  stratPick.forEach(c => { html += cardDetailHtml(c, compMap[c.univ]); });
+  if (!stratPick.length) html += '<p style="font-size:12px;color:var(--muted)">안정·적정·소신 카드가 없습니다. 희망 계열을 넓혀 보세요.</p>';
 
   // 전형 전략 분석
   const strat = calcAdmissionStrategy(student, analysis);
@@ -4518,7 +4533,7 @@ function renderSusiTab(student, analysis) {
     if (strat.foundKeywords.length > 0) {
       html += `<span style="font-size:10px;padding:2px 8px;background:rgba(0,122,255,0.08);border-radius:10px;color:var(--blue)">생기부 키워드: ${strat.foundKeywords.join(', ')}</span>`;
     }
-    html += `<span style="font-size:10px;padding:2px 8px;background:rgba(20,58,64,0.06);border-radius:10px;color:var(--sub)">생기부 ${Math.round(strat.recordChars/100)/10}천자 · 적합성 ${strat.fitScore}점</span>`;
+    html += `<span style="font-size:10px;padding:2px 8px;background:rgba(20,58,64,0.06);border-radius:10px;color:var(--sub)">생기부 ${Math.round(strat.recordChars/100)/10}천자</span>`;
     html += '</div>';
   }
   html += '</div>';
@@ -4529,33 +4544,39 @@ function renderSusiTab(student, analysis) {
   const 논술Results = allComps.filter(r => r.comp.is논술);
   const hasMultipleTypes = (교과Results.length > 0 ? 1 : 0) + (종합Results.length > 0 ? 1 : 0) + (논술Results.length > 0 ? 1 : 0) >= 2;
 
-  if (hasMultipleTypes) {
+  // [카드 전환] 전형별 추천 — 교과/종합/논술 탭 + 2계층 카드
+  {
+    const ra2 = analyzeRecord(student, analysis);
+    const threads2 = studentTopicThreads(student, ra2);
+    const alignedNames = threads2.filter(t => t.aligned && t.continuity !== '단발').map(t => t.topic);
+    const threadLine = alignedNames.length
+      ? `<strong style="color:var(--teal)">계열 정합 스레드:</strong> ${alignedNames.slice(0, 4).map(esc).join(', ')} <span style="color:var(--green);font-weight:700">보유 ✓</span>`
+      : `<strong style="color:var(--teal)">계열 정합 스레드:</strong> <span style="color:var(--red);font-weight:700">없음</span> — 지원 계열 연속 활동 보완 필요`;
     html += '<div style="margin-top:14px;padding:14px;background:var(--card);border-radius:12px;border:1px solid var(--border)">';
-    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">전형별 추천 대학</div>';
-
-    const renderTypeSection = (label, color, items, maxShow) => {
-      if (items.length === 0) return;
-      // 인서울>인경기>충남권 순 (동일 지역 합격확률순)
-      const top = sortByRegionPriority(items, regionOf, (a, b) => b.prob - a.prob).slice(0, maxShow);
-      html += `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:${color};margin-bottom:5px">${label} (${items.length}교)</div>`;
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-      top.forEach(r => {
-        const pColor = r.prob >= 65 ? 'var(--green)' : r.prob >= 40 ? 'var(--blue)' : r.prob >= 15 ? 'var(--orange)' : 'var(--red)';
-        html += `<div style="padding:5px 10px;background:var(--cream);border-radius:8px;cursor:pointer;border:1px solid var(--border);min-width:80px;text-align:center" onclick="showUnivDetail('${esc(r.univ)}')">
-          <div style="font-size:11px;font-weight:600">${esc(r.univ)}</div>
-          <div style="font-size:11px;font-weight:800;color:${r.comp.band ? (BAND_STYLE[r.comp.band] || {}).color : 'var(--muted)'}">${r.comp.bandLabel || '컷없음'}</div>
-          <div style="font-size:10px;color:var(--muted)">${r.score.toFixed(2)}등급</div>
-        </div>`;
+    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">전형별 추천 (지원 카드 단위)</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+    ['교과', '종합', '논술'].forEach(t => {
+      const on = _typeTabSel === t;
+      html += `<button onclick="setTypeTab('${t}')" style="padding:5px 16px;border-radius:10px;border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};background:${on ? 'var(--teal)' : 'var(--card)'};color:${on ? '#fff' : 'var(--sub)'};font-weight:${on ? 700 : 400};cursor:pointer;font-family:inherit;font-size:12px">${t}</button>`;
+    });
+    html += '</div>';
+    const typeCards = getCards(student, { jt: _typeTabSel }).filter(c => !c.noCut)
+      .filter(c => c.band === '안정' || c.band === '적정' || c.band === '소신').slice(0, 8);
+    if (!typeCards.length) {
+      html += `<p style="font-size:12px;color:var(--muted)">${_typeTabSel} 전형의 안정·적정·소신 카드가 없습니다.</p>`;
+    } else {
+      typeCards.forEach(c => {
+        const extras = [];
+        if (_typeTabSel === '종합') extras.push(threadLine);   // 종합: 계열 정합 스레드 보유 여부
+        if (_typeTabSel === '논술') {                          // 논술: 수능최저 충족 가능성
+          const min = findMinSpec(c.univ, c.dept);
+          extras.push(min
+            ? `<strong style="color:var(--teal)">수능최저:</strong> ${esc(min)} ${minReqBadge(student, min, c.dept)}`
+            : `<strong style="color:var(--teal)">수능최저:</strong> 자료 없음 — 모집요강 확인 필요`);
+        }
+        html += cardDetailHtml(c, compMap[c.univ], extras);
       });
-      if (items.length > maxShow) {
-        html += `<div style="padding:5px 10px;display:flex;align-items:center;font-size:10px;color:var(--muted)">+${items.length - maxShow}교</div>`;
-      }
-      html += '</div></div>';
-    };
-
-    renderTypeSection('교과전형', 'var(--teal)', 교과Results, 4);
-    renderTypeSection('종합전형', 'var(--blue)', 종합Results, 4);
-    renderTypeSection('논술전형', 'var(--orange)', 논술Results, 3);
+    }
     html += '</div>';
   }
 
