@@ -697,6 +697,42 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     JSON.stringify({ c3: r.c3, expected: r.c3Expected }));
 }
 
+// ═══════════════════════════════════════════════
+// 카드 보드 UX: 초성 검색 · 여유도 정렬 · 후보 바구니 저장/복원
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 1) 초성 검색: 순서 유지 부분수열 (ㅅㄱㄷ ⊂ ㅅㄱㄱㄷㅎㄱ)
+    const cho = cardSearchMatch('성균관대학교', 'ㅅㄱㄷ') === true
+      && cardSearchMatch('중앙대학교', 'ㅅㄱㄷ') === false
+      && cardSearchMatch('성균관대학교', '성균') === true;
+    // 2) 여유도순(평균-70컷, 기본 정렬): 비내림차순 + 최솟값(가장 여유) 선두
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s).filter(c => !c.noCut && c.band === '적정');
+    const sorted = sortBoardCards(cards, 'margin');
+    let mono = sorted.length > 1;
+    for (let i = 1; i < sorted.length; i++)
+      if (boardMarginOf(sorted[i]) < boardMarginOf(sorted[i - 1])) mono = false;
+    const marginOk = mono && boardMarginOf(sorted[0]) === Math.min(...cards.map(boardMarginOf));
+    // 3) 후보 바구니: localStorage 저장 → 캐시 무효화 후 복원 → 6지원 후보군 선두 반영 → 정리
+    const key = basketKeyOf(sorted[0]);
+    toggleBasketEnc(s.seat, encodeURIComponent(key));
+    const saved = (localStorage.getItem('basket_' + s.seat) || '').includes(sorted[0].dept);
+    delete _basketCache[s.seat];                        // 메모리 캐시 제거 → localStorage에서 복원
+    const restored = getBasket(s.seat).includes(key);
+    const candFirst = basketKeyOf(portfolioCandidateCards(s)[0]) === key;
+    toggleBasketEnc(s.seat, encodeURIComponent(key));
+    const cleaned = getBasket(s.seat).length === 0 && portfolioCandidateCards(s) === null;
+    return { cho, marginOk, n: sorted.length, saved, restored, candFirst, cleaned };
+  });
+  assert('보드UX#1: 초성 검색 — "ㅅㄱㄷ"→성균관대 일치 · 중앙대 불일치 · 일반 부분일치',
+    r.cho === true, JSON.stringify(r));
+  assert(`보드UX#2: 여유도순 정렬 — 적정 탭 ${r.n}장 margin 비내림차순 + 최솟값 선두`,
+    r.marginOk === true, JSON.stringify(r));
+  assert('보드UX#3: 후보 바구니 localStorage 저장·복원 + 6지원 후보군 선두 반영',
+    r.saved && r.restored && r.candFirst && r.cleaned, JSON.stringify(r));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');

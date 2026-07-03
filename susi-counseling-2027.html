@@ -3497,6 +3497,8 @@ function buildApplicationCards(student) {
       const bandFinal = (caution && (band === '안정' || band === '적정')) ? '유보' : band;
       cards.push({
         univ, dept, region,
+        seat: student.seat,                       // 후보 바구니(☆) 연결용
+
         jn: e.jn, jt: e.jt, gy: e.gy, sub: e.sub || '',
         num: e.num, ratio: e.ratio, chu: e.chu,
         cw: e.cw != null ? e.cw : null,          // 충원배수
@@ -3565,22 +3567,178 @@ function getCards(student, filters = {}) {
 // 카드 보드 컴포넌트 — getCards() 기반 학과×전형 단위 목록
 // (수도권 매칭 / 컷라인 비교 / 전체 환산 결과 화면 공용)
 // ═══════════════════════════════════════════════
+// ── 한글 초성 검색 ──
+const _CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+function chosungOf(str) {
+  let out = '';
+  for (const ch of String(str)) {
+    const code = ch.charCodeAt(0);
+    out += (code >= 0xAC00 && code <= 0xD7A3) ? _CHO[Math.floor((code - 0xAC00) / 588)] : ch;
+  }
+  return out;
+}
+// 대학·학과·전형 통합 검색 매칭: 일반 부분일치 + 전부 초성(ㄱ-ㅎ) 질의면 초성열
+// 순서 유지 부분수열 매칭 (예: "ㅅㄱㄷ" ⊂ "ㅅㄱㄱㄷㅎㄱ"=성균관대학교 → 일치)
+function cardSearchMatch(text, q) {
+  if (!q) return true;
+  q = String(q).replace(/\s/g, '').toLowerCase();
+  if (!q) return true;
+  const t = String(text).replace(/\s/g, '').toLowerCase();
+  if (t.includes(q)) return true;
+  if (/^[ㄱ-ㅎ]+$/.test(q)) {
+    const cho = chosungOf(t);
+    let i = 0;
+    for (const ch of cho) {
+      if (ch === q[i]) { i++; if (i === q.length) return true; }
+    }
+  }
+  return false;
+}
+
+// ── 후보 바구니 (학생별 localStorage 저장 · 6지원 시뮬레이션 후보군에 우선 반영) ──
+const _basketCache = {};
+function basketKeyOf(c) { return c.univ + '|' + (c.jn || c.jt) + '|' + c.dept; }
+function getBasket(seat) {
+  if (_basketCache[seat]) return _basketCache[seat];
+  try {
+    const v = localStorage.getItem('basket_' + seat);
+    return (_basketCache[seat] = v ? JSON.parse(v) : []);
+  } catch (e) { return (_basketCache[seat] = []); }
+}
+function setBasketKeys(seat, keys) {
+  _basketCache[seat] = keys;
+  try { localStorage.setItem('basket_' + seat, JSON.stringify(keys)); } catch (e) {}
+}
+function toggleBasketEnc(seat, enc) {
+  const key = decodeURIComponent(enc);
+  const b = getBasket(seat).slice();
+  const i = b.indexOf(key);
+  if (i >= 0) b.splice(i, 1); else b.push(key);
+  setBasketKeys(seat, b);
+  refreshBasketUI(seat);
+}
+function clearBasket(seat) { setBasketKeys(seat, []); refreshBasketUI(seat); }
+function basketCards(student) {
+  const keys = getBasket(student.seat);
+  if (!keys.length) return [];
+  const set = new Set(keys);
+  return buildApplicationCards(student).filter(c => set.has(basketKeyOf(c)));
+}
+// 6지원 시뮬레이션 입력 후보군: 바구니 카드(컷 보유)를 선두에 두면
+// calcOptimalPortfolioCards의 골격 채우기(P2)가 같은 구간에서 바구니 카드를 먼저 집는다.
+function portfolioCandidateCards(student) {
+  const basket = basketCards(student).filter(c => !c.noCut);
+  if (!basket.length) return null;               // 바구니 비어 있으면 기본 전체 후보
+  const inBasket = new Set(basket.map(basketKeyOf));
+  const rest = getCards(student).filter(c => !inBasket.has(basketKeyOf(c)));
+  return basket.concat(rest);
+}
+function renderBasketPanel(student) {
+  let panel = document.getElementById('basketPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'basketPanel';
+    document.body.appendChild(panel);
+  }
+  const cards = basketCards(student);
+  if (!cards.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.cssText = 'display:block;position:fixed;right:16px;bottom:16px;z-index:900;width:290px;max-height:46vh;overflow:auto;'
+    + 'background:var(--card);border:1px solid var(--teal);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:10px 12px';
+  let h = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+    <strong style="font-size:12px;color:var(--teal)">★ 후보 바구니 (${cards.length})</strong>
+    <span style="font-size:9px;color:var(--muted);flex:1">${esc(student.name)}</span>
+    <button onclick="clearBasket(${student.seat})" style="font-size:9px;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:var(--cream);cursor:pointer;font-family:inherit;color:var(--sub)">비우기</button>
+  </div>`;
+  for (const c of cards) {
+    const bs = BAND_STYLE[c.band] || {};
+    h += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">
+      <span style="padding:0 6px;border-radius:6px;background:${bs.color || 'var(--muted)'};color:#fff;font-size:9px;font-weight:700;white-space:nowrap">${c.band || '컷없음'}</span>
+      <span style="flex:1;line-height:1.3"><strong>${esc(c.univ)}</strong> ${esc(c.dept)}<br><span style="color:var(--muted);font-size:9px">${esc(c.jn || c.jt)}</span></span>
+      <span onclick="toggleBasketEnc(${c.seat}, '${encodeURIComponent(basketKeyOf(c))}')" title="바구니에서 빼기"
+        style="cursor:pointer;color:var(--red);font-weight:700">✕</span>
+    </div>`;
+  }
+  h += `<div style="font-size:9px;color:var(--muted);margin-top:6px">바구니 카드는 AI 6지원 시뮬레이션 후보군에 우선 반영됩니다.</div>`;
+  panel.innerHTML = h;
+}
+function refreshBasketUI(seat) {
+  for (const [bid, st] of Object.entries(_boardState)) {
+    if (st.student && st.student.seat === seat) renderBoardList(bid);
+  }
+  const s = STUDENTS.find(x => x.seat === seat);
+  if (s) {
+    renderBasketPanel(s);
+    const wrap = document.getElementById('pfSimWrap');
+    if (wrap) wrap.innerHTML = portfolioSimHtml(s);
+  }
+}
+
+// ── 카드 보드 상태 ──
 const _boardState = {};
+const BOARD_TABS = ['안정', '적정', '소신', '상향', '유보', '컷정보없음'];
+const BOARD_SORTS = [
+  ['margin', '여유도순 (평균-70컷)'], ['close', '컷근접순'],
+  ['cw', '충원배수순'], ['region', '지역우선순위순'],
+];
 function initCardBoard(id, student, opts = {}) {
   const prev = _boardState[id] || {};
-  _boardState[id] = { jt: prev.jt ?? null, region: prev.region ?? null, band: prev.band ?? null,
-                      limit: 50, student, onlyWithCut: !!opts.onlyWithCut };
+  _boardState[id] = {
+    jt: prev.jt ?? null, region: prev.region ?? null,
+    bandTab: prev.bandTab ?? '안정',                       // 구간 탭 (1차 분할)
+    search: prev.search ?? '', sort: prev.sort ?? 'margin', // 기본 정렬: 여유도순
+    open: prev.open instanceof Set ? prev.open : new Set(), // 펼친 대학 아코디언
+    gcap: {},                                               // 대학별 표시 상한 (더 보기)
+    student, onlyWithCut: !!opts.onlyWithCut
+  };
 }
 function setBoardFilter(id, key, val) {
   const st = _boardState[id]; if (!st) return;
   st[key] = st[key] === val ? null : val;   // 같은 칩 재클릭 = 해제
-  st.limit = 50;
-  renderCardBoard(id);
+  renderBoardList(id);
 }
-function boardMore(id) {
+function boardTab(id, t) {
   const st = _boardState[id]; if (!st) return;
-  st.limit += 50;                            // 화면당 50건 단위 추가 렌더링
-  renderCardBoard(id);
+  st.bandTab = t;
+  renderBoardList(id);
+}
+function boardSort(id, v) {
+  const st = _boardState[id]; if (!st) return;
+  st.sort = v;
+  renderBoardList(id);
+}
+// 검색 입력: 300ms 디바운스 후 목록 영역만 재렌더 (검색창은 셸에 있어 포커스 유지)
+const _boardDebounce = {};
+function boardSearchInput(id, val) {
+  const st = _boardState[id]; if (!st) return;
+  clearTimeout(_boardDebounce[id]);
+  _boardDebounce[id] = setTimeout(() => { st.search = val; renderBoardList(id); }, 300);
+}
+function toggleBoardUniv(id, enc) {
+  const st = _boardState[id]; if (!st) return;
+  const u = decodeURIComponent(enc);
+  if (st.open.has(u)) st.open.delete(u); else st.open.add(u);
+  renderBoardList(id);
+}
+function boardGroupMore(id, enc) {
+  const st = _boardState[id]; if (!st) return;
+  const u = decodeURIComponent(enc);
+  st.gcap[u] = (st.gcap[u] || 80) + 100;
+  renderBoardList(id);
+}
+// 여유도 = 학생 평균등급 − 70컷(없으면 50컷). 음수일수록 여유 (등급은 낮을수록 좋음).
+function boardMarginOf(c) {
+  const cut = c.g70 != null ? c.g70 : c.g50;
+  return cut == null ? Infinity : Math.round((c.stAvg - cut) * 100) / 100;
+}
+function sortBoardCards(cards, mode) {
+  const arr = cards.slice();
+  if (mode === 'margin') arr.sort((a, b) => boardMarginOf(a) - boardMarginOf(b));
+  else if (mode === 'close') arr.sort((a, b) => Math.abs(boardMarginOf(a)) - Math.abs(boardMarginOf(b)));
+  else if (mode === 'cw') arr.sort((a, b) => (b.cw ?? -1) - (a.cw ?? -1));
+  else arr.sort((a, b) => (REGION_PRIORITY[a.region] ?? 3) - (REGION_PRIORITY[b.region] ?? 3)
+    || (_BAND_RANK[b.band] ?? -1) - (_BAND_RANK[a.band] ?? -1)
+    || (_REL_RANK[b.rel] ?? 0) - (_REL_RANK[a.rel] ?? 0));
+  return arr;
 }
 function _boardChip(id, key, val, label, on) {
   const v = val === null ? 'null' : `'${String(val).replace(/'/g, "\\'")}'`;
@@ -3593,7 +3751,14 @@ function cardRowHtml(c) {
   const bandCell = c.band
     ? `<span style="padding:1px 8px;border-radius:8px;background:${bs.color};color:#fff;font-size:10px;font-weight:800;white-space:nowrap">${c.band === '유보' ? '판정 유보(컷 해석주의)' : c.bandAdjusted ? '충원 감안 시 ' + c.band : c.band}</span>`
     : `<span style="font-size:9px;color:var(--muted)">${esc(c.noCutLabel || '컷 정보 없음')}</span>`;
+  const bkey = basketKeyOf(c);
+  const starred = c.seat != null && getBasket(c.seat).includes(bkey);
+  const star = c.seat != null
+    ? `<span onclick="toggleBasketEnc(${c.seat}, '${encodeURIComponent(bkey)}')" title="후보 담기"
+        style="cursor:pointer;font-size:15px;line-height:1;color:${starred ? 'var(--copper)' : 'var(--muted)'}">${starred ? '★' : '☆'}</span>`
+    : '';
   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;flex-wrap:wrap">
+    ${star}
     <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
     <span class="mono" style="white-space:nowrap">${c.scoreSrc || '환산'} ${c.score} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
     ${bandCell}
@@ -3601,51 +3766,92 @@ function cardRowHtml(c) {
     ${judgeRelBadge(c.rel)}
   </div>`;
 }
+// 셸(검색창·정렬 셀렉터·컨테이너)은 1회만 렌더하고, 이후 상태 변화는
+// renderBoardList가 칩·탭·목록 영역만 갱신한다 — 검색창 포커스 보존 + 부분 재렌더.
 function renderCardBoard(id) {
   const st = _boardState[id]; if (!st) return;
   const el = document.getElementById('board-' + id); if (!el) return;
-  let cards = getCards(st.student, { jt: st.jt, region: st.region, band: st.band }); // 기본 정렬: 지역 우선순위 → 구간
-  if (st.onlyWithCut) cards = cards.filter(c => !c.noCut);
-  let h = '';
-  // 필터 칩 3줄: 유형 / 지역 / 구간
-  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">'
+  el.innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+      <input id="board-search-${id}" type="search" placeholder="대학·학과·전형 검색 — 초성 가능 (예: ㅅㄱㄷ)" value="${esc(st.search)}"
+        oninput="boardSearchInput('${id}', this.value)"
+        style="flex:1;min-width:220px;padding:7px 12px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:12px;background:var(--card);color:inherit">
+      <select onchange="boardSort('${id}', this.value)"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:11px;background:var(--card);color:inherit;cursor:pointer">
+        ${BOARD_SORTS.map(([v, l]) => `<option value="${v}"${st.sort === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
+    </div>
+    <div id="board-chips-${id}"></div>
+    <div id="board-tabs-${id}" style="display:flex;flex-wrap:wrap;border-bottom:2px solid var(--border);margin-bottom:8px"></div>
+    <div id="board-list-${id}"></div>`;
+  renderBoardList(id);
+}
+function renderBoardList(id) {
+  const st = _boardState[id]; if (!st) return;
+  const chipsEl = document.getElementById(`board-chips-${id}`);
+  const tabsEl = document.getElementById(`board-tabs-${id}`);
+  const listEl = document.getElementById(`board-list-${id}`);
+  if (!chipsEl || !tabsEl || !listEl) return;
+  // 유형/지역 칩 (2차 필터)
+  chipsEl.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">'
     + _boardChip(id, 'jt', null, '유형 전체', st.jt == null)
-    + ['교과', '종합', '논술'].map(v => _boardChip(id, 'jt', v, v, st.jt === v)).join('') + '</div>';
-  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">'
+    + ['교과', '종합', '논술'].map(v => _boardChip(id, 'jt', v, v, st.jt === v)).join('') + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">'
     + _boardChip(id, 'region', null, '지역 전체', st.region == null)
     + ['서울', '경기인천', '충청', '기타'].map(v => _boardChip(id, 'region', v, REGION_LABEL[v] || v, st.region === v)).join('') + '</div>';
-  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">'
-    + _boardChip(id, 'band', null, '구간 전체', st.band == null)
-    + ['안정', '적정', '소신', '상향'].map(v => _boardChip(id, 'band', v, v, st.band === v)).join('') + '</div>';
-  h += `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${cards.length}건 · 인서울→인경기→충남권→기타 순, 지역 내 구간·신뢰도 순 · 대학명 클릭으로 접기/펼치기</div>`;
-  // 대학별 그룹 (정렬 등장 순서 유지)
-  const groups = []; const gmap = {};
+  // 필터·검색 적용 (구간 분할 전)
+  let cards = getCards(st.student, { jt: st.jt, region: st.region });
+  if (st.onlyWithCut) cards = cards.filter(c => !c.noCut);
+  const q = String(st.search || '').trim();
+  if (q) cards = cards.filter(c => cardSearchMatch(c.univ, q) || cardSearchMatch(c.dept, q) || cardSearchMatch(c.jn || '', q));
+  // 구간 탭 + 건수
+  const counts = {};
+  BOARD_TABS.forEach(t => { counts[t] = 0; });
   for (const c of cards) {
+    if (c.noCut) counts['컷정보없음']++;
+    else if (counts[c.band] != null) counts[c.band]++;
+  }
+  const tabs = BOARD_TABS.filter(t => !(st.onlyWithCut && t === '컷정보없음'));
+  if (!tabs.includes(st.bandTab)) st.bandTab = tabs[0];
+  tabsEl.innerHTML = tabs.map(t => {
+    const on = st.bandTab === t;
+    const col = (BAND_STYLE[t] || {}).color || 'var(--muted)';
+    return `<span onclick="boardTab('${id}', '${t}')" style="cursor:pointer;padding:6px 13px;font-size:12px;white-space:nowrap;
+      font-weight:${on ? 800 : 500};color:${on ? col : 'var(--sub)'};border-bottom:2px solid ${on ? col : 'transparent'};margin-bottom:-2px">
+      ${t === '컷정보없음' ? '컷 정보 없음' : t === '유보' ? '판정 유보' : t} <span style="font-size:10px;color:var(--muted)">${counts[t]}</span></span>`;
+  }).join('');
+  // 현재 탭 목록 + 정렬
+  let list = cards.filter(c => st.bandTab === '컷정보없음' ? c.noCut : (!c.noCut && c.band === st.bandTab));
+  list = sortBoardCards(list, st.sort);
+  // 대학별 아코디언 (기본 접힘 · 검색 중 자동 펼침)
+  const groups = []; const gmap = {};
+  for (const c of list) {
     let g = gmap[c.univ];
     if (!g) { g = gmap[c.univ] = { univ: c.univ, region: c.region, rows: [] }; groups.push(g); }
     g.rows.push(c);
   }
-  let shown = 0;
+  const openAll = !!q;
+  const sortLabel = (BOARD_SORTS.find(([v]) => v === st.sort) || [])[1] || '';
+  let h = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${st.bandTab === '유보' ? '판정 유보(컷 해석주의)' : st.bandTab} ${list.length}장 · ${groups.length}개 대학 · ${sortLabel}${openAll ? ' · 검색 중: 전체 펼침' : ' · 대학명 클릭으로 펼치기'}</div>`;
   for (const g of groups) {
-    if (shown >= st.limit) break;
-    const take = g.rows.slice(0, st.limit - shown);
-    const best = g.rows.reduce((b, c) => (_BAND_RANK[c.band] ?? -1) > (_BAND_RANK[b] ?? -1) ? c.band : b, null);
+    const open = openAll || st.open.has(g.univ);
+    const cap = st.gcap[g.univ] || 80;
+    const take = open ? g.rows.slice(0, cap) : [];
     const rc = REGION_COLOR[g.region] || 'var(--muted)';
-    h += `<details open style="margin-bottom:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <summary style="cursor:pointer;padding:6px 10px;background:var(--cream);font-size:12px;font-weight:700;color:var(--teal)">
-        ${esc(g.univ)} <span style="font-size:10px;padding:1px 7px;border-radius:8px;background:${rc}22;color:${rc};font-weight:600">${REGION_LABEL[g.region] || g.region}</span>
-        <span style="font-size:10px;color:var(--muted);font-weight:400">카드 ${g.rows.length}장${best ? ' · 최고 ' + best : ''}</span>
-      </summary>
-      <div>${take.map(cardRowHtml).join('')}</div>
-      ${take.length < g.rows.length ? `<div style="font-size:10px;color:var(--muted);padding:4px 10px">외 ${g.rows.length - take.length}행 — 더보기로 표시</div>` : ''}
-    </details>`;
-    shown += take.length;
+    const encU = encodeURIComponent(g.univ);
+    h += `<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div onclick="toggleBoardUniv('${id}', '${encU}')" style="cursor:pointer;padding:7px 10px;background:var(--cream);font-size:12px;font-weight:700;color:var(--teal);display:flex;align-items:center;gap:7px">
+        <span style="font-size:9px;color:var(--muted)">${open ? '▼' : '▶'}</span>
+        ${esc(g.univ)} <span style="font-size:10px;color:var(--muted);font-weight:400">(카드 ${g.rows.length}장)</span>
+        <span style="font-size:10px;padding:1px 7px;border-radius:8px;background:${rc}22;color:${rc};font-weight:600;margin-left:auto">${REGION_LABEL[g.region] || g.region}</span>
+      </div>
+      ${take.length ? `<div>${take.map(cardRowHtml).join('')}</div>` : ''}
+      ${open && take.length < g.rows.length ? `<div style="text-align:center;padding:5px"><span onclick="boardGroupMore('${id}', '${encU}')" style="cursor:pointer;font-size:10px;color:var(--teal);font-weight:700">더 보기 (${take.length}/${g.rows.length}장)</span></div>` : ''}
+    </div>`;
   }
-  if (shown < cards.length) {
-    h += `<div style="text-align:center;margin-top:8px"><button onclick="boardMore('${id}')"
-      style="padding:7px 22px;border-radius:10px;border:1px solid var(--teal);background:var(--card);color:var(--teal);font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">더보기 (${shown} / ${cards.length}건)</button></div>`;
-  }
-  el.innerHTML = h;
+  if (!groups.length) h += `<div style="font-size:12px;color:var(--muted);padding:14px;text-align:center">해당 조건의 카드가 없습니다${q ? ` — 검색어 "${esc(q)}"` : ''}</div>`;
+  listEl.innerHTML = h;
 }
 
 // ═══════════════════════════════════════════════
@@ -3815,6 +4021,50 @@ function calcOptimalPortfolioCards(student, candidateCards) {
     minRisky: picks.filter(pk => pk.minInfo && pk.minInfo.risky).length,
     principle: '안정 2 / 적정 2 / 소신·상향 2 골격 · 같은 대학 다른 전형 허용(대학당 최대 2장) · 교과·종합 혼합 · 수능최저 리스크 분산'
   };
+}
+
+// AI 최적 6지원 시뮬레이션 블록 — 후보 바구니 변경 시 #pfSimWrap만 부분 재렌더된다.
+// 바구니(★) 카드가 있으면 portfolioCandidateCards가 이를 후보군 선두에 배치한다.
+function portfolioSimHtml(student) {
+  const basketN = basketCards(student).filter(c => !c.noCut).length;
+  const pf = calcOptimalPortfolioCards(student, portfolioCandidateCards(student));
+  if (!pf.picks.length) return '';
+  const conflicts = classCardConflicts();
+  let html = '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:6px">AI 최적 6지원 시뮬레이션 (지원 카드 단위)</div>';
+  html += `<p style="font-size:10px;color:var(--sub);margin-bottom:8px">조합 원칙: ${esc(pf.principle)}</p>`;
+  if (basketN) html += `<p style="font-size:10px;color:var(--copper);font-weight:700;margin-bottom:8px">★ 후보 바구니 ${basketN}장을 후보군 선두에 반영해 조합했습니다.</p>`;
+  // 사실 기술 요약 (단정 표현 없음)
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">
+    <span style="padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:8px;font-weight:700">6장 중 안정 구간 ${pf.counts.안정}장</span>
+    <span style="padding:3px 10px;background:var(--blue-light);color:var(--blue);border-radius:8px;font-weight:700">적정 ${pf.counts.적정}장</span>
+    <span style="padding:3px 10px;background:var(--orange-light);color:var(--orange);border-radius:8px;font-weight:700">소신 ${pf.counts.소신}장 · 상향 ${pf.counts.상향}장</span>
+    <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">교과 ${pf.jtMix.교과} · 종합 ${pf.jtMix.종합} · 논술 ${pf.jtMix.논술}</span>
+    <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">수능최저 위험 ${pf.minRisky}장</span>
+  </div>`;
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">';
+  pf.picks.forEach((pk, i) => {
+    const bs = BAND_STYLE[pk.band] || {};
+    const k = pk.univ + '|' + (pk.jn || pk.jt) + '|' + pk.dept;
+    const rivals = (conflicts[k] || []).filter(x => x.seat !== student.seat);
+    html += `<div style="padding:8px 10px;background:var(--card);border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="showUnivDetail('${esc(pk.univ)}')">
+      <div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">
+        <span style="font-size:9px;color:var(--muted)">${i + 1}지망</span>
+        <span style="padding:1px 8px;border-radius:8px;background:${bs.color || 'var(--muted)'};color:#fff;font-size:10px;font-weight:800">${pk.bandAdjusted ? '충원 감안 시 ' + pk.band : pk.band}</span>
+        <span style="font-size:9px;color:var(--muted)">${esc(pk.jt)}</span>
+        ${pk.swapped ? `<span style="font-size:8px;color:var(--copper)">↻ ${pk.swapped}</span>` : ''}
+      </div>
+      <div style="font-size:12px;font-weight:700">${esc(pk.univ)}</div>
+      <div style="font-size:11px;color:var(--sub)">${esc(pk.jn || '')} · <strong>${esc(pk.dept)}</strong></div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px">50컷 ${pk.g50 ?? '-'} · 70컷 ${pk.g70 ?? '-'}${pk.cw != null ? ' · 충원 ' + pk.cw.toFixed(1) + '배수' : ''} ${judgeRelBadge(pk.rel)}</div>
+      ${pk.minInfo && pk.minInfo.has ? `<div style="font-size:9px;margin-top:2px;color:${pk.minInfo.risky ? 'var(--red)' : 'var(--green)'};font-weight:600">수능최저 ${pk.minInfo.risky ? '미충족 위험' : '충족 가능'}</div>` : ''}
+      ${rivals.length ? `<div style="font-size:9px;margin-top:2px;color:var(--purple);font-weight:700">경합(동일 대학·전형·학과): ${rivals.map(x => x.seat + '번 ' + esc(x.name)).join(', ')}</div>` : ''}
+    </div>`;
+  });
+  html += '</div>';
+  html += `<div style="margin-top:8px;font-size:10px;color:var(--muted)">※ 같은 대학이라도 전형이 다르면 별개 카드로 지원 가능(수시 규정). 경합 표시는 학급 자동 조합 기준의 참고 정보입니다.</div>`;
+  html += '</div>';
+  return html;
 }
 
 // 학급 내 카드 단위 지원 경합: 같은 (대학·전형·학과) 카드를 6지원안에 가진 학생끼리
@@ -6943,45 +7193,8 @@ function renderSusiTab(student, analysis) {
   }
 
   // [카드 전환] AI 최적 6지원 시뮬레이션 — 지원 카드(대학×전형×학과) 단위
-  {
-    const pf = calcOptimalPortfolioCards(student);
-    if (pf.picks.length) {
-      const conflicts = classCardConflicts();
-      html += '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
-      html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:6px">AI 최적 6지원 시뮬레이션 (지원 카드 단위)</div>';
-      html += `<p style="font-size:10px;color:var(--sub);margin-bottom:8px">조합 원칙: ${esc(pf.principle)}</p>`;
-      // 사실 기술 요약 (단정 표현 없음)
-      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">
-        <span style="padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:8px;font-weight:700">6장 중 안정 구간 ${pf.counts.안정}장</span>
-        <span style="padding:3px 10px;background:var(--blue-light);color:var(--blue);border-radius:8px;font-weight:700">적정 ${pf.counts.적정}장</span>
-        <span style="padding:3px 10px;background:var(--orange-light);color:var(--orange);border-radius:8px;font-weight:700">소신 ${pf.counts.소신}장 · 상향 ${pf.counts.상향}장</span>
-        <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">교과 ${pf.jtMix.교과} · 종합 ${pf.jtMix.종합} · 논술 ${pf.jtMix.논술}</span>
-        <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">수능최저 위험 ${pf.minRisky}장</span>
-      </div>`;
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">';
-      pf.picks.forEach((pk, i) => {
-        const bs = BAND_STYLE[pk.band] || {};
-        const k = pk.univ + '|' + (pk.jn || pk.jt) + '|' + pk.dept;
-        const rivals = (conflicts[k] || []).filter(x => x.seat !== student.seat);
-        html += `<div style="padding:8px 10px;background:var(--card);border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="showUnivDetail('${esc(pk.univ)}')">
-          <div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">
-            <span style="font-size:9px;color:var(--muted)">${i + 1}지망</span>
-            <span style="padding:1px 8px;border-radius:8px;background:${bs.color || 'var(--muted)'};color:#fff;font-size:10px;font-weight:800">${pk.bandAdjusted ? '충원 감안 시 ' + pk.band : pk.band}</span>
-            <span style="font-size:9px;color:var(--muted)">${esc(pk.jt)}</span>
-            ${pk.swapped ? `<span style="font-size:8px;color:var(--copper)">↻ ${pk.swapped}</span>` : ''}
-          </div>
-          <div style="font-size:12px;font-weight:700">${esc(pk.univ)}</div>
-          <div style="font-size:11px;color:var(--sub)">${esc(pk.jn || '')} · <strong>${esc(pk.dept)}</strong></div>
-          <div style="font-size:9px;color:var(--muted);margin-top:2px">50컷 ${pk.g50 ?? '-'} · 70컷 ${pk.g70 ?? '-'}${pk.cw != null ? ' · 충원 ' + pk.cw.toFixed(1) + '배수' : ''} ${judgeRelBadge(pk.rel)}</div>
-          ${pk.minInfo && pk.minInfo.has ? `<div style="font-size:9px;margin-top:2px;color:${pk.minInfo.risky ? 'var(--red)' : 'var(--green)'};font-weight:600">수능최저 ${pk.minInfo.risky ? '미충족 위험' : '충족 가능'}</div>` : ''}
-          ${rivals.length ? `<div style="font-size:9px;margin-top:2px;color:var(--purple);font-weight:700">경합(동일 대학·전형·학과): ${rivals.map(x => x.seat + '번 ' + esc(x.name)).join(', ')}</div>` : ''}
-        </div>`;
-      });
-      html += '</div>';
-      html += `<div style="margin-top:8px;font-size:10px;color:var(--muted)">※ 같은 대학이라도 전형이 다르면 별개 카드로 지원 가능(수시 규정). 경합 표시는 학급 자동 조합 기준의 참고 정보입니다.</div>`;
-      html += '</div>';
-    }
-  }
+  // 후보 바구니(★)가 있으면 바구니 카드를 후보군 선두에 두고 조합한다 (portfolioCandidateCards).
+  html += '<div id="pfSimWrap">' + portfolioSimHtml(student) + '</div>';
 
   html += '</div>';
 
@@ -7055,6 +7268,7 @@ function renderSusiTab(student, analysis) {
   renderCardBoard('realmatch');
   renderCardBoard('cutcmp');
   renderCardBoard('allresults');
+  renderBasketPanel(student);   // 화면 고정 후보 바구니 패널
 }
 
 // ═══════════════════════════════════════════════
