@@ -972,8 +972,6 @@ let univResults = [];
 let favorites = JSON.parse(localStorage.getItem('susi27_favs') || '{}');
 let memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
 const _cache = { record: {}, fit: {}, combo: {}, avg: {}, trend: {} };
-function clearCache() { Object.keys(_cache).forEach(k => { if (typeof _cache[k] === 'object') _cache[k] = {}; else delete _cache[k]; }); _cache.heatmap = null; _cache.classPortfolio = null; _cache.studentUnivProbs = null; _cache.studentRanking = null; }
-
 // ═══════════════════════════════════════════════
 // CORE CALCULATIONS
 // ═══════════════════════════════════════════════
@@ -2180,50 +2178,6 @@ const DEPT_KEYWORDS = {
   '디자인학과': ['디자인','조형','시각','색채','제품','창작'],
   '체육학과': ['운동','체육','스포츠','트레이닝','신체','경기']
 };
-
-// 생기부 ↔ 추천 학과 연결점 분석
-function analyzeDeptConnections(student, analysis, ra) {
-  const depts = (ra.deptMatch || []).slice(0, 6);
-  if (!depts.length) return [];
-  // 세특 기록 수집 (교과 + 문장)
-  const recs = student.records.filter(r => r.t === '세부능력및특기사항' && r.b && r.b.length > 20);
-  const conceptKw = (HL_CAREER_KW[ra.concept] || []);
-  const out = [];
-  depts.forEach(dept => {
-    let kws = DEPT_KEYWORDS[dept];
-    if (!kws) {
-      // 학과명에서 키워드 추출
-      const base = dept.replace(/(학과|학부|과|전공)$/,'');
-      kws = [base].concat(conceptKw.slice(0, 4));
-    }
-    const evidence = [];
-    const subjSet = new Set();
-    let hits = 0;
-    recs.forEach(r => {
-      const text = r.b;
-      let matched = null;
-      for (const kw of kws) {
-        const idx = text.indexOf(kw);
-        if (idx >= 0) { matched = { kw, idx }; hits++; break; }
-      }
-      if (matched) {
-        if (r.c) subjSet.add(r.c);
-        if (evidence.length < 2) {
-          // 매칭 키워드 주변 문장 추출
-          const sentences = text.split(/(?<=[.。])\s*/);
-          let snip = sentences.find(s => s.includes(matched.kw)) || text.substring(Math.max(0,matched.idx-20), matched.idx+50);
-          snip = snip.trim();
-          if (snip.length > 90) snip = snip.substring(0, 90) + '…';
-          evidence.push({ subj: r.c || '', year: r.y, kw: matched.kw, text: snip });
-        }
-      }
-    });
-    if (hits > 0) {
-      out.push({ dept, hits, subjects: [...subjSet], evidence, matchedKw: kws });
-    }
-  });
-  return out.sort((a,b) => b.hits - a.hits);
-}
 
 function assessCompetencies(student, analysis) {
   const scores = {
@@ -4372,37 +4326,9 @@ function getStudentTrack(student, analysis) {
   return '인문';
 }
 
-function normJeonType(s) {
-  s = s || '';
-  if (s.includes('논술')) return '논술';
-  if (s.includes('종합')) return '종합';
-  return '교과';
-}
-
-// 실제 합격선(평균등급) 대비 학생 평균등급 → 합격 확률
-function probFromRealCut(cut, studentAvg, jt) {
-  const gap = cut - studentAvg; // +면 학생이 컷보다 우수
-  let p;
-  if (jt === '교과') p = 50 + gap * 33;
-  else if (jt === '종합') p = 50 + gap * 22;
-  else p = 46 + gap * 14; // 논술: 내신 비중 낮음
-  return Math.max(3, Math.min(97, Math.round(p)));
-}
-
-function realBand(prob) {
-  if (prob >= 65) return { label: '안정', cls: 'band-safe', color: 'var(--green)' };
-  if (prob >= 40) return { label: '적정', cls: 'band-fit', color: 'var(--blue)' };
-  if (prob >= 15) return { label: '소신', cls: 'band-reach', color: 'var(--orange)' };
-  return { label: '도전', cls: 'band-hard', color: 'var(--red)' };
-}
-
 // 목표 지역: 전과목 평균 5점대까지 수도권(서울·경기·인천), 6~7점대부터 충청권
 function getTargetRegion(avg) {
   return avg < 6.0 ? '수도권' : '충청';
-}
-function inTargetRegion(region, target) {
-  if (target === '수도권') return region === '서울' || region === '경기인천';
-  return region === '충청';
 }
 const REGION_LABEL = { '서울': '서울', '경기인천': '경기·인천', '충청': '충청권', '기타': '기타' };
 const REGION_COLOR = { '서울': 'var(--teal)', '경기인천': 'var(--blue)', '충청': 'var(--copper)', '기타': 'var(--muted)' };
@@ -4428,39 +4354,6 @@ function sortByRegionPriority(items, getRegion, secondaryCmp) {
     if (ra !== rb) return ra - rb;
     return secondaryCmp ? secondaryCmp(a, b) : 0;
   });
-}
-
-// 학생별 실제 합격선 매칭 결과
-function matchRealAdmissions(student, analysis) {
-  const track = getStudentTrack(student, analysis);
-  const avg = calcWeightedAvg(student);
-  const out = [];
-  for (const [univ, data] of Object.entries(ADM_RESULTS)) {
-    // 계열 우선: 학생 계열 → 전체 fallback
-    let pool = (data[track] && data[track].length) ? data[track].slice() : [];
-    if (data['전체'] && data['전체'].length) pool = pool.concat(data['전체']);
-    if (!pool.length) continue;
-    // 전형유형별 최고 확률 엔트리
-    const byType = {};
-    pool.forEach(e => {
-      if (e.cut == null || e.cut < 0.5 || e.cut > 9) return; // 등급 스케일만
-      const jt = normJeonType(e.jt);
-      const prob = probFromRealCut(e.cut, avg, jt);
-      const cur = byType[jt];
-      if (!cur || prob > cur.prob) {
-        byType[jt] = { jt, jn: e.jn, cut: e.cut, prob, reg: e.reg || '', yr: e.yr || '',
-                       ratio: e.ratio || '', fill: e.fill || '', ind: e.ind || '' };
-      }
-    });
-    const entries = Object.values(byType).sort((a,b) => b.prob - a.prob);
-    const best = entries[0];
-    out.push({
-      univ, region: UNIV_REGION[univ] || '기타', track,
-      bestProb: best.prob, bestType: best.jt, bestCut: best.cut,
-      entries
-    });
-  }
-  return out.sort((a,b) => b.bestProb - a.bestProb);
 }
 
 // ═══════════════════════════════════════════════
@@ -4531,8 +4424,7 @@ function renderSusiTab(student, analysis) {
   const stAvg = calcWeightedAvg(student);
   const stTrack = getStudentTrack(student, analysis);
   const target = getTargetRegion(stAvg);
-  const realMatches = matchRealAdmissions(student, analysis);
-  window._realMatchCache = realMatches;
+
 
   const targetLabel = target === '수도권' ? '수도권 (인서울·인경기)' : '충청권';
   const targetDesc = target === '수도권'
@@ -4547,31 +4439,6 @@ function renderSusiTab(student, analysis) {
     <div style="font-size:11px;color:var(--muted)">학생 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 계열 판정 <strong>${stTrack}</strong> · 실제 합격선 자료(2025~2026 수박/어디가) 기준</div>
   </div>`;
 
-  // 실제 합격선 기반 대학 매칭 — 인서울>인경기>충남권 순, 동일 지역 내 합격확률순
-  const byRegionThenProb = (a, b) => b.bestProb - a.bestProb;
-  const targetMatches = sortByRegionPriority(
-    realMatches.filter(m => inTargetRegion(m.region, target)), regionOf, byRegionThenProb);
-  const otherMatches = sortByRegionPriority(
-    realMatches.filter(m => !inTargetRegion(m.region, target)), regionOf, byRegionThenProb);
-
-  const renderRealRow = (m) => {
-    const band = realBand(m.bestProb);
-    const rc = REGION_COLOR[m.region] || 'var(--muted)';
-    const entryLine = m.entries.map(e => `${e.jt} ${classifyBand(stAvg, e.cut, e.cut) || '컷없음'}`).join(' · ');
-    const trBadge = ' ' + trendBadge(getDeptTrend(m.univ, null, student, m.bestType));
-    const cBadge = ' ' + confBadge(m.univ);
-    return `<div class="match-row" onclick="showRealDetail('${esc(m.univ)}')" style="cursor:pointer">
-      <span class="match-badge" style="background:${band.color};color:#fff;min-width:34px">${band.label}</span>
-      <div class="match-body">
-        <div class="univ">${esc(m.univ)} <span style="font-size:10px;padding:1px 7px;border-radius:8px;background:${rc}22;color:${rc};font-weight:600">${REGION_LABEL[m.region]}</span>${trBadge}${cBadge}</div>
-        <div class="jeon">${esc(entryLine)} · 합격선 ${m.bestCut}등급(${esc(m.bestType)})</div>
-      </div>
-      <div class="match-num">
-        <div>${bandBadge(classifyBand(stAvg, m.bestCut, m.bestCut))}</div>
-        <div class="unit">${m.track} 기준</div>
-      </div>
-    </div>`;
-  };
 
   // [카드 전환] 수도권 매칭 — getCards() 기반 학과×전형 단위 보드
   html += `<div class="glass"><h3>수도권 매칭 — 실제 합격선 (학과·전형 단위)</h3>
@@ -4812,51 +4679,6 @@ function renderSusiTab(student, analysis) {
   renderCardBoard('realmatch');
   renderCardBoard('cutcmp');
   renderCardBoard('allresults');
-}
-
-function filterUnivResults() {
-  const q = document.getElementById('univSearch').value.toLowerCase();
-  document.querySelectorAll('.univ-row').forEach(row => {
-    const univ = row.dataset.univ.toLowerCase();
-    row.style.display = (!q || univ.includes(q)) ? '' : 'none';
-  });
-  updateUnivCount();
-}
-
-function sortUnivResults(btn, sortBy) {
-  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const tbody = document.getElementById('univTableBody');
-  const rows = [...tbody.querySelectorAll('.univ-row')];
-  rows.sort((a, b) => {
-    if (sortBy === 'prob') return parseFloat(b.dataset.prob||0) - parseFloat(a.dataset.prob||0);
-    if (sortBy === 'score') return parseFloat(a.dataset.score) - parseFloat(b.dataset.score);
-    if (sortBy === 'name') return a.dataset.univ.localeCompare(b.dataset.univ);
-    if (sortBy === 'reliability') {
-      const order = {high:0, medium:1, low:2, none:3};
-      return (order[a.dataset.rel]||3) - (order[b.dataset.rel]||3);
-    }
-    return 0;
-  });
-  rows.forEach(r => tbody.appendChild(r));
-}
-
-function filterUnivBand(btn, filter) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.univ-row').forEach(row => {
-    if (filter === 'all') { row.style.display = ''; return; }
-    if (filter === 'cutline') { row.style.display = CUTLINES.some(c => c.univ === row.dataset.univ) ? '' : 'none'; return; }
-    if (filter === 'high') { row.style.display = row.dataset.rel === 'high' ? '' : 'none'; return; }
-    if (filter === 'interview') { row.style.display = row.dataset.hasint === 'true' ? '' : 'none'; return; }
-  });
-  updateUnivCount();
-}
-
-function updateUnivCount() {
-  const visible = document.querySelectorAll('.univ-row:not([style*="display: none"])').length;
-  const el = document.getElementById('univCount');
-  if (el) el.textContent = visible;
 }
 
 // ═══════════════════════════════════════════════
@@ -5253,21 +5075,6 @@ function trendBadge(trend) {
 }
 
 // 신뢰도 배지: "신뢰도: 높음(표본 N개)" — ADM_RESULTS 표본 수 기반
-function confBadge(univName) {
-  const c = UNIV_CONFIDENCE[univName];
-  if (!c) return '';
-  const cls = c.grade === '높음' ? 'conf-high' : c.grade === '보통' ? 'conf-mid' : 'conf-low';
-  return `<span class="conf-badge ${cls}" title="ADM_RESULTS 표본 ${c.samples}개">신뢰도: ${c.grade}(표본 ${c.samples}개)</span>`;
-}
-
-// 요인별 기여도 breakdown 텍스트: "내신 40% + 생기부매칭 25% + ..."
-function factorBreakdownText(comp, topN) {
-  if (!comp || !comp.factorBreakdown) return '';
-  const fb = comp.factorBreakdown.filter(f => f.pct > 0).sort((a, b) => b.pct - a.pct);
-  const shown = topN ? fb.slice(0, topN) : fb;
-  return shown.map(f => `${f.key} ${f.pct}%`).join(' + ');
-}
-
 // 컷 대비 등급차 → 확률 (전형유형별 곡선, 컷라인 분기와 동일 모양)
 function cutCurveProb(diff, is종합, is논술) {
   // 백테스트 재보정 가중치 적용: 전형유형별 offset만큼 diff를 이동 (offset>0 → 관대)
@@ -5426,92 +5233,6 @@ function renderDeptInfoSection(univName) {
   });
   h += '</div>';
   return h;
-}
-
-// 실제 합격선 기반 대학 상세 (수박/어디가 자료)
-function showRealDetail(univName) {
-  const modal = document.getElementById('univModal');
-  const content = document.getElementById('univModalContent');
-  const student = STUDENTS[selectedIdx];
-  const analysis = ANALYSIS[student.seat] || {};
-  // NAESIN 환산 결과가 있으면 기존 상세로
-  if (univResults.find(r => r.univ === univName)) { showUnivDetail(univName); return; }
-
-  const data = ADM_RESULTS[univName];
-  const m = (window._realMatchCache || []).find(x => x.univ === univName);
-  if (!data) return;
-  const stAvg = calcWeightedAvg(student);
-  const track = m ? m.track : getStudentTrack(student, analysis);
-  const region = UNIV_REGION[univName] || '기타';
-  const rc = REGION_COLOR[region] || 'var(--muted)';
-
-  let html = `<button class="modal-close" onclick="closeUnivModal()">&times;</button>`;
-  html += `<h2>${esc(univName)} <span style="font-size:12px;padding:2px 10px;border-radius:10px;background:${rc}22;color:${rc};font-weight:600;vertical-align:middle">${REGION_LABEL[region]}</span></h2>`;
-  html += `<p style="font-size:12px;color:var(--muted);margin-bottom:12px">실제 합격 성적(수박·어디가 2025~2026) 기반 매칭 · 학생 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 계열 <strong>${track}</strong></p>`;
-
-  // 합격 가능성 요약
-  if (m) {
-    const band = realBand(m.bestProb);
-    html += `<div class="glass" style="box-shadow:none;margin-bottom:12px;text-align:center">
-      <div style="font-size:34px;font-weight:800;color:${band.color}">${m.bestProb}%</div>
-      <div style="font-size:12px;color:var(--sub)">${band.label} · ${esc(m.bestType)}전형 기준 (합격선 ${m.bestCut}등급)</div>
-    </div>`;
-  }
-
-  // 계열별 실제 합격선
-  html += '<div class="glass" style="box-shadow:none;margin-bottom:12px"><h3>실제 합격선 (계열·전형별)</h3>';
-  html += '<table class="g-table" style="font-size:12px"><thead><tr><th>계열</th><th>전형유형</th><th>전형명</th><th>합격선</th><th>충원율</th><th>예측</th></tr></thead><tbody>';
-  ['자연','인문','전체'].forEach(gy => {
-    (data[gy] || []).forEach(e => {
-      const jt = normJeonType(e.jt);
-      const prob = probFromRealCut(e.cut, stAvg, jt);
-      const pc = prob >= 65 ? 'var(--green)' : prob >= 40 ? 'var(--blue)' : prob >= 15 ? 'var(--orange)' : 'var(--red)';
-      const isMyTrack = (gy === track || gy === '전체');
-      html += `<tr style="${isMyTrack ? '' : 'opacity:0.5'}">
-        <td>${gy}</td><td>${esc(jt)}</td><td style="font-size:11px">${esc(e.jn||'')}</td>
-        <td class="mono" style="font-weight:600">${e.cut}</td>
-        <td style="font-size:11px;color:var(--muted)">${e.fill ? esc(String(e.fill))+'%' : '-'}</td>
-        <td class="mono" style="color:${pc};font-weight:700">${prob}%</td>
-      </tr>`;
-    });
-  });
-  html += '</tbody></table>';
-  html += '<div style="font-size:10px;color:var(--muted);margin-top:6px">※ 합격선은 등급(낮을수록 우수). 학생 계열과 다른 행은 흐리게 표시됩니다.</div>';
-  html += '</div>';
-
-  // 학과별 합격선 (어디가 실제 자료)
-  html += renderDeptCutSection(univName, student);
-
-  // 학과(모집단위)별 전형정보
-  html += renderDeptInfoSection(univName);
-
-  // 2027 전형정보
-  const info = ADM_INFO2027[univName];
-  if (info && info.length) {
-    html += '<div class="glass" style="box-shadow:none;margin-bottom:12px"><h3>2027 전형 정보</h3>';
-    info.slice(0, 8).forEach(e => {
-      html += `<div style="padding:8px 12px;margin:6px 0;background:var(--cream);border-radius:8px;font-size:12px">
-        <div style="font-weight:600">${esc(e.jt||'')} · ${esc(e.jn||'')} <span style="color:var(--muted);font-weight:400">(${esc(e.cat||'')}${e.num ? ', '+esc(e.num)+'명' : ''})</span></div>
-        ${e.method ? `<div style="font-size:11px;color:var(--sub);margin-top:3px">전형방법: ${esc(e.method)}</div>` : ''}
-        ${e.minYN ? `<div style="font-size:11px;color:var(--sub);margin-top:2px">수능최저: ${esc(e.minYN)}${e.min ? ' — '+esc(e.min) : ''}</div>` : ''}
-        ${e.eo ? `<div style="font-size:11px;color:var(--copper);margin-top:2px">고른기회: ${esc(e.eo)}</div>` : ''}
-      </div>`;
-    });
-    html += '</div>';
-  }
-
-  // 면접 문항
-  const univQ = INTERVIEW_BANK[univName] || [];
-  if (univQ.length) {
-    html += `<div class="glass" style="box-shadow:none;margin-bottom:12px"><h3>면접 예시 문항 (${univQ.length}개)</h3>`;
-    univQ.slice(0, 8).forEach(q => {
-      html += `<div class="interview-card"><div class="q-area">${esc(q.area)}</div><div>${esc(q.q)}</div></div>`;
-    });
-    html += '</div>';
-  }
-
-  content.innerHTML = html;
-  modal.classList.add('open');
 }
 
 function showUnivDetail(univName) {
