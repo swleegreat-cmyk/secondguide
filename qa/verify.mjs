@@ -536,6 +536,41 @@ const dq = JSON.parse(_rf(_jn(_SCRATCH, 'data_quality.json'), 'utf8'));
 }
 
 // ═══════════════════════════════════════════════
+// AI 최적 6지원 — 카드 단위 조합 검증
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const mk = (univ, jn, dept, band, jt) => ({ univ, jn, jt: jt || '교과', dept, band,
+      noCut: false, g50: 3, g70: 3.3, cw: null, rel: '높음', stAvg: 3.1, score: 3.1, bandAdjusted: false });
+    const s = STUDENTS[1];
+    // 케이스 A: 안정 후보가 같은 대학의 서로 다른 전형 2장뿐 → 둘 다 채택돼야 함 (수시 규정 동일)
+    const poolA = [
+      mk('한밭대학교', '교과(일반)', '기계공학과', '안정'),
+      mk('한밭대학교', '교과(지역인재)', '기계공학과', '안정'),
+      mk('공주대학교', '교과(일반)', '경영학과', '적정'),
+      mk('충남대학교', '교과(일반)', '경제학과', '적정'),
+      mk('단국대학교', '종합(DKU)', '경영학과', '소신', '종합'),
+      mk('인하대학교', '종합(인하미래)', '경제학과', '소신', '종합'),
+    ];
+    const pfA = calcOptimalPortfolioCards(s, poolA);
+    const keysA = pfA.picks.map(p => p.univ + '|' + p.jn);
+    // 케이스 B: 풍부한 풀 → 골격(안정2/적정2/소신·상향2) 준수
+    const poolB = [];
+    const bands = ['안정', '안정', '안정', '적정', '적정', '적정', '소신', '소신', '상향', '상향'];
+    bands.forEach((b, i) => poolB.push(mk('대학' + i, '전형' + i, '학과' + i, b, i % 2 ? '종합' : '교과')));
+    const pfB = calcOptimalPortfolioCards(s, poolB);
+    return { A: { n: pfA.picks.length, keys: keysA, counts: pfA.counts },
+             B: { counts: pfB.counts, n: pfB.picks.length, jtMix: pfB.jtMix } };
+  });
+  assert("6지원#1: 같은 대학(한밭대) 다른 전형 2장 모두 조합 허용",
+    r.A.keys.includes('한밭대학교|교과(일반)') && r.A.keys.includes('한밭대학교|교과(지역인재)') && r.A.counts.안정 === 2,
+    JSON.stringify(r.A));
+  assert(`6지원#2: 골격 준수 — 안정 ${r.B.counts.안정}/적정 ${r.B.counts.적정}/소신·상향 ${r.B.counts.소신 + r.B.counts.상향} (6장)`,
+    r.B.n === 6 && r.B.counts.안정 === 2 && r.B.counts.적정 === 2 && (r.B.counts.소신 + r.B.counts.상향) === 2,
+    JSON.stringify(r.B));
+}
+
+// ═══════════════════════════════════════════════
 // 골든 케이스 검산 (golden_cases.json ↔ computeScore)
 // 기대환산점수가 null이 아닌 케이스만 오차 0.01 이내 비교.
 // null인 케이스는 "검산 대기"로 집계 — 모집요강 수동 검산 후 값을 채우면 자동 검증된다.

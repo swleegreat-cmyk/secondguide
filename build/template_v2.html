@@ -1385,6 +1385,125 @@ function findMinSpec(univ, dept) {
 }
 
 // ═══════════════════════════════════════════════
+// AI 최적 6지원 — 지원 카드(대학×전형×학과) 단위 조합
+// ── 조합 원칙 (명시적 코드화) ──
+// P1. 후보: 희망 계열 내(미설정 시 전체) 컷 보유 카드. getCards 기본 정렬
+//     (지역 우선순위 → 구간 → 신뢰도)을 후보 우선순위로 사용한다.
+// P2. 기본 골격: 안정 2 / 적정 2 / 소신·상향 2 (소신 우선, 부족하면 상향,
+//     그래도 6장이 안 되면 인접 구간에서 보충).
+// P3. 카드 유일성: 같은 (대학·전형·학과) 조합은 1장만. 같은 대학이라도 전형이
+//     다르면 별개 카드로 조합 가능 (실제 수시 지원 규정과 동일).
+//     동일 대학 쏠림 방지를 위해 대학당 최대 2장으로 제한한다.
+// P4. 유형 다양성: 가능하면 교과·종합 전형이 각각 1장 이상 포함되도록
+//     같은 구간 안에서 카드를 교체한다.
+// P5. 수능최저 리스크 분산: 최저 미충족(위험) 카드가 5장 이상이면 같은 구간의
+//     최저 없는/충족 카드로 교체해 전 장이 최저 리스크에 노출되지 않게 한다.
+// ═══════════════════════════════════════════════
+function calcOptimalPortfolioCards(student, candidateCards) {
+  const cards = (candidateCards || getCards(student)).filter(c => !c.noCut);
+  const keyOf = c => c.univ + '|' + (c.jn || c.jt) + '|' + c.dept;
+  const picks = [];
+  const used = new Set();
+  const univN = {};
+  const canTake = c => !used.has(keyOf(c)) && (univN[c.univ] || 0) < 2;
+  const register = c => { used.add(keyOf(c)); univN[c.univ] = (univN[c.univ] || 0) + 1; };
+  const unregister = c => { used.delete(keyOf(c)); univN[c.univ]--; };
+  const pool = b => cards.filter(c => c.band === b);
+
+  // P2: 골격 채우기
+  const fill = (bands, want, slot) => {
+    let got = 0;
+    for (const b of bands) {
+      for (const c of pool(b)) {
+        if (got >= want) return got;
+        if (!canTake(c)) continue;
+        register(c);
+        picks.push(Object.assign({ slot }, c));
+        got++;
+      }
+    }
+    return got;
+  };
+  fill(['안정'], 2, '안정');
+  fill(['적정'], 2, '적정');
+  fill(['소신', '상향'], 2, '도전');
+  if (picks.length < 6) {
+    for (const b of ['적정', '안정', '소신', '상향']) {
+      for (const c of pool(b)) {
+        if (picks.length >= 6) break;
+        if (canTake(c)) { register(c); picks.push(Object.assign({ slot: '보충' }, c)); }
+      }
+    }
+  }
+
+  // P4: 유형 다양성 (교과·종합 각 1장 이상, 같은 구간 내 교체)
+  const jtCount = t => picks.filter(p => String(p.jt).includes(t)).length;
+  for (const wantT of ['교과', '종합']) {
+    if (jtCount(wantT) > 0) continue;
+    let done = false;
+    for (let i = picks.length - 1; i >= 0 && !done; i--) {
+      const pcur = picks[i];
+      for (const c of pool(pcur.band)) {
+        if (String(c.jt).includes(wantT) && canTake(c)) {
+          unregister(pcur); register(c);
+          picks[i] = Object.assign({ slot: pcur.slot, swapped: '유형 다양성' }, c);
+          done = true; break;
+        }
+      }
+    }
+  }
+
+  // P5: 수능최저 리스크 분산
+  const riskOf = c => {
+    const m = findMinSpec(c.univ, c.dept);
+    if (!m) return { has: false, risky: false, text: null };
+    const r = checkMinRequirement(student, m, c.dept);
+    return { has: true, risky: !!(r.applicable && !r.meets), text: m };
+  };
+  picks.forEach(pk => { pk.minInfo = riskOf(pk); });
+  let riskyN = picks.filter(pk => pk.minInfo.risky).length;
+  if (riskyN >= 5) {
+    for (let i = picks.length - 1; i >= 0 && riskyN >= 5; i--) {
+      const pcur = picks[i];
+      if (!pcur.minInfo.risky) continue;
+      for (const c of pool(pcur.band)) {
+        if (!canTake(c)) continue;
+        const ri = riskOf(c);
+        if (ri.risky) continue;
+        unregister(pcur); register(c);
+        picks[i] = Object.assign({ slot: pcur.slot, swapped: '최저 리스크 분산', minInfo: ri }, c);
+        riskyN--; break;
+      }
+    }
+  }
+
+  const counts = { 안정: 0, 적정: 0, 소신: 0, 상향: 0 };
+  picks.forEach(pk => { if (counts[pk.band] != null) counts[pk.band]++; });
+  return {
+    picks, counts,
+    jtMix: { 교과: jtCount('교과'), 종합: jtCount('종합'), 논술: jtCount('논술') },
+    minRisky: picks.filter(pk => pk.minInfo && pk.minInfo.risky).length,
+    principle: '안정 2 / 적정 2 / 소신·상향 2 골격 · 같은 대학 다른 전형 허용(대학당 최대 2장) · 교과·종합 혼합 · 수능최저 리스크 분산'
+  };
+}
+
+// 학급 내 카드 단위 지원 경합: 같은 (대학·전형·학과) 카드를 6지원안에 가진 학생끼리
+let _classPickCache = null;
+function classCardConflicts() {
+  if (_classPickCache) return _classPickCache;
+  const map = {};
+  STUDENTS.forEach(s2 => {
+    try {
+      for (const pk of calcOptimalPortfolioCards(s2).picks) {
+        const k = pk.univ + '|' + (pk.jn || pk.jt) + '|' + pk.dept;
+        (map[k] = map[k] || []).push({ seat: s2.seat, name: s2.name });
+      }
+    } catch (e) {}
+  });
+  return (_classPickCache = map);
+}
+
+// ═══════════════════════════════════════════════
 // 세특 문장 태깅 엔진 (신호 사전은 별도 데이터 파일 signal_dictionary.js에서 주입)
 // ═══════════════════════════════════════════════
 __SIGNAL_DICT__
@@ -4580,117 +4699,45 @@ function renderSusiTab(student, analysis) {
     html += '</div>';
   }
 
-  // 6지원 최적 포트폴리오 시뮬레이터
-  if (allComps.length >= 6) {
-    const optPortfolio = calcOptimalPortfolio(allComps, 6);
-    html += '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
-    html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:8px">AI 최적 6지원 시뮬레이션</div>';
-    html += '<p style="font-size:11px;color:var(--sub);margin-bottom:10px">합격 확률, 대학 티어, 전형 다양성을 종합 최적화한 6개 대학 조합입니다.</p>';
-
-    // Risk distribution bar
-    const total = optPortfolio.picks.length;
-    const sPct = Math.round(optPortfolio.safeCount / total * 100);
-    const fPct = Math.round(optPortfolio.fitCount / total * 100);
-    const rPct = 100 - sPct - fPct;
-    const riskColor = optPortfolio.riskLevel === '안정적' ? 'var(--green)' : optPortfolio.riskLevel === '균형' ? 'var(--blue)' : optPortfolio.riskLevel === '주의' || optPortfolio.riskLevel === '위험' ? 'var(--red)' : 'var(--orange)';
-    html += `<div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
-        <span>안정 ${optPortfolio.safeCount}교 / 적정 ${optPortfolio.fitCount}교 / 소신 ${optPortfolio.reachCount}교</span>
-        <span style="font-weight:700;color:${riskColor}">${optPortfolio.riskLevel}</span>
-      </div>
-      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden">
-        ${sPct > 0 ? `<div style="width:${sPct}%;background:var(--green)"></div>` : ''}
-        ${fPct > 0 ? `<div style="width:${fPct}%;background:var(--blue)"></div>` : ''}
-        ${rPct > 0 ? `<div style="width:${rPct}%;background:var(--orange)"></div>` : ''}
-      </div>
-    </div>`;
-
-    // Type breakdown chips
-    const typeEntries = Object.entries(optPortfolio.typeBreakdown);
-    if (typeEntries.length > 1) {
-      html += '<div style="display:flex;gap:6px;margin-bottom:8px">';
-      typeEntries.forEach(([t, c]) => {
-        const tc = t === '교과' ? 'var(--teal)' : t === '종합' ? 'var(--blue)' : 'var(--orange)';
-        html += `<span style="font-size:10px;padding:2px 8px;background:${tc}15;border-radius:10px;color:${tc};font-weight:600">${t} ${c}교</span>`;
-      });
-      html += '</div>';
-    }
-
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">';
-    optPortfolio.picks.forEach((p, i) => {
-      const tierLabel = p.prob >= 65 ? '안정' : p.prob >= 40 ? '적정' : p.prob >= 15 ? '소신' : '도전';
-      const tColor = p.prob >= 65 ? 'var(--green)' : p.prob >= 40 ? 'var(--blue)' : p.prob >= 15 ? 'var(--orange)' : 'var(--red)';
-      const typeTag = p.comp.is논술 ? '논술' : p.comp.is종합 ? '종합' : '교과';
-      html += `<div style="padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);cursor:pointer;text-align:center" onclick="showUnivDetail('${esc(p.univ)}')">
-        <div style="display:flex;justify-content:center;gap:4px;margin-bottom:2px">
-          <span style="font-size:9px;color:${tColor};font-weight:700">${tierLabel}</span>
-          <span style="font-size:9px;color:var(--muted)">${typeTag}</span>
-        </div>
-        <div style="font-size:12px;font-weight:600;margin:2px 0">${esc(p.univ)}</div>
-        <div style="font-size:13px;font-weight:800;color:${p.comp.band ? (BAND_STYLE[p.comp.band] || {}).color : 'var(--muted)'}">${p.comp.bandLabel || '컷없음'}</div>
-        <div style="font-size:10px;color:var(--muted)">${esc((p.jeonType||'').substring(0,6))}</div>
+  // [카드 전환] AI 최적 6지원 시뮬레이션 — 지원 카드(대학×전형×학과) 단위
+  {
+    const pf = calcOptimalPortfolioCards(student);
+    if (pf.picks.length) {
+      const conflicts = classCardConflicts();
+      html += '<div style="margin-top:14px;padding:14px;background:var(--teal-light);border-radius:12px;border:1px solid rgba(20,58,64,0.15)">';
+      html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:6px">AI 최적 6지원 시뮬레이션 (지원 카드 단위)</div>';
+      html += `<p style="font-size:10px;color:var(--sub);margin-bottom:8px">조합 원칙: ${esc(pf.principle)}</p>`;
+      // 사실 기술 요약 (단정 표현 없음)
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">
+        <span style="padding:3px 10px;background:var(--green-light);color:var(--green);border-radius:8px;font-weight:700">6장 중 안정 구간 ${pf.counts.안정}장</span>
+        <span style="padding:3px 10px;background:var(--blue-light);color:var(--blue);border-radius:8px;font-weight:700">적정 ${pf.counts.적정}장</span>
+        <span style="padding:3px 10px;background:var(--orange-light);color:var(--orange);border-radius:8px;font-weight:700">소신 ${pf.counts.소신}장 · 상향 ${pf.counts.상향}장</span>
+        <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">교과 ${pf.jtMix.교과} · 종합 ${pf.jtMix.종합} · 논술 ${pf.jtMix.논술}</span>
+        <span style="padding:3px 10px;background:var(--cream);color:var(--sub);border-radius:8px">수능최저 위험 ${pf.minRisky}장</span>
       </div>`;
-    });
-    html += '</div>';
-
-    // Duplicate university warning
-    if (optPortfolio.dupUnivs.length > 0) {
-      html += `<div style="margin-top:6px;padding:6px 10px;background:var(--orange-light);border-radius:6px;font-size:11px;color:var(--orange)">
-        동일 대학 중복 지원: ${optPortfolio.dupUnivs.join(', ')} — 대학별 복수 지원 가능 여부를 확인하세요.
-      </div>`;
-    }
-
-    html += `<div style="margin-top:8px;text-align:center;font-size:12px;color:var(--sub)">
-      최소 1개 합격 확률: <strong class="mono" style="color:var(--teal);font-size:16px">${optPortfolio.atLeastOne}%</strong>
-      · 기대 합격 수: <strong class="mono" style="color:var(--teal)">${optPortfolio.expectedCount.toFixed(1)}교</strong>
-    </div>`;
-
-    // Risk advice
-    html += `<div style="margin-top:6px;padding:6px 10px;background:var(--cream);border-radius:6px;font-size:11px;color:var(--sub);border-left:3px solid ${riskColor}">
-      ${optPortfolio.riskAdvice}
-    </div>`;
-
-    // Classmate competition: use heatmap cache to avoid recalculating for all students
-    const portUnivs = optPortfolio.picks.map(p => p.univ);
-    if (!_cache.studentUnivProbs) {
-      _cache.studentUnivProbs = {};
-      STUDENTS.forEach((s2, idx2) => {
-        const a2 = ANALYSIS[s2.seat] || {};
-        const r2 = runAllUniversities(s2);
-        const probs = {};
-        r2.forEach(r => {
-          const c2 = calcCompositeScore(r, s2, a2);
-          if (c2.probability >= 30) probs[r.univ] = c2.probability;
-        });
-        _cache.studentUnivProbs[idx2] = probs;
-      });
-    }
-    const competitors = [];
-    STUDENTS.forEach((s2, idx2) => {
-      if (idx2 === selectedIdx) return;
-      const probs = _cache.studentUnivProbs[idx2] || {};
-      const overlaps = [];
-      portUnivs.forEach(u => {
-        if (probs[u]) overlaps.push({ univ: u, prob: probs[u] });
-      });
-      if (overlaps.length >= 2) competitors.push({ name: s2.name, seat: s2.seat, idx: idx2, overlaps });
-    });
-
-    if (competitors.length > 0) {
-      competitors.sort((a, b) => b.overlaps.length - a.overlaps.length);
-      html += `<div style="margin-top:8px;padding:8px 10px;background:var(--purple-light);border-radius:6px;font-size:11px">
-        <div style="font-weight:700;color:var(--purple);margin-bottom:4px">학급 내 지원 경합 (${competitors.length}명)</div>`;
-      competitors.slice(0, 5).forEach(c => {
-        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;cursor:pointer" onclick="selectStudent(${c.idx})">
-          <span>${c.seat}번 ${esc(c.name)}</span>
-          <span style="color:var(--muted)">${c.overlaps.map(o => esc(o.univ) + '(' + o.prob + '%)').join(', ')}</span>
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">';
+      pf.picks.forEach((pk, i) => {
+        const bs = BAND_STYLE[pk.band] || {};
+        const k = pk.univ + '|' + (pk.jn || pk.jt) + '|' + pk.dept;
+        const rivals = (conflicts[k] || []).filter(x => x.seat !== student.seat);
+        html += `<div style="padding:8px 10px;background:var(--card);border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="showUnivDetail('${esc(pk.univ)}')">
+          <div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--muted)">${i + 1}지망</span>
+            <span style="padding:1px 8px;border-radius:8px;background:${bs.color || 'var(--muted)'};color:#fff;font-size:10px;font-weight:800">${pk.bandAdjusted ? '충원 감안 시 ' + pk.band : pk.band}</span>
+            <span style="font-size:9px;color:var(--muted)">${esc(pk.jt)}</span>
+            ${pk.swapped ? `<span style="font-size:8px;color:var(--copper)">↻ ${pk.swapped}</span>` : ''}
+          </div>
+          <div style="font-size:12px;font-weight:700">${esc(pk.univ)}</div>
+          <div style="font-size:11px;color:var(--sub)">${esc(pk.jn || '')} · <strong>${esc(pk.dept)}</strong></div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">50컷 ${pk.g50 ?? '-'} · 70컷 ${pk.g70 ?? '-'}${pk.cw != null ? ' · 충원 ' + pk.cw.toFixed(1) + '배수' : ''} ${judgeRelBadge(pk.rel)}</div>
+          ${pk.minInfo && pk.minInfo.has ? `<div style="font-size:9px;margin-top:2px;color:${pk.minInfo.risky ? 'var(--red)' : 'var(--green)'};font-weight:600">수능최저 ${pk.minInfo.risky ? '미충족 위험' : '충족 가능'}</div>` : ''}
+          ${rivals.length ? `<div style="font-size:9px;margin-top:2px;color:var(--purple);font-weight:700">경합(동일 대학·전형·학과): ${rivals.map(x => x.seat + '번 ' + esc(x.name)).join(', ')}</div>` : ''}
         </div>`;
       });
-      if (competitors.length > 5) html += `<div style="color:var(--muted)">+${competitors.length - 5}명 더</div>`;
+      html += '</div>';
+      html += `<div style="margin-top:8px;font-size:10px;color:var(--muted)">※ 같은 대학이라도 전형이 다르면 별개 카드로 지원 가능(수시 규정). 경합 표시는 학급 자동 조합 기준의 참고 정보입니다.</div>`;
       html += '</div>';
     }
-
-    html += '</div>';
   }
 
   html += '</div>';
