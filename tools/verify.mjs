@@ -640,6 +640,63 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     JSON.stringify(perUniv['중앙대학교']));
 }
 
+// ═══════════════════════════════════════════════
+// 컷 해석주의 (특목·자사고 혼재 컷 보수화) 검증
+// 명단 대학 × 종합전형 × 50컷>3.0 카드는 안정/적정 대신 '유보'.
+// 교과전형·비명단 대학·50컷≤3.0은 기존 판정 유지.
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 케이스1: 명단 대학 종합 저컷 — 강리영(stAvg 5.28) × 성균관대 물리학과 과학인재(g50 5.35)
+    //          수치상 '안정'이지만 컷 해석주의로 '유보'가 되어야 한다
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s);
+    const c1 = cards.find(c => c.univ === '성균관대학교' && c.dept === '물리학과' && c.jn === '종합(면접형-과학인재)');
+    // 케이스2: 명단 대학이지만 교과전형(정량 선발)은 미적용.
+    //   실데이터의 명단 대학 교과 카드 중 50컷이 가장 불리한 카드가 caution 아님 +
+    //   합성 입력(성균관대·교과·g50 5.35 — 종합이었다면 유보)으로 전형 조건을 격리 검증
+    const c2 = cards.filter(c => CUT_CAUTION_SET.has(c.univ) && String(c.jt).includes('교과') && c.g50 != null)
+      .sort((a, b) => b.g50 - a.g50)[0];
+    const c2Synthetic = isCutCaution('성균관대학교', '교과', 5.35);   // false여야 함
+    const c2Control = isCutCaution('성균관대학교', '종합', 5.35);     // true여야 함 (대조군)
+    // 케이스3: 비명단 대학 종합 저컷은 기존 판정 유지 (classifyBand 결과 그대로)
+    const c3 = cards.find(c => !CUT_CAUTION_SET.has(c.univ) && String(c.jt).includes('종합') && c.g50 != null && c.g50 > 3.0 && c.band);
+    // 대학별 집계: 컷 해석주의로 판정이 바뀐(안정/적정→유보) 카드 수 — 전체 34명 합산
+    const changed = {};
+    let changedTotal = 0, targetEntries = 0;
+    for (const st of STUDENTS) {
+      for (const c of buildApplicationCards(st)) {
+        if (c.band === '유보') { changed[c.univ] = (changed[c.univ] || 0) + 1; changedTotal++; }
+      }
+    }
+    for (const [k, list] of Object.entries(DEPT_CUTLINES)) {
+      const u = k.slice(0, k.indexOf('|'));
+      if (!CUT_CAUTION_SET.has(u)) continue;
+      for (const e of list) if (String(e.jt || '').includes('종합') && e.g50 != null && e.g50 > 3.0) targetEntries++;
+    }
+    const pick = c => c && { univ: c.univ, dept: c.dept, jn: c.jn, jt: c.jt, g50: c.g50, band: c.band, bandRaw: c.bandRaw, caution: c.caution, reason: c.cautionReason };
+    return { list: CUT_CAUTION_UNIVS, c1: pick(c1), c2: pick(c2), c2Synthetic, c2Control, c3: pick(c3),
+             c3Expected: c3 ? classifyBand(c3.stAvg, c3.g50, c3.g70, c3.cw) : null,
+             changed, changedTotal, targetEntries };
+  });
+  console.log(`──── 컷 해석주의 — 명단 ${r.list.length}개 대학 · 대상 엔트리 ${r.targetEntries}건 ────`);
+  console.log('  판정 변경(안정/적정→유보) 카드 수 — 34명 합산, 대학별:');
+  for (const [u, n] of Object.entries(r.changed).sort((a, b) => b[1] - a[1]))
+    console.log(`    ${u}: ${n}장`);
+  console.log(`    합계: ${r.changedTotal}장`);
+  assert(`컷해석주의#1: 강리영×성균관대 물리 과학인재(g50 ${r.c1?.g50}) 수치상 ${r.c1?.bandRaw} → 판정 유보`,
+    r.c1 && r.c1.caution === true && r.c1.band === '유보' && r.c1.bandRaw === '안정'
+      && r.c1.reason === '특목·자사고 지원자 혼재 가능성으로 발표 컷이 일반고 합격선과 다를 수 있음',
+    JSON.stringify(r.c1));
+  assert(`컷해석주의#2: 명단 대학 교과전형 미적용 — 실카드 최불리(${r.c2?.univ} ${r.c2?.dept}, g50 ${r.c2?.g50}) + 합성(성균관·교과·5.35)`,
+    r.c2 && r.c2.caution === false && r.c2.band !== '유보'
+      && r.c2Synthetic === false && r.c2Control === true,
+    JSON.stringify({ c2: r.c2, synthetic: r.c2Synthetic, control: r.c2Control }));
+  assert(`컷해석주의#3: 비명단 대학 종합 저컷(${r.c3?.univ} ${r.c3?.dept}, g50 ${r.c3?.g50}) 기존 판정 유지`,
+    r.c3 && r.c3.caution === false && r.c3.band !== '유보' && r.c3.band === r.c3Expected,
+    JSON.stringify({ c3: r.c3, expected: r.c3Expected }));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');
