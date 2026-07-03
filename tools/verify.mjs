@@ -601,6 +601,45 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     typeof c.검산근거 === 'string' && c.검산근거.length > 0 && '기대환산점수' in c),
   `count=${goldenCases.length}`);
 
+// ═══════════════════════════════════════════════
+// 카드 컷 값 = adiga.json 원본 행 값 (STEP 1 진단 후속 회귀 방지)
+// 화면 카드가 쓰는 DEPT_CUTLINES의 g50/g70이 원본 어디가 값과 일치해야 한다.
+// 표본: 성균관대 종합 3장 + 중앙대 종합 2장 (특목 혼재 고위험 컷 포함 고정 표본)
+// ═══════════════════════════════════════════════
+{
+  const adigaRaw = JSON.parse(
+    readFileSync('/home/user/secondguide/tools/adiga.json', 'utf8').replace(/:\s*NaN/g, ': null'));
+  const CARD_SAMPLES = [
+    { rawU: '성균관대', univ: '성균관대학교', dept: '물리학과', jn: '종합(면접형-과학인재)' },
+    { rawU: '성균관대', univ: '성균관대학교', dept: '공학계열', jn: '종합(융합형)' },
+    { rawU: '성균관대', univ: '성균관대학교', dept: '배터리학과', jn: '종합(면접형-계약학과)' },
+    { rawU: '중앙대', univ: '중앙대학교', dept: '화학공학과', jn: '종합(CAU탐구형)' },
+    { rawU: '중앙대', univ: '중앙대학교', dept: '소프트웨어학부', jn: '종합(CAU융합형)' },
+  ];
+  console.log('──── 카드 컷 ↔ adiga 원본 대조 (표본 5장) ────');
+  const perUniv = { 성균관대학교: [], 중앙대학교: [] };
+  for (const smp of CARD_SAMPLES) {
+    const card = await page.evaluate(({ univ, dept, jn }) => {
+      const e = (DEPT_CUTLINES[univ + '|' + dept] || []).find(x => x.jn === jn);
+      return e ? { g50: e.g50, g70: e.g70 } : null;
+    }, smp);
+    const raw = adigaRaw.find(r =>
+      r['대학'] === smp.rawU && String(r['학과']) === smp.dept && String(r['전형']) === smp.jn);
+    const same = !!card && !!raw &&
+      String(card.g50 ?? '') === String(raw['등급50'] ?? '') &&
+      String(card.g70 ?? '') === String(raw['등급70'] ?? '');
+    console.log(`  ${smp.univ} ${smp.dept} — ${smp.jn}`);
+    console.log(`    카드: g50=${card?.g50 ?? '?'} g70=${card?.g70 ?? '?'} | 원본: 등급50=${raw?.['등급50'] ?? '?'} 등급70=${raw?.['등급70'] ?? '?'} → ${same ? '[일치]' : '[불일치!]'}`);
+    perUniv[smp.univ].push(same);
+  }
+  assert('카드컷#1: 성균관대학교 종합 카드 3장 g50/g70 = adiga 원본 행',
+    perUniv['성균관대학교'].length === 3 && perUniv['성균관대학교'].every(Boolean),
+    JSON.stringify(perUniv['성균관대학교']));
+  assert('카드컷#2: 중앙대학교 종합 카드 2장 g50/g70 = adiga 원본 행',
+    perUniv['중앙대학교'].length === 2 && perUniv['중앙대학교'].every(Boolean),
+    JSON.stringify(perUniv['중앙대학교']));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');
