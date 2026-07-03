@@ -733,6 +733,36 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     r.saved && r.restored && r.candFirst && r.cleaned, JSON.stringify(r));
 }
 
+// ═══════════════════════════════════════════════
+// 전략적 지원 추천 선별 목록 (selectStrategicCards)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const out = [];
+    for (const name of ['강리영', '김수안']) {
+      const s = STUDENTS.find(x => x.name === name);
+      const picks = selectStrategicCards(s);
+      const byBand = { 안정: 0, 적정: 0, 소신: 0 };
+      const univN = {};
+      let bad = 0;
+      for (const c of picks) {
+        if (byBand[c.band] != null) byBand[c.band]++;
+        univN[c.univ] = (univN[c.univ] || 0) + 1;
+        if (c.noCut || c.band === '유보' || !['안정', '적정', '소신'].includes(c.band)) bad++;
+      }
+      out.push({ name, n: picks.length, byBand,
+                 maxPerUniv: Math.max(...Object.values(univN)), bad });
+    }
+    return out;
+  });
+  assert(`추천선별#1: 선별 11장 내외 (강리영 ${r[0].n}장=안${r[0].byBand.안정}·적${r[0].byBand.적정}·소${r[0].byBand.소신} / 김수안 ${r[1].n}장) + 동일 대학 ≤2장`,
+    r.every(x => x.n >= 9 && x.n <= 11 && x.maxPerUniv <= 2)
+      && r[0].byBand.안정 === 4 && r[0].byBand.적정 === 4 && r[0].byBand.소신 === 3,
+    JSON.stringify(r));
+  assert('추천선별#2: 유보·컷정보없음 카드 선별 미포함 (안정·적정·소신만)',
+    r.every(x => x.bad === 0), JSON.stringify(r));
+}
+
 // ── 결과 출력 ──
 console.log('══════════════════════════════════════════════');
 console.log('  verify.mjs — 최저기준+추이+백테스트+신뢰도+기여도+골든케이스 검증');

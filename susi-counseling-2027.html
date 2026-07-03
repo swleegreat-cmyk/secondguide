@@ -3665,6 +3665,12 @@ function refreshBasketUI(seat) {
   for (const [bid, st] of Object.entries(_boardState)) {
     if (st.student && st.student.seat === seat) renderBoardList(bid);
   }
+  // 재렌더되지 않는 정적 섹션(추천 선별 목록 등)의 ☆ 상태 동기화
+  document.querySelectorAll('[data-bkey]').forEach(el => {
+    const on = getBasket(Number(el.dataset.seat)).includes(decodeURIComponent(el.dataset.bkey));
+    el.textContent = on ? '★' : '☆';
+    el.style.color = on ? 'var(--copper)' : 'var(--muted)';
+  });
   const s = STUDENTS.find(x => x.seat === seat);
   if (s) {
     renderBasketPanel(s);
@@ -3729,6 +3735,48 @@ function boardGroupMore(id, enc) {
 function boardMarginOf(c) {
   const cut = c.g70 != null ? c.g70 : c.g50;
   return cut == null ? Infinity : Math.round((c.stAvg - cut) * 100) / 100;
+}
+// ── 전략적 지원 추천 선별 (선별 목록 전용 — 판정 로직·보드와 무관) ──
+// 규칙: 컷 보유 + 판정 유보 제외 풀에서 안정 4 / 적정 4 / 소신 3장 = 11장 내외.
+//   우선순위: 신뢰도(높음>보통>낮음) → 충원배수 보유(cw≥1.0) → getCards 기본 정렬(지역 우선순위).
+//   계열 정합은 getCards가 희망 계열(getHopeSubs)로 풀 자체를 필터해 1차 반영한다.
+//   동일 대학 최대 2장 (6지원 조합기와 같은 분산 원칙).
+function selectStrategicCards(student) {
+  const pool = getCards(student).filter(c => !c.noCut && c.band !== '유보');
+  const relW = { '높음': 2, '보통': 1, '낮음': 0 };
+  const prio = c => (relW[c.rel] || 0) * 2 + (c.cw != null && c.cw >= 1.0 ? 1 : 0);
+  const univN = {};
+  const out = [];
+  for (const [band, want] of [['안정', 4], ['적정', 4], ['소신', 3]]) {
+    let got = 0;
+    for (const c of pool.filter(x => x.band === band).sort((a, b) => prio(b) - prio(a))) {
+      if (got >= want) break;
+      if ((univN[c.univ] || 0) >= 2) continue;
+      univN[c.univ] = (univN[c.univ] || 0) + 1;
+      out.push(c); got++;
+    }
+  }
+  return out;
+}
+// 선별 사유 한 줄 (구간 · 신뢰도 · 계열 정합 · 충원)
+function stratReasonLine(c, hopeActive) {
+  const parts = [`${c.band} 구간`, `신뢰도 ${c.rel}`];
+  if (hopeActive && c.sub) parts.push(`희망 계열(${c.sub}) 정합`);
+  parts.push(c.cw != null ? `충원 ${c.cw.toFixed(1)}배수` : '충원 정보 없음');
+  return `<span style="color:var(--muted)">선별 사유:</span> ${esc(parts.join(' · '))}`;
+}
+// 추천 섹션 → 전체 보드(allresults) 이동: 구간 탭 / 유형 필터를 맞춰 놓고 스크롤
+function jumpToBoardBand(band) {
+  const st = _boardState['allresults'];
+  if (st) { st.bandTab = band; renderBoardList('allresults'); }
+  const sec = document.getElementById('allUnivSection');
+  if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+}
+function jumpToBoardJt(jt) {
+  const st = _boardState['allresults'];
+  if (st) { st.jt = jt; renderBoardList('allresults'); }
+  const sec = document.getElementById('allUnivSection');
+  if (sec) sec.scrollIntoView({ behavior: 'smooth' });
 }
 function sortBoardCards(cards, mode) {
   const arr = cards.slice();
@@ -3889,8 +3937,17 @@ function cardDetailHtml(c, comp, extraLines) {
     : `<span style="font-size:10px;color:var(--muted);font-weight:600">${esc(c.noCutLabel || '컷 정보 없음')}</span>`;
   const fb = usedFactorBreakdown(comp);
   const fbLine = fb.length ? fb.map(f => `${f.key} ${f.pct}%`).join(' + ') + ' = 100%' : null;
+  // 보드와 동일한 ☆ 바구니 버튼 — 정적 섹션에서도 담을 수 있게 data-bkey로 상태 동기화
+  const dKey = basketKeyOf(c);
+  const dOn = c.seat != null && getBasket(c.seat).includes(dKey);
+  const dStar = c.seat != null
+    ? `<span data-bkey="${encodeURIComponent(dKey)}" data-seat="${c.seat}" title="후보 담기"
+        onclick="event.preventDefault();event.stopPropagation();toggleBasketEnc(${c.seat}, '${encodeURIComponent(dKey)}')"
+        style="cursor:pointer;font-size:15px;line-height:1;color:${dOn ? 'var(--copper)' : 'var(--muted)'}">${dOn ? '★' : '☆'}</span>`
+    : '';
   return `<details style="margin-bottom:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
     <summary style="cursor:pointer;padding:7px 10px;background:var(--card);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">
+      ${dStar}
       ${head}
       <strong>${esc(c.univ)}</strong> · ${esc(c.jn || c.jt)} · ${esc(c.dept)}
       ${judgeRelBadge(c.rel)}
@@ -7085,20 +7142,18 @@ function renderSusiTab(student, analysis) {
   const compMap = compByUniv(student, analysis);
   const cnt = b => stratCards.filter(c => c.band === b).length;
   html += '<div class="glass"><h3>전략적 지원 추천 <span style="font-size:10px;color:var(--muted);font-weight:400">(지원 카드 단위 · ' + (hopeSubs.length ? '희망 계열 ' + hopeSubs.length + '개' : '전체 계열') + ')</span></h3>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">1차 표시는 4구간 판정, 카드를 펼치면 판정 근거와 실사용 요인 기여도가 보입니다.</p>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">아래는 선별 목록(안정 4·적정 4·소신 3장, 동일 대학 최대 2장)입니다. 카드를 펼치면 판정 근거와 실사용 요인 기여도가 보입니다.</p>';
+  html += '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">전체 카드 분포 — 숫자를 클릭하면 전체 보드의 해당 구간 탭으로 이동합니다</div>';
   html += '<div class="tier-grid">';
   [['안정','var(--green)','green'],['적정','var(--blue)','blue'],['소신','var(--orange)','orange'],['상향','var(--red)','red']].forEach(([b, c, k]) => {
-    html += `<div style="padding:10px;background:var(--${k}-light);border-radius:8px;text-align:center">
+    html += `<div onclick="jumpToBoardBand('${b}')" style="cursor:pointer;padding:10px;background:var(--${k}-light);border-radius:8px;text-align:center" title="전체 보드에서 ${b} 카드 보기">
       <div style="font-size:22px;font-weight:800;color:${c}">${cnt(b)}</div>
-      <div style="font-size:11px;color:var(--muted)">${b} 카드</div></div>`;
+      <div style="font-size:11px;color:var(--muted)">${b} 카드 →</div></div>`;
   });
   html += '</div>';
-  const stratPick = [];
-  for (const b of ['안정', '적정', '소신']) {
-    const n = b === '소신' ? 3 : 4;
-    stratPick.push(...stratCards.filter(c => c.band === b).slice(0, n));
-  }
-  stratPick.forEach(c => { html += cardDetailHtml(c, compMap[c.univ]); });
+  // 선별 목록: selectStrategicCards — 신뢰도·충원 우선, 동일 대학 최대 2장, 유보·컷정보없음 제외
+  const stratPick = selectStrategicCards(student);
+  stratPick.forEach(c => { html += cardDetailHtml(c, compMap[c.univ], [stratReasonLine(c, hopeSubs.length > 0)]); });
   if (!stratPick.length) html += '<p style="font-size:12px;color:var(--muted)">안정·적정·소신 카드가 없습니다. 희망 계열을 넓혀 보세요.</p>';
 
   // 전형 전략 분석
@@ -7162,8 +7217,10 @@ function renderSusiTab(student, analysis) {
       html += `<button onclick="setTypeTab('${t}')" style="padding:5px 16px;border-radius:10px;border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};background:${on ? 'var(--teal)' : 'var(--card)'};color:${on ? '#fff' : 'var(--sub)'};font-weight:${on ? 700 : 400};cursor:pointer;font-family:inherit;font-size:12px">${t}</button>`;
     });
     html += '</div>';
-    const typeCards = getCards(student, { jt: _typeTabSel }).filter(c => !c.noCut)
-      .filter(c => c.band === '안정' || c.band === '적정' || c.band === '소신').slice(0, 8);
+    // 선별: 유형별 상위 5장 (유보·컷정보없음 제외, 안정·적정·소신만)
+    const typeAll = getCards(student, { jt: _typeTabSel });
+    const typeCards = typeAll.filter(c => !c.noCut)
+      .filter(c => c.band === '안정' || c.band === '적정' || c.band === '소신').slice(0, 5);
     if (!typeCards.length) {
       html += `<p style="font-size:12px;color:var(--muted)">${_typeTabSel} 전형의 안정·적정·소신 카드가 없습니다.</p>`;
     } else {
@@ -7176,8 +7233,11 @@ function renderSusiTab(student, analysis) {
             ? `<strong style="color:var(--teal)">수능최저:</strong> ${esc(min)} ${minReqBadge(student, min, c.dept)}`
             : `<strong style="color:var(--teal)">수능최저:</strong> 자료 없음 — 모집요강 확인 필요`);
         }
+        extras.push(stratReasonLine(c, hopeSubs.length > 0));  // 선별 사유 한 줄
         html += cardDetailHtml(c, compMap[c.univ], extras);
       });
+      html += `<div style="margin-top:6px"><span onclick="jumpToBoardJt('${_typeTabSel}')"
+        style="cursor:pointer;color:var(--teal);font-weight:700;font-size:11px">이 유형 전체 ${typeAll.length}장 보드에서 보기 →</span></div>`;
     }
     html += '</div>';
   }
