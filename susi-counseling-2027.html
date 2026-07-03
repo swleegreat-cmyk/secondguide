@@ -6332,42 +6332,32 @@ function renderDashboard() {
     html += '</tbody></table></div>';
   }
 
-  // Class-wide admission potential summary (cached)
+  // Class-wide 6지원안 구성 요약 — 4구간 판정 기반 집계 (단일 % 확률 표시는 규칙상 사용하지 않음)
   if (!_cache.classPortfolio) {
-    const stats = { atLeastOneSum: 0, expectedSum: 0, count: 0 };
-    const bands = { high: 0, mid: 0, low: 0, warn: 0 };
+    const agg = { count: 0, safeSum: 0, balanced: 0, noSafe: 0, minRiskySum: 0 };
     STUDENTS.forEach(s => {
-      const a = ANALYSIS[s.seat] || {};
-      const results = runAllUniversities(s);
-      const allC = results.map(r => {
-        const comp = calcCompositeScore(r, s, a);
-        return { ...r, prob: comp.probability, comp };
-      }).sort((a, b) => b.prob - a.prob);
-      if (allC.length >= 6) {
-        const port = calcOptimalPortfolio(allC, 6);
-        stats.atLeastOneSum += port.atLeastOne;
-        stats.expectedSum += port.expectedCount;
-        stats.count++;
-        if (port.atLeastOne >= 95) bands.high++;
-        else if (port.atLeastOne >= 80) bands.mid++;
-        else if (port.atLeastOne >= 60) bands.low++;
-        else bands.warn++;
-      }
+      try {
+        const pf = calcOptimalPortfolioCards(s);
+        if (!pf.picks.length) return;
+        agg.count++;
+        agg.safeSum += pf.counts.안정;
+        if (pf.counts.안정 >= 2 && pf.counts.적정 >= 2) agg.balanced++;
+        if (pf.counts.안정 === 0) agg.noSafe++;
+        agg.minRiskySum += pf.minRisky;
+      } catch (e) {}
     });
-    _cache.classPortfolio = { stats, bands };
+    _cache.classPortfolio = agg;
   }
-  const { stats: classPortfolioStats, bands: portBands } = _cache.classPortfolio;
+  const cp = _cache.classPortfolio;
 
-  html += '<h3 style="margin-top:20px">학급 합격 예측 요약</h3>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">전체 학생의 AI 최적 포트폴리오 기반 합격 예측 통계입니다.</p>';
-  if (classPortfolioStats.count > 0) {
-    const avgALO = Math.round(classPortfolioStats.atLeastOneSum / classPortfolioStats.count);
-    const avgExp = (classPortfolioStats.expectedSum / classPortfolioStats.count).toFixed(1);
+  html += '<h3 style="margin-top:20px">학급 6지원안 구성 요약</h3>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">전체 학생의 AI 최적 6지원안(지원 카드 단위)을 4구간 판정 기준으로 집계한 통계입니다.</p>';
+  if (cp.count > 0) {
     html += '<div class="stat-grid" style="margin-bottom:12px">';
-    html += `<div class="stat-box"><div class="num" style="color:var(--green)">${avgALO}%</div><div class="label">평균 합격 확률 (최소 1교)</div></div>`;
-    html += `<div class="stat-box"><div class="num" style="color:var(--blue)">${avgExp}교</div><div class="label">평균 기대 합격 수</div></div>`;
-    html += `<div class="stat-box"><div class="num">${portBands.high}</div><div class="label">안정 (95%+)</div></div>`;
-    html += `<div class="stat-box"><div class="num" style="color:var(--orange)">${portBands.warn}</div><div class="label">주의 (<60%)</div></div>`;
+    html += `<div class="stat-box"><div class="num" style="color:var(--green)">${(cp.safeSum / cp.count).toFixed(1)}장</div><div class="label">6지원 중 평균 안정 장수</div></div>`;
+    html += `<div class="stat-box"><div class="num" style="color:var(--blue)">${cp.balanced}명</div><div class="label">골격 충족 (안정 2·적정 2 이상)</div></div>`;
+    html += `<div class="stat-box"><div class="num" style="color:var(--orange)">${cp.noSafe}명</div><div class="label">안정 0장 (보강 필요)</div></div>`;
+    html += `<div class="stat-box"><div class="num">${(cp.minRiskySum / cp.count).toFixed(1)}장</div><div class="label">평균 수능최저 위험 장수</div></div>`;
     html += '</div>';
   }
 
@@ -6387,7 +6377,7 @@ function renderDashboard() {
       if (diff > 1.0) reasons.push({text:'성적 급락 (' + Math.abs(diff).toFixed(1) + '등급↓)', severity:3});
       else if (diff < -1.0) reasons.push({text:'성적 급상승 (' + Math.abs(diff).toFixed(1) + '등급↑)', severity:1});
     }
-    if (fit.score < 30) reasons.push({text:'전공적합성 낮음 (' + fit.score + '점)', severity:2});
+    if (fit.score < 30) reasons.push({text:'전공적합성 낮음', severity:2});   // 단일 점수 표기 없이 판정만
     if (!ra.concept) reasons.push({text:'진로 방향 미설정', severity:2});
     if (ra.storyArc.length >= 2) {
       const first = ra.storyArc[0], last = ra.storyArc[ra.storyArc.length-1];
@@ -7200,7 +7190,7 @@ function renderSusiTab(student, analysis) {
 
   // What-if grade simulation
   html += '<div class="glass"><h3>성적 변화 시뮬레이션</h3>';
-  html += '<p style="font-size:11px;color:var(--sub);margin-bottom:10px">남은 학기에 성적이 변화하면 합격 확률이 어떻게 달라지는지 시뮬레이션합니다.</p>';
+  html += '<p style="font-size:11px;color:var(--sub);margin-bottom:10px">남은 학기에 성적이 변화하면 4구간 판정이 어떻게 달라지는지 시뮬레이션합니다.</p>';
   html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
     <label style="font-size:12px;font-weight:600;white-space:nowrap">등급 변화:</label>
     <input type="range" id="whatifSlider" min="-15" max="15" value="0" step="1"
@@ -7234,7 +7224,6 @@ function renderSusiTab(student, analysis) {
 
       favResults.forEach(r => {
         const comp = calcCompositeScore(r, student, analysis);
-        const pColor = comp.probability >= 70 ? 'var(--green)' : comp.probability >= 45 ? 'var(--blue)' : comp.probability >= 30 ? 'var(--orange)' : 'var(--red)';
         const b = r.band || { label: '-', color: 'var(--muted)' };
         html += `<div class="match-row" onclick="showUnivDetail('${esc(r.univ)}')">
           <span class="match-badge ${b.cls || ''}">${b.label}</span>
@@ -7250,11 +7239,7 @@ function renderSusiTab(student, analysis) {
         </div>`;
       });
 
-      const avgProb = Math.round(favResults.reduce((s, r) => s + calcCompositeScore(r, student, analysis).probability, 0) / favResults.length);
-      html += `<div style="margin-top:10px;padding:10px 14px;background:var(--teal-light);border-radius:10px;font-size:13px;text-align:center">
-        포트폴리오 평균 합격 확률: <strong style="color:var(--teal);font-size:18px">${avgProb}%</strong>
-        ${avgProb >= 55 ? ' — 긍정적 전망' : avgProb >= 35 ? ' — 보통 전망 (안정권 추가 권장)' : ' — 도전적 구성 (안정권 추가 필수)'}
-      </div>`;
+      // 단일 % 확률 요약은 규칙상 표시하지 않는다 — 구성은 위의 안정/적정/소신 장수로 판단.
     }
     html += '</div>';
   }
@@ -7354,37 +7339,30 @@ function runWhatIf(sliderVal) {
 
   let html = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">';
   html += `<div style="padding:8px;background:var(--card);border-radius:8px;text-align:center">
-    <div style="font-size:10px;color:var(--muted)">안정권 (65%+)</div>
+    <div style="font-size:10px;color:var(--muted)">안정권 판정</div>
     <div class="mono" style="font-size:14px">${currentSafe} → <strong style="color:${simSafe > currentSafe ? 'var(--green)' : simSafe < currentSafe ? 'var(--red)' : 'var(--sub)'}">${simSafe}교</strong></div>
   </div>`;
   html += `<div style="padding:8px;background:var(--card);border-radius:8px;text-align:center">
-    <div style="font-size:10px;color:var(--muted)">적정 (40~64%)</div>
+    <div style="font-size:10px;color:var(--muted)">적정 판정</div>
     <div class="mono" style="font-size:14px">${currentFit} → <strong style="color:${simFit > currentFit ? 'var(--green)' : simFit < currentFit ? 'var(--red)' : 'var(--sub)'}">${simFit}교</strong></div>
   </div>`;
   html += '</div>';
 
-  if (currentPort && simPort) {
-    const diffAtLeast = simPort.atLeastOne - currentPort.atLeastOne;
-    const diffLabel = diffAtLeast > 0 ? '+' + diffAtLeast : '' + diffAtLeast;
-    html += `<div style="text-align:center;margin-bottom:8px">
-      포트폴리오 합격 확률: <span class="mono">${currentPort.atLeastOne}%</span> → <strong class="mono" style="color:${diffAtLeast > 0 ? 'var(--green)' : diffAtLeast < 0 ? 'var(--red)' : 'var(--sub)'}">${simPort.atLeastOne}% (${diffLabel}%p)</strong>
-    </div>`;
-  }
-
-  // Top changed universities
+  // 단일 % 확률 표시는 규칙상 사용하지 않음 — 변화는 4구간 판정 이동으로만 보여준다.
+  const _bandRankW = { '안정': 3, '적정': 2, '소신': 1, '상향': 0 };
   const changes = currentComps.map(c => {
     const sim = simComps.find(s => s.univ === c.univ);
-    return { univ: c.univ, jeon: c.jeonType, current: c.prob, sim: sim ? sim.prob : c.prob, diff: sim ? sim.prob - c.prob : 0 };
-  }).filter(c => Math.abs(c.diff) >= 3).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 5);
+    return { univ: c.univ, jeon: c.jeonType,
+             from: c.comp && c.comp.band, to: sim && sim.comp ? sim.comp.band : (c.comp && c.comp.band) };
+  }).filter(c => c.from && c.to && c.from !== c.to).slice(0, 5);
 
   if (changes.length > 0) {
-    html += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">주요 변화 대학</div>';
+    html += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">판정 구간이 바뀌는 대학</div>';
     changes.forEach(c => {
-      const color = c.diff > 0 ? 'var(--green)' : 'var(--red)';
-      const sign = c.diff > 0 ? '+' : '';
+      const up = (_bandRankW[c.to] ?? -1) > (_bandRankW[c.from] ?? -1);
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:11px">${esc(c.univ)} <span style="color:var(--muted);font-size:10px">${esc((c.jeon||'').substring(0,4))}</span></span>
-        <span class="mono" style="font-size:11px">${c.current}% → <strong style="color:${color}">${c.sim}% (${sign}${c.diff}%p)</strong></span>
+        <span class="mono" style="font-size:11px">${c.from} → <strong style="color:${up ? 'var(--green)' : 'var(--red)'}">${c.to}</strong></span>
       </div>`;
     });
   }
@@ -7984,15 +7962,11 @@ function showUnivDetail(univName) {
 
     // Fit score visualization
     const fitData = comp.fitData;
-    html += `<div style="text-align:center;margin:12px 0">
-      <div style="display:inline-block;position:relative;width:100px;height:100px">
-        <svg viewBox="0 0 100 100" style="transform:rotate(-90deg);width:100px;height:100px">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" stroke-width="8"/>
-          <circle cx="50" cy="50" r="42" fill="none" stroke="${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}" stroke-width="8" stroke-dasharray="${fitData.score * 2.64} 264" stroke-linecap="round"/>
-        </svg>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:800;color:${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}">${fitData.score}</div>
-      </div>
-      <div style="font-size:12px;color:var(--sub);margin-top:4px">전공적합성 점수 (100점 만점)</div>
+    // 단일 점수(N점/100점 만점) 게이지는 규칙상 표시하지 않음 — 요인별 근거만 보여준다.
+    const fitLabel = fitData.score >= 70 ? '높음' : fitData.score >= 40 ? '보통' : '낮음';
+    html += `<div style="margin:12px 0;font-size:12px">
+      <strong style="color:${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}">전공적합성 ${fitLabel}</strong>
+      <span style="color:var(--muted);font-size:10px"> — 아래 요인별 근거로 판단</span>
     </div>`;
 
     fitData.factors.forEach(f => {
@@ -8054,8 +8028,8 @@ function showUnivDetail(univName) {
   if (analysis.wk && analysis.wk.length >= 2) disadvantages.push('약점 교과 ' + analysis.wk.length + '개 — 약점 보완 노력 설명 준비 필요');
   if (recordAnalysis.concept) advantages.push(`진로 분야 '${recordAnalysis.concept}' 명확 — 학과 선택 근거 확보`);
   if (result.cutline && result.cutline.min) disadvantages.push('수능최저 충족 필요 — 수능 대비도 병행해야 함');
-  if (comp.is종합 && comp.fitData.score >= 60) advantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 경쟁력 양호`);
-  else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push(`전공적합성 ${comp.fitData.score}점 — 서류 보완 필요`);
+  if (comp.is종합 && comp.fitData.score >= 60) advantages.push('전공적합성 높음 — 서류 경쟁력 양호');
+  else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push('전공적합성 낮음 — 서류 보완 필요');
   if (comp.is논술) {
     const avg = calcWeightedAvg(student);
     if (avg <= 3.5) advantages.push('내신 3.5 이내 — 논술전형 내신 감점 최소화');
