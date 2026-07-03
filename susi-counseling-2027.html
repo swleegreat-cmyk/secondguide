@@ -3449,13 +3449,15 @@ function buildApplicationCards(student) {
   const stAvg = calcWeightedAvg(student);
   const engineSubj = toEngineFormat(student);
   const univScore = {};  // 대학별 학생 환산등급 (NAESIN 규칙 보유 대학만 환산, 그 외 전과목 평균)
+  const univScoreSrc = {};  // '환산' = 반영교과 환산 계산됨 · '평균' = 규칙 미보유로 전과목 평균 폴백
   const scoreOf = univ => {
     if (univScore[univ] !== undefined) return univScore[univ];
     let v = stAvg;
+    univScoreSrc[univ] = '평균';
     if (NAESIN_RULES[univ]) {
       try {
         const r = computeScore(engineSubj, NAESIN_RULES[univ], { A: 1, B: 3, C: 5 });
-        if (r && r.환산등급 != null && !isNaN(r.환산등급)) v = r.환산등급;
+        if (r && r.환산등급 != null && !isNaN(r.환산등급)) { v = r.환산등급; univScoreSrc[univ] = '환산'; }
       } catch (e) {}
     }
     return (univScore[univ] = Math.round(v * 100) / 100);
@@ -3477,6 +3479,7 @@ function buildApplicationCards(student) {
         rel: e.rel || '보통',                     // 판정 신뢰도 (빌드 단계 산출)
         g50: e.g50, g70: e.g70,
         score: scoreOf(univ),                      // 학생 환산등급
+        scoreSrc: univScoreSrc[univ],              // '환산' | '평균' — 평균이면 stAvg 복사값
         stAvg: Math.round(stAvg * 100) / 100,
         band, bandBase,
         bandAdjusted: band !== bandBase,
@@ -3566,7 +3569,7 @@ function cardRowHtml(c) {
     : `<span style="font-size:9px;color:var(--muted)">${esc(c.noCutLabel || '컷 정보 없음')}</span>`;
   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;flex-wrap:wrap">
     <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
-    <span class="mono" style="white-space:nowrap">환산 ${c.score} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
+    <span class="mono" style="white-space:nowrap">${c.scoreSrc || '환산'} ${c.score} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
     ${bandCell}
     <span class="mono" style="font-size:10px;color:var(--sub);white-space:nowrap">${c.cw != null ? '충원 ' + c.cw.toFixed(1) + '배수' : '충원 -'}</span>
     ${judgeRelBadge(c.rel)}
@@ -6744,7 +6747,7 @@ function renderSusiTab(student, analysis) {
             <div class="univ">${esc(c.univ)} <strong>${esc(c.dept)}</strong> <span style="font-size:10px;color:var(--muted)">${esc(c.jn || c.jt)}</span> ${judgeRelBadge(c.rel)}</div>
             <div class="jeon">${esc(c.sub || c.gy || '')} · 50컷 ${c.g50 ?? '-'} · 70컷 ${c.g70 ?? '-'} · 경쟁률 ${c.ratio ?? '-'}${c.cw != null ? ' · 충원 ' + c.cw.toFixed(1) + '배수' : ''}</div>
           </div>
-          <div class="match-num"><div class="unit">평균 ${c.stAvg} / 환산 ${c.score}</div></div>
+          <div class="match-num"><div class="unit">${c.scoreSrc === '환산' ? `평균 ${c.stAvg} / 환산 ${c.score}` : `평균 ${c.stAvg}`}</div></div>
         </div>`;
       });
     }
@@ -6792,7 +6795,7 @@ function renderSusiTab(student, analysis) {
 
   // [카드 전환] 컷라인 비교 — getCards() 기반 (컷 보유 카드만)
   html += `<div class="glass"><h3>합격 가능성 분석 — 컷라인 비교 (학과·전형 단위)</h3>
-    <p style="font-size:11px;color:var(--muted);margin-bottom:8px">등급50/70 컷이 있는 지원 카드만 표시합니다. 행 형식: 학과 · 전형(유형) — 환산 vs 50/70컷 — 구간 — 충원배수 — 신뢰도</p>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:8px">등급50/70 컷이 있는 지원 카드만 표시합니다. 행 형식: 학과 · 전형(유형) — 환산(반영교과 규칙 보유 대학) 또는 평균(전과목) vs 50/70컷 — 구간 — 충원배수 — 신뢰도. 4구간 판정은 항상 전과목 평균 기준입니다.</p>
     <div id="board-cutcmp"></div></div>`;
 
   // All results table
