@@ -7002,6 +7002,34 @@ function _needsCountOf(s) {
   try { n = counselNeeds(s).length; } catch (e) {}   // 결과지 ③·스냅샷 비교와 동일 목록 (중복 제거 포함)
   return (_cache.needsCount[s.seat] = n);
 }
+// ── 학생 위험 점수 합성 ──
+// 합성 규칙 (각 항목 발동 시 가중치 가산, 가중치는 RISK_WEIGHTS 상수에서 조정):
+//   ① 안정 카드 0장            → +noSafe (4)
+//   ② 후보 바구니 미작성        → +noBasket (3)
+//   ③ 바구니 과반 최저 미충족    → +minMajor (2)  (모평 입력 학생만 발동 가능)
+//   ④ 생기부 보완 미해소 3건 이상 → +needs3 (1)
+//   ⑤ 최근 상담 21일 초과        → +staleCounsel (2)  (상담 기록 없음도 동일 가산)
+const RISK_WEIGHTS = { noSafe: 4, noBasket: 3, minMajor: 2, needs3: 1, staleCounsel: 2 };
+const RISK_STALE_DAYS = 21;   // 최근 상담 경과 기준(일)
+// 최근 메모 경과 일수 (메모 없음 → null). 메모 time 형식: toLocaleString('ko-KR') "2026. 7. 4. 오전 …"
+function memoDaysOf(memoTime) {
+  const m = /(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\./.exec(String(memoTime || ''));
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+// 순수 합성 함수 (verify가 직접 검사) — row: {safe, basketN, minMajor, needs, memoDays(null=기록 없음)}
+function riskScoreOf(r) {
+  const tags = [];
+  let score = 0;
+  if (r.safe === 0) { score += RISK_WEIGHTS.noSafe; tags.push('안정 0장'); }
+  if (r.basketN === 0) { score += RISK_WEIGHTS.noBasket; tags.push('바구니 미작성'); }
+  if (r.minMajor) { score += RISK_WEIGHTS.minMajor; tags.push('바구니 과반 최저 미충족'); }
+  if (r.needs >= 3) { score += RISK_WEIGHTS.needs3; tags.push(`보완 미해소 ${r.needs}건`); }
+  if (r.memoDays == null) { score += RISK_WEIGHTS.staleCounsel; tags.push('상담 기록 없음'); }
+  else if (r.memoDays > RISK_STALE_DAYS) { score += RISK_WEIGHTS.staleCounsel; tags.push(`상담 ${r.memoDays}일 경과`); }
+  return { score, tags };
+}
 function commandCenterData() {
   const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
   return STUDENTS.map((s, idx) => {
@@ -7021,13 +7049,18 @@ function commandCenterData() {
       minMajor = basketC.length > 0 && minBad * 2 > basketC.length;
     }
     const memoList = memos['memo_' + s.seat] || [];
-    return {
+    const row = {
       idx, seat: s.seat, name: s.name,
       avg: Math.round(calcWeightedAvg(s) * 100) / 100,
       safe, basketN: basketC.length, comp, minTxt, minMajor,
       needs: _needsCountOf(s),
+      memoDays: memoList.length ? memoDaysOf(memoList[0].time) : null,
       memoDate: memoList.length ? String(memoList[0].time).split(/\s*오/)[0].trim() : '-'
     };
+    const rk = riskScoreOf(row);
+    row.risk = rk.score;
+    row.riskTags = rk.tags;
+    return row;
   });
 }
 // 바구니 기준 경합: 같은 카드(대학·전형·학과)에 3명 이상 겹치는 조합
@@ -7040,7 +7073,7 @@ function cmdConflictRows(minCount) {
     .sort((a, b) => b[1].length - a[1].length)
     .map(([k, names]) => ({ key: k, names }));
 }
-let _cmdSort = { key: 'avg', dir: 1 };
+let _cmdSort = { key: 'risk', dir: -1 };   // 기본: 위험 점수 내림차순
 function cmdSort(key) {
   if (_cmdSort.key === key) _cmdSort.dir *= -1; else _cmdSort = { key, dir: 1 };
   renderCommandCenter();
@@ -7076,6 +7109,16 @@ function renderCommandCenter() {
       <div style="font-size:11px;color:var(--sub);font-weight:600">${label}</div>
       <div style="font-size:9px;color:var(--muted)">${sub}</div></div>`;
   let h = '<div class="glass"><h3>담임 관제 <span style="font-size:10px;color:var(--muted);font-weight:400">(카드 클릭 → 학생 명단 · 이름 클릭 → 학생 화면)</span></h3>';
+  // 오늘의 호출 우선순위: 위험 점수 상위 5명 (0점 제외) — 사유 태그 병기
+  const callList = [...rows].sort((a, b) => b.risk - a.risk || b.avg - a.avg).filter(r => r.risk > 0).slice(0, 5);
+  h += '<div style="margin-bottom:8px;padding:9px 11px;border-radius:10px;background:var(--card);border:1px solid var(--red)">'
+    + '<div style="font-size:11px;font-weight:800;color:var(--red);margin-bottom:5px">📣 오늘의 호출 우선순위 <span style="font-size:9px;color:var(--muted);font-weight:400">(위험 점수 상위 5명 · 규칙: 안정 0장 +4 / 바구니 미작성 +3 / 과반 최저 미충족 +2 / 보완 3건↑ +1 / 상담 21일 초과 +2)</span></div>';
+  h += callList.length
+    ? callList.map(r => `<div class="cmdCallChip" onclick="selectStudent(${r.idx})" style="cursor:pointer;padding:3px 0;font-size:11px;border-bottom:1px dashed var(--border)">
+        <span style="display:inline-block;min-width:26px;text-align:center;font-weight:800;color:#fff;background:${r.risk >= 6 ? 'var(--red)' : 'var(--orange)'};border-radius:8px;font-size:10px;padding:1px 4px">${r.risk}점</span>
+        <strong>${r.seat}번 ${esc(r.name)}</strong> <span style="color:var(--sub)">— ${r.riskTags.map(esc).join(' · ')}</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">위험 점수 1점 이상 학생 없음</div>';
+  h += '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
     + alertCard('urgent', urgent.length, '안정 카드 0장 (긴급)', 'var(--red)', '전체 카드 기준 안정 구간 없음')
     + alertCard('nobasket', nobasket.length, '후보 바구니 미작성', 'var(--orange)', '★ 담은 카드 0장')
@@ -7083,7 +7126,7 @@ function renderCommandCenter() {
     + alertCard('needs', needsOpen.length, '생기부 보완 미해소', 'var(--blue)', '실행형 보완 항목 1건 이상')
     + '</div><div id="cmdListArea"></div>';
   // 학생 테이블 (정렬 가능)
-  const cols = [['seat', '번호'], ['name', '이름'], ['avg', '평균등급'], ['basketN', '바구니'], ['comp', '6지원 구성'], ['minTxt', '최저 충족'], ['needs', '보완 잔여'], ['memoDate', '최근 메모']];
+  const cols = [['seat', '번호'], ['name', '이름'], ['risk', '위험 점수'], ['avg', '평균등급'], ['basketN', '바구니'], ['comp', '6지원 구성'], ['minTxt', '최저 충족'], ['needs', '보완 잔여'], ['memoDate', '최근 메모']];
   const sorted = [...rows].sort((a, b) => {
     const x = a[_cmdSort.key], y = b[_cmdSort.key];
     return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * _cmdSort.dir;
@@ -7094,6 +7137,7 @@ function renderCommandCenter() {
   sorted.forEach(r => {
     h += `<tr onclick="selectStudent(${r.idx})" style="cursor:pointer${r.safe === 0 ? ';background:var(--orange-light)' : ''}">
       <td class="mono">${r.seat}</td><td style="font-weight:600">${esc(r.name)}</td>
+      <td class="mono" title="${esc(r.riskTags.join(' · ') || '위험 요인 없음')}" style="font-weight:800;color:${r.risk >= 6 ? 'var(--red)' : r.risk >= 3 ? 'var(--orange)' : 'var(--muted)'}">${r.risk}</td>
       <td class="mono">${r.avg.toFixed(2)}</td><td class="mono">${r.basketN}장</td>
       <td class="mono">${esc(r.comp)}</td><td class="mono">${esc(r.minTxt)}</td>
       <td class="mono"${r.needs ? ' style="color:var(--orange);font-weight:700"' : ''}>${r.needs}건</td>

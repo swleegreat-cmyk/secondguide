@@ -896,6 +896,55 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 위험 점수 합성 · 오늘의 호출 우선순위
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 복합 사유: 5개 규칙 전부 발동 → 4+3+2+1+2 = 12점 + 사유 태그 5개
+    const comp = riskScoreOf({ safe: 0, basketN: 0, minMajor: true, needs: 3, memoDays: 24 });
+    // 실데이터 정합: 34명 전원 risk = 행 필드 재합성과 일치, 숫자 아님 0명
+    const rows = commandCenterData();
+    const mismatch = rows.filter(x => riskScoreOf(x).score !== x.risk).length;
+    const badNum = rows.filter(x => !Number.isFinite(x.risk)).length;
+    // 무위험 0점: 김태양(안정 28장·보완 2건)에 바구니 1장 + 오늘 자 메모 → 발동 규칙 없음
+    const s = STUDENTS.find(x => x.name === '김태양');
+    const card = buildApplicationCards(s).find(c => !c.noCut);
+    setBasketKeys(s.seat, [basketKeyOf(card)]);
+    const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
+    memos['memo_' + s.seat] = [{ text: '(검증용) 상담 완료', time: new Date().toLocaleString('ko-KR') }];
+    localStorage.setItem('susi27_memos', JSON.stringify(memos));
+    const zeroRow = commandCenterData().find(x => x.seat === s.seat);
+    setBasketKeys(s.seat, []);   // 정리
+    delete memos['memo_' + s.seat];
+    localStorage.setItem('susi27_memos', JSON.stringify(memos));
+    // 렌더: 호출 우선순위 5명 + 위험 점수 열 기본 내림차순 + 34행 오염 없음
+    if (!document.getElementById('cmdCenter')) document.body.insertAdjacentHTML('beforeend', '<div id="cmdCenter"></div>');
+    _cmdSort = { key: 'risk', dir: -1 };
+    renderCommandCenter();
+    const h = document.getElementById('cmdCenter').innerHTML;
+    const rows2 = commandCenterData();
+    const idxSeq = [...h.matchAll(/<tr onclick="selectStudent\((\d+)\)"/g)].map(m => Number(m[1]));
+    const maxRisk = Math.max(...rows2.map(x => x.risk));
+    return {
+      comp, mismatch, badNum,
+      zeroRisk: zeroRow.risk, zeroTags: zeroRow.riskTags.length,
+      hasCall: h.includes('오늘의 호출 우선순위'), chips: (h.match(/cmdCallChip/g) || []).length,
+      headerDesc: h.includes('위험 점수 ▼'), rowsN: idxSeq.length,
+      firstIsMax: rows2[idxSeq[0]] != null && rows2[idxSeq[0]].risk === maxRisk,
+      renderOk: !/undefined|\bNaN\b|>null</.test(h),
+    };
+  });
+  assert(`위험점수#1(복합 사유): 5개 규칙 전부 발동 = ${r.comp.score}점 (4+3+2+1+2) · 태그 ${r.comp.tags.length}개('상담 24일 경과' 포함) + 34명 재합성 일치`,
+    r.comp.score === 12 && r.comp.tags.length === 5 && r.comp.tags.includes('상담 24일 경과')
+      && r.mismatch === 0 && r.badNum === 0, JSON.stringify(r.comp));
+  assert(`위험점수#2(무위험 0점): 김태양 바구니 작성 + 당일 상담 메모 → ${r.zeroRisk}점 · 태그 ${r.zeroTags}개`,
+    r.zeroRisk === 0 && r.zeroTags === 0, JSON.stringify({ zeroRisk: r.zeroRisk, zeroTags: r.zeroTags }));
+  assert(`위험점수#3(호출 우선순위·정렬): 상위 ${r.chips}명 표시 + 테이블 ${r.rowsN}행 위험 내림차순(선두=최고점) + 오염 없음`,
+    r.hasCall && r.chips === 5 && r.headerDesc && r.rowsN === 34 && r.firstIsMax && r.renderOk,
+    JSON.stringify({ chips: r.chips, headerDesc: r.headerDesc, rowsN: r.rowsN, firstIsMax: r.firstIsMax }));
+}
+
+// ═══════════════════════════════════════════════
 // 상담 결과지 생성 (counselSheetHtml)
 // ═══════════════════════════════════════════════
 {
