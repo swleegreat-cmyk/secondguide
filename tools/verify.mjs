@@ -813,6 +813,50 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 학과 매칭 2단 키워드 (강한 정합 / 계열 정합 / 근거 부족 + 근거 중복 금지)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 합성 학생: 수학 고유(미적분) + 교육 공통(수업·멘토링) 문장 / 교육 공통만 문장
+    const st = {
+      seat: 990, name: '_매칭검증', opinions: [],
+      records: [
+        { t: '세부능력및특기사항', c: '수학', y: 3,
+          b: '미적분의 변화율 개념을 활용해 학습 멘토링 수업 자료를 직접 제작하여 배포함. 통계 단원에서 확률 모형을 설계함.' },
+        { t: '세부능력및특기사항', c: '진로', y: 2,
+          b: '교사를 희망하며 교육 봉사에서 후배 학습 지도를 진행함. 수업 참관 후 보고서를 제출함.' }
+      ],
+      subjects: []
+    };
+    const ra = { deptMatch: ['수학교육과', '국어교육과', '철학과'], concept: '교육' };
+    const fit = computeDeptFit(st, {}, ra);
+    const by = {};
+    fit.forEach(f => { by[f.dept] = f; });
+    // 근거 중복 금지: 학과 간 인용 문장 교집합
+    const texts = d => new Set((by[d].evidence || []).map(e => e.text));
+    const overlap = [...texts('수학교육과')].filter(t => texts('국어교육과').has(t)).length;
+    return {
+      수학: { grade: by['수학교육과'].grade, ev: by['수학교육과'].evidence.length, kw: by['수학교육과'].uniqueKws },
+      국어: { grade: by['국어교육과'].grade, ev: by['국어교육과'].evidence.length, msg: by['국어교육과'].noUniqueMsg,
+              gap0: (by['국어교육과'].gaps[0] || '') },
+      철학: { grade: by['철학과'].grade },
+      overlap,
+      noPct: !JSON.stringify(fit).includes('"score"') && !JSON.stringify(fit).includes('우수')
+    };
+  });
+  assert(`매칭#1(강한 정합): 수학교육과 — 고유(${r.수학.kw.join(',')}) + 공통 매칭, 근거 ${r.수학.ev}건`,
+    r.수학.grade === '강한 정합' && r.수학.ev >= 1, JSON.stringify(r.수학));
+  assert('매칭#2(계열 정합): 국어교육과 — 공통만 매칭 + 정직한 무근거 표시 + 실행형 보완 문구',
+    r.국어.grade === '계열 정합' && r.국어.ev === 0
+      && r.국어.msg.includes('고유 활동의 근거 문장 없음')
+      && r.국어.gap0.includes('3학년 세특') && r.국어.gap0.includes('고유 근거 0건'),
+    JSON.stringify(r.국어));
+  assert('매칭#3(근거 부족): 철학과 — 고유·공통 모두 미매칭', r.철학.grade === '근거 부족', JSON.stringify(r.철학));
+  assert(`매칭#4(근거 중복 금지 + % 폐지): 학과 간 인용 교집합 ${r.overlap}건 · score/우수 부재`,
+    r.overlap === 0 && r.noPct === true, JSON.stringify({ overlap: r.overlap, noPct: r.noPct }));
+}
+
+// ═══════════════════════════════════════════════
 // 판정 근거 문구 — 좌변(전과목 평균) 명시 + 환산값 '참고' 구분
 // ═══════════════════════════════════════════════
 {

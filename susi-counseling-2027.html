@@ -4719,96 +4719,85 @@ function _analyzeRecordInner(student, analysis) {
       seen.add(key); return true;
     }).slice(0, 12);
 
-  // 8. 추천 학과별 매칭 점수(%) + 부족 항목 산출
+  // 8. 추천 학과별 2단 키워드 매칭 (3단계 등급 + 근거 인용 + 실행형 보완 항목)
   result.deptFit = computeDeptFit(student, analysis, result);
 
   return result;
 }
 
-// 추천 학과별 매칭 점수(%)와 부족 항목 리스트 산출
-// 반환: [{dept, score, matchedKeywords, missingKeywords, subjects, evidence, missing:[{label,detail}], level}]
+// 추천 학과별 2단 키워드 매칭
+// 반환: [{dept, field, grade(강한 정합|계열 정합|근거 부족), uniqueKws, commonKws, evidence, noUniqueMsg, gaps}]
 function computeDeptFit(student, analysis, ra) {
+  // ── 2단 키워드 매칭 (DEPT_KEYWORDS2: 계열 공통 + 학과 고유) ──
+  // 등급 3단계: 고유 키워드 문장 ≥1 + 공통 매칭 = "강한 정합"
+  //           / 공통만 매칭 = "계열 정합" / 둘 다 없음 = "근거 부족".
+  //   (고유 매칭이 있으나 공통이 없는 드문 경우도 고유가 더 강한 신호이므로 강한 정합.)
+  // % 점수·우수 라벨은 사용하지 않는다. 근거 인용은 그 학과의 고유 키워드 매칭 문장만 —
+  // 학과 간 인용 중복을 구조적으로 방지한다.
   const depts = (ra.deptMatch || []).slice(0, 6);
   if (!depts.length) return [];
   const recs = student.records.filter(r => r.t === '세부능력및특기사항' && r.b && r.b.length > 20);
-  const allText = recs.map(r => r.b).join(' ');
   const opText = (student.opinions || []).map(o => o.b || '').join(' ');
-  const conceptKw = (HL_CAREER_KW[ra.concept] || []);
   const out = [];
+  // 키워드 매칭: 좌측 경계가 한글이면 다른 단어의 일부이므로 불인정
+  // (예: '기하'가 '포기하지'·'암기하면서'에, '문학'이 '인문학'에 걸리는 오탐 방지.
+  //  우측은 열어둔다 — '기하학', '문학적'은 정당한 매칭.)
+  const kwHit = (text, kw) => new RegExp('(?<![가-힣])' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(text);
 
   depts.forEach(dept => {
-    let kws = DEPT_KEYWORDS[dept];
-    if (!kws || !kws.length) {
-      const base = dept.replace(/(학과|학부|과|전공|계열)$/, '');
-      kws = [base].concat(conceptKw.slice(0, 4));
-    }
-    kws = [...new Set(kws)];
+    const spec = DEPT_KEYWORDS2[dept] || null;
+    const common = spec ? (DEPT_FIELD_COMMON[spec.field] || []) : [];
+    const unique = spec ? spec.unique
+      : [dept.replace(/(학과|학부|과|전공|계열)$/, '')];   // 사전 미보유 학과: 학과명 어근을 고유로
+    const fieldName = spec ? spec.field : (ra.concept || '해당 계열');
 
-    // 키워드 커버리지 + 활동 빈도 + 근거 문장 수집
-    const found = [], missing = [];
-    let recordHits = 0;
-    const subjSet = new Set();
+    const uniqueHits = new Set(), commonHits = new Set(), uniqueYears = new Set();
     const evidence = [];
-    kws.forEach(kw => {
-      const cnt = (allText.split(kw).length - 1) + (opText.split(kw).length - 1);
-      if (cnt > 0) found.push({ kw, cnt }); else missing.push(kw);
-    });
-    recs.forEach(r => {
-      const hit = kws.find(kw => r.b.includes(kw));
-      if (!hit) return;
-      recordHits++;
-      if (r.c) subjSet.add(r.c);
-      if (evidence.length < 2) {
-        const sentences = r.b.split(/(?<=[.。])\s*/);
-        let snip = (sentences.find(s => s.includes(hit)) || r.b.substring(0, 70)).trim();
-        if (snip.length > 90) snip = snip.substring(0, 90) + '…';
-        evidence.push({ subj: r.c || '', year: r.y, kw: hit, text: snip });
+    for (const r of recs) {
+      for (const sent of splitSentences(r.b)) {
+        common.forEach(k => { if (kwHit(sent, k)) commonHits.add(k); });
+        const uHit = unique.find(k => kwHit(sent, k));
+        if (!uHit) continue;
+        uniqueHits.add(uHit);
+        uniqueYears.add(r.y);
+        if (evidence.length < 3) {
+          const tag = tagSentence(sent, { subjectName: r.c });
+          evidence.push({ subj: r.c || '', year: r.y, kw: uHit, tagGrade: tag.grade,
+            text: sent.length > 90 ? sent.slice(0, 90) + '…' : sent });
+        }
       }
-    });
+    }
+    common.forEach(k => { if (kwHit(opText, k)) commonHits.add(k); });   // 행특은 공통 매칭에만
 
-    // 심화 활동 마커 (탐구/실험/연구/독서/발표 등)
-    const deptText = recs.filter(r => kws.some(kw => r.b.includes(kw))).map(r => r.b).join(' ');
-    const hasInquiry = /탐구|실험|연구|프로젝트|논문|분석|가설/.test(deptText);
-    const hasReading = /[「『"'][^」』"']{2,}[」』"']|독서|읽/.test(deptText);
-    const hasPresent = /발표|토론|프레젠테이션|캠페인/.test(deptText);
+    const grade = uniqueHits.size ? '강한 정합' : commonHits.size ? '계열 정합' : '근거 부족';
 
-    // ── 매칭 점수 (0~100) ──
-    const coverage = found.length / kws.length;                 // 키워드 커버리지
-    const freqNorm = Math.min(recordHits, 6) / 6;               // 활동 빈도
-    const depthCnt = (hasInquiry ? 1 : 0) + (hasReading ? 1 : 0) + (hasPresent ? 1 : 0);
-    let score = Math.round(coverage * 50 + freqNorm * 30 + (depthCnt / 3) * 20);
-    score = Math.max(0, Math.min(100, score));
-
-    // ── 부족 항목 리스트 ──
+    // ── 보완 필요: 남은 3학년 1학기에 실행 가능한 형태로 기술 ──
     const gaps = [];
-    if (missing.length) {
-      gaps.push({ label: '핵심어 미언급', detail: missing.slice(0, 5).join(', ') + (missing.length > 5 ? ` 외 ${missing.length - 5}개` : '') });
+    if (!uniqueHits.size) {
+      gaps.push(`3학년 세특에 ${dept} 고유 활동(${unique.slice(0, 3).join('·')} 등) 기록 필요 — 현재 고유 근거 0건, 남은 3학년 1학기에 보완 가능`);
+    } else if (!uniqueYears.has(3)) {
+      gaps.push(`고유 근거가 1·2학년에만 있음 — 3학년 1학기 세특에서 '${[...uniqueHits][0]}' 활동을 이어가는 기록 필요`);
     }
-    if (recordHits < 2) {
-      gaps.push({ label: '관련 세특 활동 부족', detail: `학과 연관 세특 ${recordHits}건 — 최소 2~3건 확보 권장` });
+    if (evidence.length && evidence.every(e => e.tagGrade === '하')) {
+      gaps.push('고유 근거 문장의 구체성 보강 필요 — 수치·산출물·고유명(책·도구) 언급을 남은 학기 활동에 포함');
     }
-    if (!hasInquiry) {
-      gaps.push({ label: '심화 탐구활동 부족', detail: '탐구·실험·연구 등 심화 활동 근거 미확인' });
-    }
-    if (!hasReading) {
-      gaps.push({ label: '관련 독서 부족', detail: '학과 연계 독서활동 근거 미확인' });
-    }
-    if (subjSet.size === 0) {
-      gaps.push({ label: '연계 교과 없음', detail: '관련 교과 세특에서 근거를 찾지 못함' });
+    if (!commonHits.size && common.length) {
+      gaps.push(`${fieldName} 계열 공통 활동(${common.slice(0, 3).join('·')} 등) 기록 부족 — 진로활동·자율활동에서 보완 가능`);
     }
 
-    const level = score >= 70 ? '우수' : score >= 45 ? '양호' : score >= 25 ? '보통' : '보완필요';
     out.push({
-      dept, score, level,
-      matchedKeywords: found.map(f => f.kw),
-      missingKeywords: missing,
-      subjects: [...subjSet],
+      dept, field: fieldName, grade,
+      uniqueKws: [...uniqueHits], commonKws: [...commonHits].slice(0, 6),
       evidence,
-      missing: gaps
+      noUniqueMsg: !uniqueHits.size
+        ? `이 학과 고유 활동의 근거 문장 없음 — ${commonHits.size ? fieldName + ' 계열 공통 활동만 존재' : '계열 공통 활동도 없음'}`
+        : null,
+      gaps
     });
   });
 
-  return out.sort((a, b) => b.score - a.score);
+  const rank = { '강한 정합': 0, '계열 정합': 1, '근거 부족': 2 };
+  return out.sort((a, b) => rank[a.grade] - rank[b.grade]);
 }
 
 // 전공적합성 vs 학업역량 tagging
@@ -4920,39 +4909,68 @@ function extractKeyActivities(student) {
 }
 
 // 학과별 키워드 프로파일 (생기부 연결점 분석용)
-const DEPT_KEYWORDS = {
-  '컴퓨터공학과': ['프로그래밍','코딩','알고리즘','소프트웨어','자료구조','파이썬','앱','시스템','데이터'],
-  '소프트웨어학과': ['프로그래밍','코딩','앱','소프트웨어','알고리즘','개발'],
-  'AI학과': ['인공지능','AI','머신러닝','데이터','알고리즘','딥러닝'],
-  '전자공학과': ['회로','전자','반도체','신호','아두이노','센서'],
-  '기계공학과': ['기계','역학','설계','제작','로봇','구조'],
-  '정보보안학과': ['보안','암호','네트워크','해킹','정보'],
-  '생명과학과': ['생명','세포','유전','생물','실험','효소','미생물'],
-  '화학과': ['화학','반응','분자','실험','원소','화합물'],
-  '물리학과': ['물리','역학','에너지','파동','전자기','실험'],
-  '환경과학과': ['환경','생태','오염','기후','지속가능','탄소'],
-  '수학과': ['수학','함수','증명','통계','미적분','수열','기하'],
-  '통계학과': ['통계','확률','데이터','분포','회귀','표본'],
-  '데이터사이언스학과': ['데이터','통계','분석','시각화','머신러닝','예측'],
-  '의예과': ['의학','생명','건강','질병','해부','환자','생리'],
-  '간호학과': ['간호','건강','환자','돌봄','보건','의료'],
-  '약학과': ['약','화학','생명','약리','제약','분자'],
-  '경영학과': ['경영','기업','마케팅','전략','조직','창업'],
-  '경제학과': ['경제','시장','수요','금융','정책','무역'],
-  '국어국문학과': ['문학','소설','시','작가','국어','서사','비평'],
-  '영어영문학과': ['영어','영문','문학','언어','번역'],
-  '사학과': ['역사','사료','시대','사건','문화유산'],
-  '철학과': ['철학','사상','윤리','논리','존재','인식'],
-  '심리학과': ['심리','행동','정서','인지','상담','실험'],
-  '사회학과': ['사회','현상','계층','공동체','불평등','제도'],
-  '법학과': ['법','권리','판례','정의','헌법','제도'],
-  '행정학과': ['행정','정책','공공','제도','거버넌스'],
-  '정치외교학과': ['정치','외교','국제','정책','권력','민주'],
-  '교육학과': ['교육','학습','수업','교사','발달','지도'],
-  '미술학과': ['미술','작품','조형','색채','전시','창작'],
-  '디자인학과': ['디자인','조형','시각','색채','제품','창작'],
-  '체육학과': ['운동','체육','스포츠','트레이닝','신체','경기']
+// 학과 키워드 2단 사전 (dept_keywords.js에서 주입 — 계열 공통 + 학과 고유)
+// ═══════════════════════════════════════════════
+// 학과 키워드 2단 사전 — [계열 공통] + [학과 고유] 분리
+// 매칭 등급: 고유 문장 ≥1 + 공통 매칭 = 강한 정합 / 공통만 = 계열 정합 / 둘 다 없음 = 근거 부족
+// 이 파일은 빌드 시 __DEPT_KEYWORDS__ 토큰으로 주입된다 (build.py).
+// ═══════════════════════════════════════════════
+const DEPT_FIELD_COMMON = {
+  'IT·컴퓨터': ['프로그래밍', '코딩', '소프트웨어', '알고리즘', '데이터', '개발'],
+  '공학': ['설계', '제작', '실험', '프로젝트', '공학', '기술'],
+  '자연과학': ['탐구', '실험', '연구', '가설', '분석', '원리'],
+  '의료보건': ['건강', '환자', '의료', '질병', '보건', '돌봄'],
+  '경상': ['경제', '시장', '기업', '정책', '소비자'],
+  '인문': ['독서', '글쓰기', '토론', '해석', '비평'],
+  '사회과학': ['사회', '제도', '정책', '공동체', '조사'],
+  '교육': ['교육', '교사', '수업', '학습', '멘토링', '지도'],
+  '예술': ['창작', '작품', '표현', '전시', '감상'],
+  '체육': ['운동', '스포츠', '신체', '경기'],
 };
+const DEPT_KEYWORDS2 = {
+  '컴퓨터공학과':     { field: 'IT·컴퓨터', unique: ['자료구조', '운영체제', '컴퓨터', '파이썬', 'C언어', '시스템'] },
+  '소프트웨어학과':   { field: 'IT·컴퓨터', unique: ['앱', '웹', '오픈소스', '버그', '깃허브'] },
+  'AI학과':           { field: 'IT·컴퓨터', unique: ['인공지능', 'AI', '머신러닝', '딥러닝', '신경망', '챗봇'] },
+  '정보보안학과':     { field: 'IT·컴퓨터', unique: ['보안', '암호', '해킹', '개인정보', '네트워크'] },
+  '데이터사이언스학과': { field: 'IT·컴퓨터', unique: ['빅데이터', '시각화', '회귀', '예측 모델', '전처리'] },
+  '전자공학과':       { field: '공학', unique: ['회로', '전자', '반도체', '신호', '아두이노', '센서'] },
+  '기계공학과':       { field: '공학', unique: ['기계', '역학', '로봇', '3D프린팅', '모터'] },
+  '생명과학과':       { field: '자연과학', unique: ['생명', '세포', '유전', 'DNA', '미생물', '효소'] },
+  '화학과':           { field: '자연과학', unique: ['화학', '반응', '분자', '화합물', '산화', '용액'] },
+  '물리학과':         { field: '자연과학', unique: ['물리', '역학', '전자기', '파동', '양자', '중력'] },
+  '환경과학과':       { field: '자연과학', unique: ['환경', '생태', '기후', '오염', '탄소', '지속가능'] },
+  '수학과':           { field: '자연과학', unique: ['수학', '증명', '미적분', '기하', '수열', '함수'] },
+  '통계학과':         { field: '자연과학', unique: ['통계', '확률', '분포', '회귀', '표본'] },
+  '의예과':           { field: '의료보건', unique: ['의학', '해부', '생리', '진단', '임상'] },
+  '간호학과':         { field: '의료보건', unique: ['간호', '간호사', '응급처치', '병원', '투약'] },
+  '약학과':           { field: '의료보건', unique: ['약', '약리', '제약', '약물', '조제'] },
+  '경영학과':         { field: '경상', unique: ['경영', '마케팅', '조직', '창업', '브랜드'] },
+  '경제학과':         { field: '경상', unique: ['수요', '공급', '금융', '무역', '물가', '환율'] },
+  '국어국문학과':     { field: '인문', unique: ['문학', '소설', '시', '국어', '문법', '서사'] },
+  '영어영문학과':     { field: '인문', unique: ['영어', '영문학', '번역', '원서', '영미'] },
+  '사학과':           { field: '인문', unique: ['역사', '사료', '시대', '유물', '문화유산'] },
+  '철학과':           { field: '인문', unique: ['철학', '사상', '윤리', '논리', '존재', '인식'] },
+  '심리학과':         { field: '사회과학', unique: ['심리', '행동', '정서', '인지', '상담'] },
+  '사회학과':         { field: '사회과학', unique: ['계층', '불평등', '사회 현상', '설문', '구조'] },
+  '법학과':           { field: '사회과학', unique: ['법', '판례', '헌법', '권리', '재판'] },
+  '행정학과':         { field: '사회과학', unique: ['행정', '공공', '거버넌스', '지방자치', '공무'] },
+  '정치외교학과':     { field: '사회과학', unique: ['정치', '외교', '국제', '민주주의', '선거'] },
+  '교육학과':         { field: '교육', unique: ['교육학', '발달', '교육과정', '교수법', '교육 정책'] },
+  '수학교육과':       { field: '교육', unique: ['수학', '미적분', '기하', '통계', '확률', '수식'] },
+  '국어교육과':       { field: '교육', unique: ['국어', '문학', '문법', '독서지도', '글쓰기'] },
+  '영어교육과':       { field: '교육', unique: ['영어', '영문법', '회화', '원서', '영작'] },
+  '체육교육과':       { field: '교육', unique: ['체육', '스포츠', '경기', '트레이닝', '체력'] },
+  '유아교육과':       { field: '교육', unique: ['유아', '아동', '놀이', '보육', '동화'] },
+  '미술학과':         { field: '예술', unique: ['미술', '조형', '색채', '드로잉', '회화'] },
+  '디자인학과':       { field: '예술', unique: ['디자인', '시각', '타이포', 'UX', '일러스트'] },
+  '체육학과':         { field: '체육', unique: ['트레이닝', '체력', '종목', '생활체육', '재활'] },
+};
+// 스레드 엔진(studentTopicThreads) 호환용 평면 뷰 — 기존 DEPT_KEYWORDS 형태(학과 → 키워드 배열) 유지
+const DEPT_KEYWORDS = {};
+for (const [d, spec] of Object.entries(DEPT_KEYWORDS2)) {
+  DEPT_KEYWORDS[d] = [...new Set([...(DEPT_FIELD_COMMON[spec.field] || []), ...spec.unique])];
+}
+
 
 function assessCompetencies(student, analysis) {
   const scores = {
@@ -8607,39 +8625,47 @@ function renderRecordTab(student, analysis) {
   if (ra.deptMatch.length > 0) {
     html += '<h3 style="margin-top:16px">추천 학과 매칭 분석</h3>';
 
-    // 학과별 매칭 점수(%) + 부족 항목 — analyzeRecord().deptFit
+    // 학과별 2단 키워드 매칭 (3단계 등급 + 학과별 차별화 근거 인용) — analyzeRecord().deptFit
     const deptFit = ra.deptFit || [];
     if (deptFit.length > 0) {
-      html += '<p style="font-size:11px;color:var(--muted);margin:6px 0 10px">추천 학과별로 생기부 매칭 점수(%)와 <strong>보완이 필요한 부족 항목</strong>을 제시합니다.</p>';
+      html += '<p style="font-size:11px;color:var(--muted);margin:6px 0 10px">학과별 매칭 등급(강한 정합/계열 정합/근거 부족)과 <strong>그 학과 고유 키워드가 매칭된 문장만</strong> 인용합니다. % 점수는 산출하지 않습니다.</p>';
+      const GRADE_STYLE = { '강한 정합': 'var(--green)', '계열 정합': 'var(--blue)', '근거 부족': 'var(--orange)' };
+      const tagChip = g => {
+        const c = g === '상' ? 'var(--green)' : g === '중' ? 'var(--blue)' : 'var(--muted)';
+        return `<span style="font-size:9px;padding:0 5px;border-radius:6px;background:${c};color:#fff;font-weight:700">구체성 ${g}</span>`;
+      };
       deptFit.forEach(df => {
-        const c = df.score >= 70 ? 'var(--green)' : df.score >= 45 ? 'var(--blue)' : df.score >= 25 ? 'var(--orange)' : 'var(--red)';
+        const c = GRADE_STYLE[df.grade] || 'var(--muted)';
         html += `<div style="margin-bottom:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;border-left:3px solid ${c}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <span style="font-size:13px;font-weight:700;color:var(--teal)">${esc(df.dept)}</span>
-            <span style="font-size:14px;font-weight:800;color:${c}">${df.score}<span style="font-size:11px;font-weight:600">% · ${df.level}</span></span>
-          </div>
-          <div style="height:8px;background:var(--border);border-radius:4px;margin-bottom:6px"><div style="height:100%;width:${df.score}%;background:${c};border-radius:4px;transition:width .3s"></div></div>`;
-        if (df.subjects.length) {
-          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:3px">연계 교과: ${df.subjects.map(s => esc(s)).join(', ')}</div>`;
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:700;color:var(--teal)">${esc(df.dept)} <span style="font-size:10px;color:var(--muted);font-weight:400">(${esc(df.field)} 계열)</span></span>
+            <span style="padding:2px 10px;border-radius:9px;background:${c};color:#fff;font-size:11px;font-weight:800">${df.grade}</span>
+          </div>`;
+        if (df.uniqueKws.length) {
+          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:2px">고유 매칭: ${df.uniqueKws.slice(0, 5).map(k => '<mark class="hl-career">' + esc(k) + '</mark>').join(' ')}</div>`;
         }
-        if (df.matchedKeywords.length) {
-          html += `<div style="font-size:11px;color:var(--sub);margin-bottom:4px">매칭 키워드: ${df.matchedKeywords.slice(0,6).map(k => '<mark class="hl-career">'+esc(k)+'</mark>').join(' ')}</div>`;
+        if (df.commonKws.length) {
+          html += `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">계열 공통 매칭: ${df.commonKws.map(esc).join(', ')}</div>`;
         }
-        // 근거 문장
-        df.evidence.forEach(ev => {
-          html += `<div style="font-size:11px;color:var(--muted);line-height:1.6;padding:4px 8px;background:var(--cream);border-radius:6px;margin-top:3px">
-            <span style="color:var(--teal);font-weight:600">${ev.year}학년${ev.subj ? ' '+esc(ev.subj) : ''}</span> · ${esc(ev.text)}</div>`;
-        });
-        // 부족 항목
-        if (df.missing.length) {
+        // 이 학과 고유 키워드가 매칭된 문장만 인용 (구체성 태그 병기) — 학과 간 중복 없음
+        if (df.evidence.length) {
+          df.evidence.forEach(ev => {
+            html += `<div style="font-size:11px;color:var(--muted);line-height:1.6;padding:4px 8px;background:var(--cream);border-radius:6px;margin-top:3px">
+              <span style="color:var(--teal);font-weight:600">${ev.year}학년${ev.subj ? ' ' + esc(ev.subj) : ''}</span> · “${esc(ev.text)}” ${tagChip(ev.tagGrade)} <span style="font-size:9px;color:var(--copper)">← ${esc(ev.kw)}</span></div>`;
+          });
+        } else {
+          html += `<div style="font-size:11px;color:var(--red);font-weight:600;padding:4px 8px;background:var(--cream);border-radius:6px;margin-top:3px">${esc(df.noUniqueMsg || '고유 근거 문장 없음')}</div>`;
+        }
+        // 보완 필요 (남은 3학년 1학기에 실행 가능한 형태)
+        if (df.gaps.length) {
           html += `<div style="margin-top:6px;padding:7px 10px;background:var(--orange-light);border-radius:8px">
-            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:3px">보완 필요 항목 (${df.missing.length})</div>`;
-          df.missing.forEach(g => {
-            html += `<div style="font-size:11px;color:var(--sub);line-height:1.6">· <strong>${esc(g.label)}</strong> — ${esc(g.detail)}</div>`;
+            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:3px">보완 필요 (${df.gaps.length})</div>`;
+          df.gaps.forEach(g => {
+            html += `<div style="font-size:11px;color:var(--sub);line-height:1.6">· ${esc(g)}</div>`;
           });
           html += '</div>';
         } else {
-          html += `<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600">✓ 주요 항목 충족 — 지원 근거가 충분합니다.</div>`;
+          html += `<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600">✓ 고유·공통 근거 확보 — 지원 근거가 충분합니다.</div>`;
         }
         html += '</div>';
       });
