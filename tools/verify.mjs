@@ -695,7 +695,7 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
              changed, changedTotal, targetEntries };
   });
   console.log(`──── 컷 해석주의 — 명단 ${r.list.length}개 대학 · 대상 엔트리 ${r.targetEntries}건 ────`);
-  console.log('  판정 변경(안정/적정→유보) 카드 수 — 34명 합산, 대학별:');
+  console.log('  판정 변경(안정/적정/소신→유보) 카드 수 — 34명 합산, 대학별:');
   for (const [u, n] of Object.entries(r.changed).sort((a, b) => b[1] - a[1]))
     console.log(`    ${u}: ${n}장`);
   console.log(`    합계: ${r.changedTotal}장`);
@@ -829,6 +829,56 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
       fbRow: cardRowHtml(fallback).includes('참고'),
     };
   });
+// ═══════════════════════════════════════════════
+// 컷 해석주의 소신 확대 + 카드 상세 모달 데이터
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 소신 확대: 수치상 소신인 컷 해석주의 카드가 유보로 바뀌었는지 + 상향은 유지
+    let sosinHold = null, sangUnchanged = null;
+    const sosinByUniv = {};
+    let sosinTotal = 0;
+    for (const st of STUDENTS) {
+      for (const c of buildApplicationCards(st)) {
+        if (c.caution && c.bandRaw === '소신') {
+          sosinTotal++;
+          sosinByUniv[c.univ] = (sosinByUniv[c.univ] || 0) + 1;
+          if (!sosinHold) sosinHold = { univ: c.univ, dept: c.dept, band: c.band, bandRaw: c.bandRaw };
+        }
+        if (!sangUnchanged && c.caution && c.bandRaw === '상향')
+          sangUnchanged = { univ: c.univ, band: c.band, bandRaw: c.bandRaw };
+      }
+    }
+    const allSosinHold = STUDENTS.every(st => buildApplicationCards(st)
+      .filter(c => c.caution && c.bandRaw === '소신').every(c => c.band === '유보'));
+    // 모달 데이터: 규칙 보유(한국성서대) vs 미보유(성균관대)
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s);
+    const withRule = cardModalData(cards.find(c => c.univ === '한국성서대학교' && c.dept === '사회복지학과' && c.jn === '교과(교과성적우수)'));
+    const noRule = cardModalData(cards.find(c => c.univ === '성균관대학교' && c.dept === '물리학과' && c.jn === '종합(면접형-과학인재)'));
+    return { sosinHold, sangUnchanged, allSosinHold, sosinTotal, sosinByUniv,
+             withRule: { hasRule: withRule.naesin.hasRule, basis: withRule.naesin.basis,
+                         summaryOk: !!(withRule.naesin.summary && withRule.naesin.summary.includes('반영교과')),
+                         steps0: withRule.steps[0], stepsN: withRule.steps.length },
+             noRule: { hasRule: noRule.naesin.hasRule, basis: noRule.naesin.basis,
+                       holdStep: noRule.steps.some(t => t.includes('판정 유보')) } };
+  });
+  console.log('  소신→유보 확대분 — 대학별(34명 합산): '
+    + Object.entries(r.sosinByUniv).sort((a, b) => b[1] - a[1]).map(([u, n]) => `${u} ${n}장`).join(' · ')
+    + ` — 합계 ${r.sosinTotal}장`);
+  assert(`컷해석주의#4: 소신 확대 — 수치상 소신 카드 ${r.sosinTotal}장 전건 유보 + 상향은 유지(${r.sangUnchanged?.band})`,
+    r.allSosinHold === true && r.sosinTotal > 0 && r.sangUnchanged && r.sangUnchanged.band === '상향',
+    JSON.stringify({ ex: r.sosinHold, sang: r.sangUnchanged }));
+  assert('모달#1: 규칙 보유 대학(한국성서대) — hasRule·반영교과 요약·판정 과정 단계 생성',
+    r.withRule.hasRule === true && r.withRule.summaryOk
+      && r.withRule.steps0.startsWith('전과목 평균') && r.withRule.stepsN >= 4,
+    JSON.stringify(r.withRule));
+  assert('모달#2: 규칙 미보유 대학(성균관대) — 전과목 평균 기준 명시 + 유보 단계 표시',
+    r.noRule.hasRule === false && r.noRule.basis.includes('전과목 평균')
+      && r.noRule.holdStep === true,
+    JSON.stringify(r.noRule));
+}
+
   assert('판정근거#2: 카드 근거 첫 줄에 좌변(전과목 평균) 명시 + 환산은 "참고(판정 미반영)" 구분',
     r.ruleReason.startsWith('판정 기준: 전과목 평균')
       && r.ruleReason.includes('참고: 반영교과 환산') && r.ruleReason.includes('판정 미반영')
