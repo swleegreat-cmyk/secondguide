@@ -813,6 +813,38 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const g = { 국어: 2, 수학: 3, 영어: 2, 탐구1: 2, 탐구2: 4, 한국사: 3 };
+    return {
+      // 충족: 상위 2개(국2+영2=4) ≤ 5
+      ok: judgeMin(g, '2개 합 5', ''),
+      // 미충족: 3개 합 7 기준에 국4수5영5 → 최상 3개 합 14, 7 초과
+      no: judgeMin({ 국어: 4, 수학: 5, 영어: 5 }, '3개 합 7 한국사 4등급', ''),
+      // 근접: 상위 3개(국2+영2+탐구2=6+수학? → 국2 영2 탐1(2)=6? 합 기준 5 → 1 초과)
+      near: judgeMin(g, '3개 합 5', ''),
+      // 판정불가: 파싱 불가 텍스트
+      na: judgeMin(g, '대학별 고사 성적 우수자 전형별 상이', ''),
+      // 수학 포함 + 탐구 2과목 평균
+      mustInc: judgeMin(g, '수학 포함 2개 합 5 탐구 2과목', ''),
+    };
+  });
+  assert(`최저심#1(충족): '2개 합 5' × 국2·영2 → ${r.ok.status} (${r.ok.detail})`,
+    r.ok.status === '충족', JSON.stringify(r.ok));
+  assert(`최저심#2(미충족+사유): '3개 합 7' × 4·5·5 → ${r.no.status} — ${r.no.lackText}`,
+    r.no.status === '미충족' && /상승 필요/.test(r.no.lackText || ''), JSON.stringify(r.no));
+  assert(`최저심#3(근접): '3개 합 5' × 합 6 → ${r.near.status} (1등급 이내 부족 + 영역 명시)`,
+    r.near.status === '근접' && /상승 필요/.test(r.near.lackText || ''), JSON.stringify(r.near));
+  assert(`최저심#4(판정불가): 파싱 불가 기준 → ${r.na.status} — 정직 분류`,
+    r.na.status === '판정불가' && /기준 확인 필요/.test(r.na.detail || ''), JSON.stringify(r.na));
+  assert(`최저심#5(수학 포함·탐구 2과목 평균): ${r.mustInc.status} — 수학 강제 반영`,
+    r.mustInc.status === '충족' || r.mustInc.status === '근접' || r.mustInc.status === '미충족',
+    JSON.stringify(r.mustInc));
+}
+
+// ═══════════════════════════════════════════════
 // 5역량 구문 하이라이트 (입학사정관 평가 기준)
 // ═══════════════════════════════════════════════
 {
