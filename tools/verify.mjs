@@ -841,7 +841,7 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     // 3) 토글 해제 복원: 가상 조정 후 토글 off → 저장된 모평이 원본 그대로 + 판정도 실제 기준
     _whatIf = { on: true, seat: s.seat, delta: { 수학: -2 } };
     _whatIf = { on: false, seat: s.seat, delta: {} };   // toggleWhatIf(off)와 동일 상태
-    const storedAfter = JSON.parse(localStorage.getItem('mock_' + s.seat)).grades;
+    const storedAfter = getMockRecord(s.seat).exams['6월 모평'];   // 회차별 저장 구조
     const restored = minWhatIfCounts(s, mockGradesOf(s).grades, pool);
     localStorage.removeItem('mock_' + s.seat);   // 정리
     _minJudgeCache = {};
@@ -1085,6 +1085,56 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
   assert(`최저심#5(수학 포함·탐구 2과목 평균): ${r.mustInc.status} — 수학 강제 반영`,
     r.mustInc.status === '충족' || r.mustInc.status === '근접' || r.mustInc.status === '미충족',
     JSON.stringify(r.mustInc));
+}
+
+// ═══════════════════════════════════════════════
+// 모평 회차별 추이 — 배열 저장·마이그레이션·최신 기준 판정·코멘트 불변
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '오연서');
+    const seat = s.seat;
+    const backup = localStorage.getItem('mock_' + seat);
+    // 1) 구형식 {exam,grades} → {exams} 자동 마이그레이션
+    localStorage.setItem('mock_' + seat, JSON.stringify({ exam: '6월 모평', grades: { 국어: 4 } }));
+    const mig = getMockRecord(seat);
+    const migrated = !!(mig.exams && mig.exams['6월 모평'] && mig.exams['6월 모평'].국어 === 4);
+    // 2) 2회차 저장 → 판정은 항상 최신(9월) 회차 기준
+    localStorage.removeItem('mock_' + seat);
+    saveMockForExam(seat, '6월 모평', { 국어: 5, 수학: 5, 영어: 5 });
+    saveMockForExam(seat, '9월 모평', { 국어: 2, 수학: 2, 영어: 3 });
+    const latest = mockGradesOf(s);
+    const latestOk = latest.exam === '9월 모평' && latest.grades.국어 === 2 && latest.grades.영어 === 3;
+    // 3) 영역별 추이 (국어 5→2·영어 5→3 = 상승)
+    const trUp = mockAreaTrends(s);
+    const trendUpOk = trUp.국어.dir === '상승' && trUp.영어.dir === '상승';
+    // 4) 근접 카드 판정 = 최신 회차 기준. 추이(이전 회차)만 상승/하락으로 바꿔도 status 불변, 코멘트만 변화
+    const text = '3개 합 6';
+    const jUp = judgeMin(latest.grades, text, '');           // 국2·수2·영3 top3 합7 > 6 → 근접(부족 1)
+    const cUp = nearTrendComment(jUp.lackText, trUp);
+    // 이전(6월) 회차만 더 좋게 바꿔 9월을 '하락' 추세로 — 최신 9월 등급은 그대로 → 판정 동일해야
+    saveMockForExam(seat, '6월 모평', { 국어: 1, 수학: 1, 영어: 1 });
+    const trDown = mockAreaTrends(s);
+    const latest2 = mockGradesOf(s);
+    const jDown = judgeMin(latest2.grades, text, '');
+    const cDown = nearTrendComment(jDown.lackText, trDown);
+    // 정리
+    if (backup) localStorage.setItem('mock_' + seat, backup); else localStorage.removeItem('mock_' + seat);
+    _minJudgeCache = {};
+    return {
+      migrated, latestOk, trendUpOk,
+      latest2unchanged: latest2.exam === '9월 모평' && latest2.grades.영어 === 3,
+      down영어: trDown.영어.dir,
+      jUpStatus: jUp.status, jDownStatus: jDown.status,
+      cUp: cUp && cUp.text, cDown: cDown && cDown.text
+    };
+  });
+  assert('추이#1(회차 배열·마이그레이션·최신 기준 판정): 구형식→exams 변환 + 2회차 저장 시 최신(9월) 등급으로 판정 + 국·영 상승 추이 계산',
+    r.migrated && r.latestOk && r.trendUpOk, JSON.stringify(r));
+  assert(`추이#2(코멘트는 판정 불변): 이전 회차만 바꿔 추세 상승→하락 전환(영어 ${r.down영어})해도 근접 판정 [${r.jUpStatus}]=[${r.jDownStatus}] 동일 · 코멘트만 상이(상승="${r.cUp}" / 하락="${r.cDown}")`,
+    r.latest2unchanged && r.jUpStatus === '근접' && r.jDownStatus === '근접' &&
+    r.cUp === '9월 모평까지 유지 시 충족 가능권' && r.cDown === '충족 계획 재점검 필요' &&
+    r.down영어 === '하락', JSON.stringify(r));
 }
 
 // ═══════════════════════════════════════════════

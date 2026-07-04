@@ -3823,11 +3823,13 @@ function mockInputChanged(seat) {
     if (v != null && !isNaN(v)) grades[a] = v;
   });
   const exam = (document.getElementById('mockExamSel') || {}).value || '6월 모평';
-  saveMockExam(seat, { exam, grades });
+  saveMockForExam(seat, exam, grades);   // 회차별 저장 (판정은 최신 회차 기준으로 자동 반영)
   _minJudgeCache = {};
   const s = STUDENTS.find(x => x.seat === seat);
   const st = document.getElementById('minSimStatus');
   if (st && s) st.innerHTML = minSimStatusHtml(s);
+  const sel = document.getElementById('mockExamSel');
+  if (sel) refreshMockExamOptions(sel, seat);   // 데이터 있는 회차 표식 갱신
   // 최저 배지 즉시 반영: 보드 목록·6지원 시뮬레이션만 부분 재렌더
   for (const [bid, bst] of Object.entries(_boardState)) {
     if (bst.student && bst.student.seat === seat) renderBoardList(bid);
@@ -3835,8 +3837,31 @@ function mockInputChanged(seat) {
   const wrap = document.getElementById('pfSimWrap');
   if (wrap && s) wrap.innerHTML = portfolioSimHtml(s);
 }
+// 회차 드롭다운 변경 → 해당 회차의 저장 등급을 입력칸에 로드 (저장이 아니라 조회)
+function mockExamSwitch(seat) {
+  const exam = (document.getElementById('mockExamSel') || {}).value;
+  const rec = getMockRecord(seat);
+  const g = (rec.exams && rec.exams[exam]) || {};
+  MOCK_AREAS.forEach(a => { const el = document.getElementById('mock-' + a); if (el) el.value = g[a] != null ? g[a] : ''; });
+  _minJudgeCache = {};
+  const s = STUDENTS.find(x => x.seat === seat);
+  const st = document.getElementById('minSimStatus');
+  if (st && s) st.innerHTML = minSimStatusHtml(s);
+}
+// 회차 옵션 라벨에 데이터 보유 표식(●) 갱신
+function refreshMockExamOptions(sel, seat) {
+  const rec = getMockRecord(seat);
+  const cur = sel.value;
+  sel.innerHTML = MOCK_EXAMS.map(e => {
+    const has = rec.exams[e] && Object.values(rec.exams[e]).some(v => v != null);
+    return `<option value="${e}"${e === cur ? ' selected' : ''}>${has ? '● ' : ''}${e}</option>`;
+  }).join('');
+}
 function clearMockExam(seat) {
-  try { localStorage.removeItem('mock_' + seat); } catch (e) {}
+  // 현재 선택 회차만 삭제 (다른 회차 기록은 유지). 선택 회차가 없으면 전체 삭제.
+  const exam = (document.getElementById('mockExamSel') || {}).value;
+  if (exam) saveMockForExam(seat, exam, {});
+  else { try { localStorage.removeItem('mock_' + seat); } catch (e) {} }
   _minJudgeCache = {};
   const s = STUDENTS.find(x => x.seat === seat);
   if (s) renderSusiTab(s, ANALYSIS[s.seat] || {});
@@ -3853,13 +3878,29 @@ function minSimStatusHtml(student) {
     return { c, j };
   });
   const col = { 충족: 'var(--green)', 근접: 'var(--orange)', 미충족: 'var(--red)', 판정불가: 'var(--muted)', 해당없음: 'var(--muted)' };
-  let h = `<div style="font-size:12px;font-weight:700;margin-bottom:6px">최저 충족 현황 <span style="font-size:10px;color:var(--muted);font-weight:400">(${esc(mock.exam)} · 바구니 ${cards.length}장)</span> —
+  const trends = mockAreaTrends(student);
+  // 영역별 추이 화살표 (판정 입력 회차 = 최신, 추이는 직전 회차 대비). ▲상승(개선)/－유지/▼하락
+  const TR_SYM = { 상승: '▲', 유지: '－', 하락: '▼' };
+  const TR_COL = { 상승: 'var(--green)', 유지: 'var(--muted)', 하락: 'var(--red)' };
+  const trendChips = MOCK_AREAS.map(a => {
+    const t = trends[a];
+    if (!t || !t.dir) return `<span style="color:var(--muted)">${a} <span style="font-size:9px">–</span></span>`;
+    return `<span title="${esc(a)}: ${esc(t.prevExam)} ${t.from}등급 → ${esc(t.curExam)} ${t.to}등급 (${t.dir})" style="color:${TR_COL[t.dir]};font-weight:700">${a} ${TR_SYM[t.dir]}</span>`;
+  }).join('<span style="color:var(--border)"> · </span>');
+  let h = `<div style="font-size:12px;font-weight:700;margin-bottom:4px">최저 충족 현황 <span style="font-size:10px;color:var(--muted);font-weight:400">(판정 기준: 최신 회차 ${esc(mock.exam)} · 바구니 ${cards.length}장)</span> —
     <span style="color:var(--green)">충족 ${cnt.충족}</span> · <span style="color:var(--orange)">근접 ${cnt.근접}</span> · <span style="color:var(--red)">미충족 ${cnt.미충족}</span>${cnt.판정불가 ? ` · 판정불가 ${cnt.판정불가}` : ''}${cnt.해당없음 ? ` · 최저없음 ${cnt.해당없음}` : ''}</div>`;
+  h += `<div style="font-size:10px;margin-bottom:6px;padding:4px 8px;background:var(--cream);border-radius:6px">영역별 추이 <span style="font-size:9px;color:var(--muted)">(직전 회차 대비)</span>: ${trendChips}</div>`;
   rows.forEach(({ c, j }) => {
+    // 근접 카드에 한해 병목 영역 추세 코멘트 (판정은 그대로, 코멘트만 부가)
+    let comment = '';
+    if (j.status === '근접') {
+      const nc = nearTrendComment(j.lackText, trends);
+      if (nc) comment = ` <span style="font-size:10px;font-weight:700;color:${nc.tone === 'warn' ? 'var(--red)' : 'var(--green)'}">▷ ${esc(nc.text)}</span>`;
+    }
     h += `<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">
-      <span style="color:${col[j.status]};font-weight:700">[${j.status}]</span> ${esc(c.univ)} ${esc(c.dept)} <span style="color:var(--muted)">${esc(c.jn || '')}</span>${j.lackText ? `<span style="color:var(--red)"> — ${esc(j.lackText)}</span>` : j.detail ? `<span style="color:var(--muted)"> — ${esc(j.detail)}</span>` : ''}</div>`;
+      <span style="color:${col[j.status]};font-weight:700">[${j.status}]</span> ${esc(c.univ)} ${esc(c.dept)} <span style="color:var(--muted)">${esc(c.jn || '')}</span>${j.lackText ? `<span style="color:var(--red)"> — ${esc(j.lackText)}</span>` : j.detail ? `<span style="color:var(--muted)"> — ${esc(j.detail)}</span>` : ''}${comment}</div>`;
   });
-  h += '<div style="font-size:9px;color:var(--muted);margin-top:4px">※ 모평 등급은 변동 가능하므로 미충족 카드도 자동 제외하지 않습니다 — 경고 표시만 합니다.</div>';
+  h += '<div style="font-size:9px;color:var(--muted);margin-top:4px">※ 판정은 항상 최신 회차 기준입니다. 추이 화살표·코멘트는 참고용이며 충족/근접/미충족 판정 자체를 바꾸지 않습니다.</div>';
   return h;
 }
 
@@ -6037,13 +6078,41 @@ function parseMinRequirement(minText, studentAvg, student) {
 // 수능 최저학력기준 충족 판정
 // ═══════════════════════════════════════════════
 // ── 모의고사 성적 입력 (학생별 localStorage — 수능최저 시뮬레이터 입력) ──
-const MOCK_EXAMS = ['3월 학평', '6월 모평', '9월 모평', '10월 학평'];
+const MOCK_EXAMS = ['3월 학평', '6월 모평', '9월 모평', '10월 학평'];   // 시간 순서 (판정은 항상 최신 회차 기준)
 const MOCK_AREAS = ['국어', '수학', '영어', '탐구1', '탐구2', '한국사'];
-function getMockExam(seat) {
-  try { const v = localStorage.getItem('mock_' + seat); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+// 저장 형식: { exams: { '6월 모평': {국어:2,...}, '9월 모평': {...} } }
+// 구형식 { exam, grades } 은 읽는 시점에 자동 마이그레이션한다.
+function getMockRecord(seat) {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem('mock_' + seat) || 'null'); } catch (e) {}
+  if (!raw) return { exams: {} };
+  if (raw.exams && typeof raw.exams === 'object') return raw;
+  if (raw.exam && raw.grades) return { exams: { [raw.exam]: raw.grades } };   // 구 단일값 마이그레이션
+  return { exams: {} };
 }
+function saveMockRecord(seat, rec) {
+  try { localStorage.setItem('mock_' + seat, JSON.stringify(rec)); } catch (e) {}
+}
+// 특정 회차 저장 (grades 비면 해당 회차 삭제)
+function saveMockForExam(seat, examName, grades) {
+  const rec = getMockRecord(seat);
+  if (grades && Object.values(grades).some(v => v != null)) rec.exams[examName] = grades;
+  else delete rec.exams[examName];
+  saveMockRecord(seat, rec);
+}
+// 구 시그니처 호환 (verify·기존 호출부): {exam,grades} 또는 {exams} 모두 수용
 function saveMockExam(seat, data) {
-  try { localStorage.setItem('mock_' + seat, JSON.stringify(data)); } catch (e) {}
+  if (data && data.exams) return saveMockRecord(seat, data);
+  if (data && data.exam) return saveMockForExam(seat, data.exam, data.grades || {});
+}
+// 회차 순서상 등급이 기록된 가장 최신 회차 이름 (없으면 null)
+function latestMockExam(rec) {
+  for (let i = MOCK_EXAMS.length - 1; i >= 0; i--) {
+    const e = MOCK_EXAMS[i];
+    if (rec.exams[e] && Object.values(rec.exams[e]).some(v => v != null)) return e;
+  }
+  const extra = Object.keys(rec.exams).filter(e => rec.exams[e] && Object.values(rec.exams[e]).some(v => v != null));
+  return extra.length ? extra[extra.length - 1] : null;   // MOCK_EXAMS 밖 커스텀 키(JSON 초기값 등)
 }
 // 기존 JSON(suneungByExam)에 모평 데이터가 있으면 초기값으로 사용 (현재 데이터셋은 전원 빈 객체)
 function initialMockFromJson(student) {
@@ -6057,10 +6126,45 @@ function initialMockFromJson(student) {
   MOCK_AREAS.forEach(a => { if (last[a] != null) g[a] = last[a]; });
   return Object.keys(g).length ? { exam: keys[keys.length - 1], grades: g } : null;
 }
+// 판정 입력 = 항상 최신 회차 등급 (없으면 JSON 초기값)
 function mockGradesOf(student) {
-  const m = getMockExam(student.seat) || initialMockFromJson(student);
-  if (!m || !m.grades) return null;
-  return Object.values(m.grades).some(v => v != null) ? m : null;
+  const rec = getMockRecord(student.seat);
+  const exam = latestMockExam(rec);
+  if (exam) { const g = rec.exams[exam]; if (Object.values(g).some(v => v != null)) return { exam, grades: g }; }
+  const init = initialMockFromJson(student);
+  return (init && Object.values(init.grades).some(v => v != null)) ? init : null;
+}
+// 영역별 추이: 해당 영역 값이 기록된 회차들을 시간순으로 모아 최신 vs 직전 비교.
+// 등급은 낮을수록 좋음 → prev-cur > 0 이면 성적 상승(개선). dir: '상승'|'유지'|'하락'|null(비교불가)
+function mockAreaTrends(student) {
+  const rec = getMockRecord(student.seat);
+  const present = MOCK_EXAMS.filter(e => rec.exams[e] && Object.values(rec.exams[e]).some(v => v != null));
+  const out = {};
+  MOCK_AREAS.forEach(a => {
+    const seq = present.filter(e => rec.exams[e][a] != null).map(e => ({ exam: e, g: rec.exams[e][a] }));
+    if (seq.length < 2) { out[a] = { dir: null, seq }; return; }
+    const cur = seq[seq.length - 1], prev = seq[seq.length - 2];
+    const diff = prev.g - cur.g;
+    out[a] = { dir: diff > 0 ? '상승' : diff < 0 ? '하락' : '유지', from: prev.g, to: cur.g, prevExam: prev.exam, curExam: cur.exam, seq };
+  });
+  return out;
+}
+// 근접 카드의 병목 영역 추세 → 코멘트 (판정은 바꾸지 않음, 표시 전용).
+// lackText에 언급된 영역의 추세만 본다. '탐구'는 탐구1·탐구2 추세를 합산한다.
+// 하락이 하나라도 있으면 재점검 우선, 아니면 상승이 있으면 낙관 코멘트.
+function nearTrendComment(lackText, trends) {
+  if (!lackText) return null;
+  const areas = [];
+  if (/국어/.test(lackText)) areas.push('국어');
+  if (/수학/.test(lackText)) areas.push('수학');
+  if (/영어/.test(lackText)) areas.push('영어');
+  if (/탐구/.test(lackText)) areas.push('탐구1', '탐구2');
+  if (/한국사/.test(lackText)) areas.push('한국사');
+  const dirs = areas.map(a => trends[a] && trends[a].dir).filter(Boolean);
+  if (!dirs.length) return null;
+  if (dirs.includes('하락')) return { tone: 'warn', text: '충족 계획 재점검 필요' };
+  if (dirs.includes('상승')) return { tone: 'up', text: '9월 모평까지 유지 시 충족 가능권' };
+  return null;   // 전부 유지 → 코멘트 없음
 }
 // 카드×모평 최저 판정 (judgeMin — min_rules.js). 모평 미입력·기준 없음이면 null
 function judgeMinForCard(c) {
@@ -8153,20 +8257,23 @@ function renderSusiTab(student, analysis) {
 
   // ═══ 수능최저 시뮬레이터: 모평 등급 입력 + 바구니 카드 충족 현황 ═══
   {
-    const mock = getMockExam(student.seat) || initialMockFromJson(student) || { exam: '6월 모평', grades: {} };
-    html += '<div class="glass"><h3>수능최저 시뮬레이터 <span style="font-size:10px;color:var(--muted);font-weight:400">(모평 등급 입력 · 이 브라우저에만 저장)</span></h3>';
+    const _rec = getMockRecord(student.seat);
+    let _selExam = latestMockExam(_rec), _selGrades = _selExam ? _rec.exams[_selExam] : null;
+    if (!_selGrades) { const _ini = initialMockFromJson(student); if (_ini) { _selExam = _ini.exam; _selGrades = _ini.grades; } }
+    _selExam = (MOCK_EXAMS.includes(_selExam) ? _selExam : '6월 모평'); _selGrades = _selGrades || {};
+    html += '<div class="glass"><h3>수능최저 시뮬레이터 <span style="font-size:10px;color:var(--muted);font-weight:400">(모평 회차별 등급 입력 · 이 브라우저에만 저장 · 판정은 최신 회차 기준)</span></h3>';
     html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
-      <label style="font-size:10px;color:var(--muted)">회차<br>
-        <select id="mockExamSel" onchange="mockInputChanged(${student.seat})"
+      <label style="font-size:10px;color:var(--muted)">회차 <span style="font-size:9px">(●=입력됨)</span><br>
+        <select id="mockExamSel" onchange="mockExamSwitch(${student.seat})"
           style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;background:var(--card)">
-          ${MOCK_EXAMS.map(e => `<option${(mock.exam === e) ? ' selected' : ''}>${e}</option>`).join('')}
+          ${MOCK_EXAMS.map(e => { const has = _rec.exams[e] && Object.values(_rec.exams[e]).some(v => v != null); return `<option value="${e}"${(_selExam === e) ? ' selected' : ''}>${has ? '● ' : ''}${e}</option>`; }).join('')}
         </select></label>
       ${MOCK_AREAS.map(a => `<label style="font-size:10px;color:var(--muted)">${a}<br>
-        <input id="mock-${a}" type="number" min="1" max="9" inputmode="numeric" value="${mock.grades[a] ?? ''}"
+        <input id="mock-${a}" type="number" min="1" max="9" inputmode="numeric" value="${_selGrades[a] ?? ''}"
           onchange="mockInputChanged(${student.seat})"
           style="width:54px;padding:6px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;background:var(--card);text-align:center"></label>`).join('')}
       <button onclick="clearMockExam(${student.seat})"
-        style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--cream);color:var(--sub);cursor:pointer;font-family:inherit;font-size:11px">지우기</button>
+        style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--cream);color:var(--sub);cursor:pointer;font-family:inherit;font-size:11px" title="선택한 회차의 입력만 지웁니다">이 회차 지우기</button>
     </div>`;
     html += '<div id="minSimStatus">' + minSimStatusHtml(student) + '</div>';
     // What-if 모드: 화면 재진입·학생 전환 시 가상 상태 자동 폐기 (저장 안 함)
