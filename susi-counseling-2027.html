@@ -7384,6 +7384,104 @@ function renderCommandCenter() {
   el.innerHTML = h;
 }
 
+// ═══ 학급 개요 (평균등급 0.5 히스토그램 · 학급 바구니 구간 합계 · 전형 유형 분포) ═══
+// 인쇄용 A4 요약 뷰(printClassOverview)와 대시보드 블록이 공유하는 순수 집계 함수.
+const OVERVIEW_BINS = 16;   // 1.0~9.0을 0.5등급 간격으로 16구간
+function classOverviewData() {
+  // 1) 평균등급 0.5구간 히스토그램
+  const hist = new Array(OVERVIEW_BINS).fill(0);
+  STUDENTS.forEach(s => {
+    const a = calcWeightedAvg(s);
+    const bin = Math.max(0, Math.min(OVERVIEW_BINS - 1, Math.floor((a - 1) / 0.5)));
+    hist[bin]++;
+  });
+  // 2) 학급 전체 바구니의 구간 구성 합계 + 3) 전형 유형 분포 (담은 카드 = 지원 장수)
+  const bandSum = { 안정: 0, 적정: 0, 소신: 0, 상향: 0, 유보: 0 };
+  const jtSum = { 교과: 0, 종합: 0, 논술: 0, 기타: 0 };
+  let basketTotal = 0;
+  STUDENTS.forEach(s => {
+    basketCards(s).forEach(c => {
+      basketTotal++;
+      if (!c.noCut && bandSum[c.band] != null) bandSum[c.band]++;
+      const jt = String(c.jt || '');
+      if (jt.includes('교과')) jtSum.교과++;
+      else if (jt.includes('종합')) jtSum.종합++;
+      else if (jt.includes('논술')) jtSum.논술++;
+      else jtSum.기타++;
+    });
+  });
+  return { hist, bandSum, jtSum, basketTotal, n: STUDENTS.length };
+}
+function binLabel(i) { const lo = 1 + i * 0.5; return `${lo.toFixed(1)}~${(lo + 0.5).toFixed(1)}`; }
+// 대시보드 학급 개요 블록 HTML (0.5 히스토그램 + 바구니 구간 합계 + 전형 유형)
+function classOverviewBlockHtml() {
+  const d = classOverviewData();
+  const maxH = Math.max(...d.hist, 1);
+  let h = '<div class="glass" id="classOverview"><h3>학급 개요 <button onclick="printClassOverview()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--teal);background:none;color:var(--teal);cursor:pointer;font-family:inherit">학급 수시 현황 인쇄(A4)</button></h3>';
+  // 1) 히스토그램
+  h += '<div style="font-size:12px;font-weight:700;margin:6px 0 4px">① 평균등급 분포 <span style="font-size:10px;color:var(--muted);font-weight:400">(0.5등급 구간 · 34명)</span></div>';
+  h += '<div style="display:flex;align-items:flex-end;height:90px;gap:2px">';
+  d.hist.forEach((v, i) => {
+    h += `<div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${binLabel(i)}등급: ${v}명">
+      <div style="font-size:9px;font-weight:700;margin-bottom:1px;color:${v ? 'var(--sub)' : 'var(--border)'}">${v || ''}</div>
+      <div style="width:100%;height:${(v / maxH) * 68}px;min-height:${v ? 2 : 0}px;background:${gradeColor(1 + i * 0.5)};border-radius:3px 3px 0 0;opacity:0.75"></div>
+      <div style="font-size:7.5px;color:var(--muted);margin-top:2px;transform:rotate(-45deg);transform-origin:center;white-space:nowrap">${(1 + i * 0.5).toFixed(1)}</div></div>`;
+  });
+  h += '</div>';
+  // 2) 학급 바구니 구간 구성
+  h += `<div style="font-size:12px;font-weight:700;margin:14px 0 4px">② 학급 전체 바구니 구간 구성 <span style="font-size:10px;color:var(--muted);font-weight:400">(담은 카드 ${d.basketTotal}장)</span></div>`;
+  if (d.basketTotal) {
+    const bandCol = { 안정: 'var(--green)', 적정: 'var(--teal)', 소신: 'var(--orange)', 상향: 'var(--red)', 유보: 'var(--muted)' };
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' + Object.entries(d.bandSum).map(([b, n]) =>
+      `<span style="font-size:12px;padding:3px 10px;border-radius:10px;background:${bandCol[b]};color:#fff;font-weight:700">${b} ${n}</span>`).join('') + '</div>';
+  } else h += '<div style="font-size:11px;color:var(--muted)">아직 바구니에 담긴 카드가 없습니다 — 학생 화면에서 ☆로 후보를 담으면 집계됩니다.</div>';
+  // 3) 전형 유형 분포
+  h += '<div style="font-size:12px;font-weight:700;margin:14px 0 4px">③ 전형 유형 분포 <span style="font-size:10px;color:var(--muted);font-weight:400">(지원 장수)</span></div>';
+  const jtCol = { 교과: 'var(--teal)', 종합: 'var(--copper)', 논술: 'var(--blue)', 기타: 'var(--muted)' };
+  const jtTot = Object.values(d.jtSum).reduce((a, b) => a + b, 0);
+  if (jtTot) {
+    h += '<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">'
+      + ['교과', '종합', '논술', '기타'].filter(k => d.jtSum[k]).map(k =>
+        `<div title="${k} ${d.jtSum[k]}장" style="width:${d.jtSum[k] / jtTot * 100}%;background:${jtCol[k]};color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${k} ${d.jtSum[k]}</div>`).join('')
+      + '</div>';
+  } else h += '<div style="font-size:11px;color:var(--muted)">지원(바구니) 카드가 없습니다.</div>';
+  h += '</div>';
+  return h;
+}
+// A4 1장 인쇄 뷰 — "학급 수시 현황"
+function printClassOverview() {
+  const d = classOverviewData();
+  const maxH = Math.max(...d.hist, 1);
+  const today = new Date().toLocaleDateString('ko-KR');
+  const bars = d.hist.map((v, i) => `<td style="text-align:center;vertical-align:bottom;padding:0 1px">
+    <div style="font-size:8px;font-weight:700">${v || ''}</div>
+    <div style="width:16px;height:${(v / maxH) * 60}px;min-height:${v ? 2 : 0}px;background:#1C5A60;margin:0 auto"></div>
+    <div style="font-size:7px;color:#666">${(1 + i * 0.5).toFixed(1)}</div></td>`).join('');
+  const bandRow = Object.entries(d.bandSum).map(([b, n]) => `<td><strong>${b}</strong> ${n}</td>`).join('');
+  const jtRow = ['교과', '종합', '논술', '기타'].map(k => `<td><strong>${k}</strong> ${d.jtSum[k]}</td>`).join('');
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>학급 수시 현황</title>
+<style>${SHEET_CSS}
+.ov table{border:none}.ov td{border:none;padding:2px 6px}
+.band-tbl td,.jt-tbl td{border:1px solid #bbb;text-align:center;font-size:11px}
+</style></head><body>
+<h1>2027 학급 수시 현황<span class="kind" style="background:#1C5A60">3학년 4반</span></h1>
+<div class="meta">기준일 ${today} · 대상 ${d.n}명 · 학급 전체 바구니(지원) ${d.basketTotal}장</div>
+<h2>① 평균등급 분포 (0.5등급 구간)</h2>
+<div class="ov" style="overflow-x:auto"><table><tr style="height:74px">${bars}</tr></table></div>
+<h2>② 학급 전체 바구니 구간 구성</h2>
+${d.basketTotal ? `<table class="band-tbl"><tr>${bandRow}</tr></table>` : '<div class="muted">바구니에 담긴 카드 없음</div>'}
+<h2>③ 전형 유형 분포 (지원 장수)</h2>
+${d.basketTotal ? `<table class="jt-tbl"><tr>${jtRow}</tr></table>` : '<div class="muted">지원 카드 없음</div>'}
+<div class="notice">본 자료는 공시 입결 기반 참고자료이며, 종합전형은 정성평가로 결과가 다를 수 있습니다.</div>
+<div class="doc-footer"><div>발행일 ${today} · 학급 수시 현황 요약</div><div class="sign">상담교사 <span class="sign-line"></span> (서명)</div></div>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 350);
+}
+
 function renderDashboard() {
   selectedIdx = null;
   document.getElementById('studentView').style.display = 'none';
@@ -7397,7 +7495,7 @@ function renderDashboard() {
   const dist = [0,0,0,0,0,0,0,0,0];
   avgs.forEach(a => { const g = Math.min(9, Math.max(1, Math.round(a))); dist[g-1]++; });
 
-  let html = '<div id="cmdCenter"></div>' + '<div class="glass"><h3>학급 현황 대시보드 <button onclick="exportClassReport()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--copper);background:none;color:var(--copper);cursor:pointer;font-family:inherit">학급 종합 보고서</button></h3>';
+  let html = '<div id="cmdCenter"></div>' + classOverviewBlockHtml() + '<div class="glass"><h3>학급 현황 대시보드 <button onclick="exportClassReport()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--copper);background:none;color:var(--copper);cursor:pointer;font-family:inherit">학급 종합 보고서</button></h3>';
   html += '<div class="stat-grid">';
   html += `<div class="stat-box"><div class="num">${classAvg.toFixed(2)}</div><div class="label">학급 평균등급</div></div>`;
   html += `<div class="stat-box"><div class="num">${STUDENTS.length}</div><div class="label">총 학생 수</div></div>`;

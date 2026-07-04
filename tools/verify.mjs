@@ -1089,6 +1089,44 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 학급 개요 — 0.5 히스토그램·바구니 구간 합계·전형 유형 분포 + A4 인쇄
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 바구니 세팅: 강리영에 교과·종합 카드 각 1장 (구간·유형 합계 반영 확인)
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const had = getBasket(s.seat).slice();
+    const cards = buildApplicationCards(s).filter(c => !c.noCut);
+    const gyo = cards.find(c => String(c.jt).includes('교과'));
+    const jong = cards.find(c => String(c.jt).includes('종합'));
+    setBasketKeys(s.seat, [gyo, jong].filter(Boolean).map(basketKeyOf));
+    const d = classOverviewData();
+    const histSum = d.hist.reduce((a, b) => a + b, 0);
+    const bandSum = Object.values(d.bandSum).reduce((a, b) => a + b, 0);
+    const jtSum = Object.values(d.jtSum).reduce((a, b) => a + b, 0);
+    // 히스토그램 각 학생이 정확히 1개 bin에 (합=34), bin 인덱스 직접 재계산과 일치
+    const recomputeBins = STUDENTS.map(st => Math.max(0, Math.min(15, Math.floor((calcWeightedAvg(st) - 1) / 0.5))));
+    const binMatch = recomputeBins.every(b => b >= 0 && b < 16) && recomputeBins.length === 34;
+    // 블록·인쇄 뷰 렌더 무결성
+    const block = classOverviewBlockHtml();
+    const jtDirect = { 교과: 0, 종합: 0, 논술: 0, 기타: 0 };
+    basketCards(s).forEach(c => { const jt = String(c.jt || ''); if (jt.includes('교과')) jtDirect.교과++; else if (jt.includes('종합')) jtDirect.종합++; else if (jt.includes('논술')) jtDirect.논술++; else jtDirect.기타++; });
+    setBasketKeys(s.seat, had);   // 정리
+    return {
+      histSum, n: d.n, basketTotal: d.basketTotal, bandSum, jtSum,
+      jtGyo: d.jtSum.교과, jtJong: d.jtSum.종합, jtDirectGyo: jtDirect.교과, jtDirectJong: jtDirect.종합,
+      binMatch, bins16: d.hist.length === 16,
+      blockOk: block.includes('학급 개요') && block.includes('평균등급 분포') && block.includes('전형 유형 분포')
+        && block.includes('학급 수시 현황 인쇄') && !/undefined|\bNaN\b|>null</.test(block),
+    };
+  });
+  assert(`학급개요#1(0.5 히스토그램·바구니 구간·전형 유형): 히스토그램 16구간 합=${r.histSum}(=34) + 바구니 ${r.basketTotal}장 구간합=${r.bandSum} + 전형 교과 ${r.jtGyo}·종합 ${r.jtJong}(직접재계산 ${r.jtDirectGyo}·${r.jtDirectJong}) + 블록·인쇄 무결`,
+    r.histSum === 34 && r.n === 34 && r.bins16 && r.binMatch &&
+    r.jtGyo === r.jtDirectGyo && r.jtJong === r.jtDirectJong && r.jtSum === r.basketTotal &&
+    r.blockOk, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {
