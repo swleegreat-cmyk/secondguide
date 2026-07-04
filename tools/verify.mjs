@@ -923,6 +923,75 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 갱신 스냅샷 비교 — 정상 생략 · 변화 감지 · 지문 불일치 차단
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const orig = PREV_SNAPSHOT;
+    // 1) 현 빌드 상태 그대로의 일관성: 스냅샷 없으면 비교 null + 결과지 블록 생략 / 있으면 둘 다 존재
+    _snapCmpCache = {};
+    const cmp0 = comparePrevSnapshot(s);
+    const sheet0 = counselSheetHtml(s);
+    const nullConsistent = orig == null
+      ? (cmp0 === null && !sheet0.includes('지난 상담 대비 변화'))
+      : (cmp0 !== null && cmp0.prevDate === orig.date && sheet0.includes('지난 상담 대비 변화'));
+    // 2) 합성 스냅샷 주입: 현재 상태 기반 — 평균 +0.3(이전이 나빴음), 카드 1장 이전 구간만 조작, 보완 1건 추가
+    const cards = buildApplicationCards(s);
+    const codeOf = c => c.noCut ? 'N' : (SNAP_CODE[c.band] || '?');
+    const idx = cards.findIndex(c => !c.noCut && (c.band === '적정' || c.band === '소신'));
+    const target = cards[idx];
+    const arr = cards.map(codeOf);
+    arr[idx] = target.band === '적정' ? 'A' : 'J';   // 이전 구간을 한 단계 유리하게 조작 → 하락 감지 기대
+    const prevName = SNAP_NAME[arr[idx]];
+    let rle = '', pc = null, cnt = 0;
+    for (const ch of arr) { if (ch === pc) cnt++; else { if (pc) rle += pc + cnt; pc = ch; cnt = 1; } }
+    if (pc) rle += pc + cnt;
+    const avgNow = Math.round(calcWeightedAvg(s) * 100) / 100;
+    PREV_SNAPSHOT = { date: '2026-06-01', fingerprint: cardKeyFingerprint(),
+      students: { [String(s.seat)]: { name: s.name, stAvg: Math.round((avgNow + 0.3) * 100) / 100,
+        dist: {}, bandsRLE: rle, needs: counselNeeds(s).concat(['(검증용) 테스트 보완 항목']) } } };
+    _snapCmpCache = {};
+    const bkey = basketKeyOf(target);
+    const hadBasket = getBasket(s.seat).slice();
+    setBasketKeys(s.seat, [bkey]);   // 대상 카드를 바구니에 → 바구니 변동으로 잡혀야 함
+    const cmp = comparePrevSnapshot(s);
+    const chB = changedBasketCards(s);
+    const flag = snapChangeFlagHtml(target);
+    const sheet = counselSheetHtml(s);
+    // 3) 카드 목록 지문 불일치(adiga 교체 상황) → 구간 비교 차단, 평균·보완 비교는 유지
+    PREV_SNAPSHOT = Object.assign({}, PREV_SNAPSHOT, { fingerprint: 'X:none' });
+    _snapCmpCache = {};
+    const cmpX = comparePrevSnapshot(s);
+    const chBX = changedBasketCards(s);
+    const flagX = snapChangeFlagHtml(target);
+    const sheetX = counselSheetHtml(s);
+    setBasketKeys(s.seat, hadBasket);   // 정리
+    PREV_SNAPSHOT = orig;
+    _snapCmpCache = {};
+    return {
+      nullConsistent, snapNull: orig == null,
+      delta: cmp.delta, prevName, toName: target.band, chBN: chB.length,
+      flagOk: flag.includes('갱신 후 구간 변동') && flag.includes(prevName + '→' + target.band),
+      resolved: cmp.needsResolved,
+      sheetHas: sheet.includes('⑤ 지난 상담 대비 변화') && sheet.includes('스냅샷 2026-06-01')
+        && sheet.includes('-0.30 개선') && sheet.includes(prevName + '→' + target.band) && sheet.includes('1건 해소'),
+      xComparable: cmpX.cardsComparable, xDelta: cmpX.delta, xChB: chBX.length, xFlag: flagX,
+      xSheet: sheetX.includes('교체되어 카드 구간 비교 생략') && sheetX.includes('⑤ 지난 상담 대비 변화'),
+    };
+  });
+  assert(`스냅샷#1(정상 생략/표시 일관성): 스냅샷 ${r.snapNull ? '없음 → 비교 null + 결과지 블록 생략 (오류 아님)' : '있음 → 비교 생성 + 결과지 블록 표시'}`,
+    r.nullConsistent === true, JSON.stringify({ snapNull: r.snapNull }));
+  assert(`스냅샷#2(변화 감지): 평균 -0.30 개선 + 바구니 카드 ${r.prevName}→${r.toName} 변동 ${r.chBN}장 + 카드 플래그 + 보완 1건 해소 + 결과지 ⑤블록`,
+    r.delta === -0.3 && r.chBN === 1 && r.flagOk === true
+      && r.resolved.length === 1 && r.resolved[0] === '(검증용) 테스트 보완 항목' && r.sheetHas === true,
+    JSON.stringify({ delta: r.delta, chBN: r.chBN, flagOk: r.flagOk, resolved: r.resolved, sheetHas: r.sheetHas }));
+  assert('스냅샷#3(지문 차단): 카드 목록 지문 불일치 시 구간 비교 차단(변동 0·플래그 없음) + 평균 비교 유지 + 결과지 "비교 생략" 명시',
+    r.xComparable === false && r.xChB === 0 && r.xFlag === '' && r.xDelta === -0.3 && r.xSheet === true,
+    JSON.stringify({ xComparable: r.xComparable, xChB: r.xChB, xDelta: r.xDelta, xSheet: r.xSheet }));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {

@@ -3677,11 +3677,14 @@ function renderBasketPanel(student) {
     <span style="font-size:9px;color:var(--muted);flex:1">${esc(student.name)}</span>
     <button onclick="clearBasket(${student.seat})" style="font-size:9px;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:var(--cream);cursor:pointer;font-family:inherit;color:var(--sub)">비우기</button>
   </div>`;
+  const chN = changedBasketCards(student).length;
+  if (chN) h += `<div style="font-size:9px;color:#8b5cf6;font-weight:700;margin-bottom:4px">⚠ 성적 갱신 후 구간이 바뀐 카드 ${chN}장 — 바구니 재검토 권장</div>`;
   for (const c of cards) {
     const bs = BAND_STYLE[c.band] || {};
+    const flag = snapChangeFlagHtml(c);
     h += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">
       <span style="padding:0 6px;border-radius:6px;background:${bs.color || 'var(--muted)'};color:#fff;font-size:9px;font-weight:700;white-space:nowrap">${c.band || '컷없음'}</span>
-      <span style="flex:1;line-height:1.3"><strong>${esc(c.univ)}</strong> ${esc(c.dept)}<br><span style="color:var(--muted);font-size:9px">${esc(c.jn || c.jt)}</span></span>
+      <span style="flex:1;line-height:1.3"><strong>${esc(c.univ)}</strong> ${esc(c.dept)}${flag ? '<br>' + flag : ''}<br><span style="color:var(--muted);font-size:9px">${esc(c.jn || c.jt)}</span></span>
       <span onclick="toggleBasketEnc(${c.seat}, '${encodeURIComponent(basketKeyOf(c))}')" title="바구니에서 빼기"
         style="cursor:pointer;color:var(--red);font-weight:700">✕</span>
     </div>`;
@@ -3993,6 +3996,96 @@ function renderWhatIfArea(seat) {
   el.innerHTML = h;
 }
 
+// ═══ 갱신 스냅샷 비교 (직전 스냅샷 대비 변화 — build.py가 최신 snapshots/*/state.json을 주입) ═══
+let PREV_SNAPSHOT = null;   // 스냅샷 없으면 null → 관련 블록 정상 생략
+// 카드 목록 지문: 스냅샷 시점과 현재의 카드 목록(순서 포함) 일치 확인 — adiga 교체 시 인덱스 비교 차단
+function cardKeyFingerprint() {
+  let n = 0, h = 0;
+  for (const [k, list] of Object.entries(DEPT_CUTLINES)) for (const e of list) {
+    const s = k + '|' + e.jn;
+    n++;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return n + ':' + h.toString(36);
+}
+function rleDecodeBands(rle) {
+  let out = '';
+  const re = /([AJSHYN?])(\d+)/g;
+  let m;
+  while ((m = re.exec(rle))) out += m[1].repeat(Number(m[2]));
+  return out;
+}
+// 생기부 보완 항목 목록 (결과지 ③ · 관제 '보완 잔여' · 스냅샷 비교 공용 — 실행형 문구 그대로)
+function counselNeeds(student) {
+  const a = ANALYSIS[student.seat] || {};
+  const ra = analyzeRecord(student, a);
+  const needs = [];
+  (ra.deptFit || []).slice(0, 3).forEach(df => (df.gaps || []).forEach(g => needs.push(`[${df.dept}] ${g}`)));
+  try {
+    const tot = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
+    student.records.filter(r => r.t === '세부능력및특기사항' && r.b).forEach(r => {
+      const c2 = hl5Counts(r.b, ra.concept);
+      Object.keys(tot).forEach(k => { tot[k] += c2[k]; });
+    });
+    Object.entries(tot).forEach(([k, n]) => { if (!n) needs.push(`${k} 서술 없음 — 남은 3학년 기록에서 보완 필요`); });
+  } catch (e) {}
+  return [...new Set(needs)];
+}
+const SNAP_CODE = { '안정': 'A', '적정': 'J', '소신': 'S', '상향': 'H', '유보': 'Y' };
+const SNAP_NAME = { A: '안정', J: '적정', S: '소신', H: '상향', Y: '유보', N: '컷없음', '?': '?' };
+let _snapCmpCache = {};
+// 직전 스냅샷 대비 현재 상태 비교 — 스냅샷 없거나 해당 학생 없으면 null (오류 아닌 정상 생략)
+function comparePrevSnapshot(student) {
+  if (!PREV_SNAPSHOT || !PREV_SNAPSHOT.students) return null;
+  const hit = _snapCmpCache[student.seat];
+  if (hit && hit._snap === PREV_SNAPSHOT) return hit;
+  const prev = PREV_SNAPSHOT.students[String(student.seat)];
+  if (!prev) return null;
+  const avgNow = Math.round(calcWeightedAvg(student) * 100) / 100;
+  const cardsComparable = PREV_SNAPSHOT.fingerprint === cardKeyFingerprint();
+  const changedByKey = {};
+  if (cardsComparable && prev.bandsRLE) {
+    const prevBands = rleDecodeBands(prev.bandsRLE);
+    const cards = buildApplicationCards(student);   // DEPT_CUTLINES 순회 순서 = 스냅샷 bands 순서
+    for (let i = 0; i < cards.length && i < prevBands.length; i++) {
+      const c = cards[i];
+      const now = c.noCut ? 'N' : (SNAP_CODE[c.band] || '?');
+      if (now !== prevBands[i]) changedByKey[basketKeyOf(c)] = { from: SNAP_NAME[prevBands[i]] || '?', to: SNAP_NAME[now] || '?' };
+    }
+  }
+  const needsNow = counselNeeds(student);
+  const nowSet = new Set(needsNow);
+  const cmp = {
+    _snap: PREV_SNAPSHOT,
+    prevDate: PREV_SNAPSHOT.date, avgPrev: prev.stAvg, avgNow,
+    delta: Math.round((avgNow - prev.stAvg) * 100) / 100,
+    cardsComparable, changedByKey,
+    needsResolved: (prev.needs || []).filter(x => !nowSet.has(x)),
+    needsPrevCount: (prev.needs || []).length, needsNowCount: needsNow.length,
+  };
+  return (_snapCmpCache[student.seat] = cmp);
+}
+// 바구니 카드 중 스냅샷 이후 구간이 바뀐 카드 목록 (재검토 유도)
+function changedBasketCards(student) {
+  const cmp = comparePrevSnapshot(student);
+  if (!cmp || !cmp.cardsComparable) return [];
+  return basketCards(student)
+    .map(c => { const ch = cmp.changedByKey[basketKeyOf(c)]; return ch ? { univ: c.univ, dept: c.dept, jn: c.jn || c.jt, from: ch.from, to: ch.to } : null; })
+    .filter(Boolean);
+}
+// 카드에 붙는 "갱신 후 구간 변동" 플래그 HTML ('' = 변동 없음·비교 불가·스냅샷 없음)
+function snapChangeFlagHtml(c) {
+  if (c.seat == null) return '';
+  const s = STUDENTS.find(x => x.seat === c.seat);
+  if (!s) return '';
+  const cmp = comparePrevSnapshot(s);
+  if (!cmp || !cmp.cardsComparable) return '';
+  const ch = cmp.changedByKey[basketKeyOf(c)];
+  if (!ch) return '';
+  return `<span title="성적 갱신(스냅샷 ${cmp.prevDate}) 이후 구간이 ${ch.from}→${ch.to}로 바뀐 카드 — 바구니 재검토 권장"
+    style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid #8b5cf6;color:#8b5cf6;font-weight:700;white-space:nowrap">갱신 후 구간 변동 ${ch.from}→${ch.to}</span>`;
+}
+
 // ═══ 학생별 상담 결과지 인쇄 (A4 1~2장, 순수 생성 함수 — verify가 직접 검사) ═══
 const SHEET_BAND_SYM = { '안정': '●', '적정': '◐', '소신': '▲', '상향': '△', '유보': '⚠' };
 function counselSheetPickRow(pk, i) {
@@ -4021,20 +4114,8 @@ function counselSheetHtml(student) {
   const dist = { 안정: 0, 적정: 0, 소신: 0, 상향: 0, 유보: 0 };
   let noCut = 0;
   cards.forEach(c => { if (c.noCut) noCut++; else if (dist[c.band] != null) dist[c.band]++; });
-  // 생기부 보완 필요 상위 5 (실행형 문구 그대로: 학과 매칭 gaps + 5역량 미감지)
-  const a = ANALYSIS[student.seat] || {};
-  const ra = analyzeRecord(student, a);
-  let needs = [];
-  (ra.deptFit || []).slice(0, 3).forEach(df => (df.gaps || []).forEach(g => needs.push(`[${df.dept}] ${g}`)));
-  try {
-    const tot = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
-    student.records.filter(r => r.t === '세부능력및특기사항' && r.b).forEach(r => {
-      const c2 = hl5Counts(r.b, ra.concept);
-      Object.keys(tot).forEach(k => { tot[k] += c2[k]; });
-    });
-    Object.entries(tot).forEach(([k, n]) => { if (!n) needs.push(`${k} 서술 없음 — 남은 3학년 기록에서 보완 필요`); });
-  } catch (e) {}
-  needs = [...new Set(needs)];
+  // 생기부 보완 필요 상위 5 (실행형 문구 그대로: 학과 매칭 gaps + 5역량 미감지 — counselNeeds 공용)
+  const needs = counselNeeds(student);
   let shown = needs.slice(0, 5);
   // 2페이지 초과 방지 휴리스틱: 보완 항목 총 문자량이 크면 3건으로 자동 축약
   const compact = shown.join('').length > 400;
@@ -4078,6 +4159,26 @@ ${pf.picks.map((p, i) => counselSheetPickRow(p, i)).join('')}</table>
 ${shown.length ? '<ul>' + shown.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '<div>중대 보완 항목 없음</div>'}
 <h2>④ 학급 내 지원 경합 주의</h2>
 ${rivals.length ? '<ul>' + rivals.map(r => `<li>${esc(r)}</li>`).join('') + '</ul>' : '<div>학급 내 동일 카드 경합 없음</div>'}
+${(() => {   // ⑤ 지난 상담 대비 변화 — 직전 스냅샷이 없으면 블록 자체 생략 (정상)
+    const cmp = comparePrevSnapshot(student);
+    if (!cmp) return '';
+    const chB = changedBasketCards(student);
+    const avgTxt = cmp.delta > 0 ? `+${cmp.delta.toFixed(2)} 악화` : cmp.delta < 0 ? `${cmp.delta.toFixed(2)} 개선` : '변동 없음';
+    const basketTxt = !cmp.cardsComparable
+      ? '대학·학과 데이터가 교체되어 카드 구간 비교 생략'
+      : chB.length
+        ? chB.slice(0, 6).map(x => `${esc(x.univ)} ${esc(x.dept)} (${esc(x.jn)}) ${x.from}→${x.to}`).join(' · ') + (chB.length > 6 ? ` 외 ${chB.length - 6}장` : '')
+        : '바구니 카드 구간 변동 없음';
+    const resTxt = cmp.needsResolved.length
+      ? `${cmp.needsResolved.length}건 해소 (${cmp.needsResolved.slice(0, 3).map(esc).join(' / ')}${cmp.needsResolved.length > 3 ? ' 외' : ''})`
+      : '해소된 항목 없음';
+    return `<h2>⑤ 지난 상담 대비 변화 <span class="small muted">(스냅샷 ${esc(cmp.prevDate)} 기준)</span></h2>
+<ul>
+<li>평균등급: ${cmp.avgPrev.toFixed(2)} → ${cmp.avgNow.toFixed(2)} (${avgTxt})</li>
+<li>바구니 구간 변동: ${basketTxt}</li>
+<li>생기부 보완 항목: ${resTxt} · 잔여 ${cmp.needsNowCount}건 (이전 ${cmp.needsPrevCount}건)</li>
+</ul>`;
+  })()}
 <div class="notice">본 자료는 공시 입결 기반 참고자료이며, 종합전형은 정성평가로 결과가 다를 수 있습니다.</div>
 </body></html>`;
 }
@@ -4224,6 +4325,7 @@ function cardRowHtml(c) {
     <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
     <span class="mono" style="white-space:nowrap">${c.scoreSrc || '환산'} ${c.score}${c.scoreSrc === '환산' ? '<span style="font-size:8px;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:0 3px;margin-left:2px;vertical-align:1px">참고</span>' : ''} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
     ${bandCell}
+    ${snapChangeFlagHtml(c)}
     <span class="mono" style="font-size:10px;color:var(--sub);white-space:nowrap">${c.cw != null ? '충원 ' + c.cw.toFixed(1) + '배수' : '충원 -'}</span>
     ${judgeRelBadge(c.rel)}
     ${(() => {   // 모평 입력 시 수능최저 판정 배지 (미충족·근접만 — 행 소음 방지)
@@ -6897,17 +6999,7 @@ function _needsCountOf(s) {
   _cache.needsCount = _cache.needsCount || {};
   if (s.seat in _cache.needsCount) return _cache.needsCount[s.seat];
   let n = 0;
-  try {
-    const a = ANALYSIS[s.seat] || {};
-    const ra = analyzeRecord(s, a);
-    (ra.deptFit || []).slice(0, 3).forEach(df => { n += (df.gaps || []).length; });
-    const tot = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
-    s.records.filter(r => r.t === '세부능력및특기사항' && r.b).forEach(r => {
-      const c2 = hl5Counts(r.b, ra.concept);
-      Object.keys(tot).forEach(k => { tot[k] += c2[k]; });
-    });
-    n += Object.values(tot).filter(v => v === 0).length;
-  } catch (e) {}
+  try { n = counselNeeds(s).length; } catch (e) {}   // 결과지 ③·스냅샷 비교와 동일 목록 (중복 제거 포함)
   return (_cache.needsCount[s.seat] = n);
 }
 function commandCenterData() {

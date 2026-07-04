@@ -61,6 +61,14 @@
 - **실행 1줄**: 스크래치패드에서 `python3 refresh_grades.py <새성적JSON>` — 갱신 전후 스냅샷을 자동
   비교해 콘솔 + `grade_update_report.md`로 변화 리포트를 생성한다 (최초 실행 시 원본을
   `students_original.json`으로 백업, 원복은 같은 명령에 백업 파일을 넘기면 된다).
+- **스냅샷 자동 보관**: 갱신 실행 시 갱신 전 상태가 스크래치패드 `snapshots/YYYYMMDD/`에 보관된다
+  (students.json 성적 원본 · state.json 카드 판정 RLE+4구간 분포+보완 목록 · summary.md 분포 표 —
+  보관 항목·용량은 실행 로그로 출력). adiga 데이터 교체 전에는 `python3 refresh_grades.py --snapshot-only`.
+- **지난 상담 대비 변화**: build.py가 최신 `snapshots/*/state.json`을 `__PREV_SNAPSHOT__` 토큰으로 주입 →
+  브라우저의 `comparePrevSnapshot(student)`가 평균 변화·바구니 카드 구간 변동·보완 항목 해소를 산출한다.
+  구간이 바뀐 카드에는 "갱신 후 구간 변동" 플래그(바구니 패널·카드 행), 결과지에는 ⑤블록이 붙는다.
+  스냅샷이 없으면 전부 정상 생략(오류 아님). 카드 목록 지문(`cardKeyFingerprint`) 불일치(adiga 교체) 시
+  구간 비교만 차단되고 평균·보완 비교는 유지된다.
 - **리포트 내용**: 학생별 평균등급 변화(±·악화/개선), 4구간 판정이 바뀐 카드 수,
   6지원안 무효화(기존 조합 카드의 구간 하락·유보 전환) 학생·카드 목록, 안정 0장 긴급 학생.
 - **갱신 후 확인 항목**: ① `node tools/verify.mjs && node tools/audit.mjs` 전부 PASS,
