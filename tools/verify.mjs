@@ -813,6 +813,33 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 상담 결과지 생성 (counselSheetHtml)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const html = counselSheetHtml(s);
+    const pf = calcOptimalPortfolioCards(s, portfolioCandidateCards(s));
+    // 유보 카드 방어 렌더: 합성 유보 카드의 사유가 행에 포함되는지
+    const yuboRow = counselSheetPickRow({ univ: '성균관대학교', dept: '물리학과', jn: '종합(면접형-과학인재)',
+      jt: '종합', band: '유보', cautionReason: '특목·자사고 지원자 혼재 가능성으로 발표 컷이 일반고 합격선과 다를 수 있음',
+      cw: 3.4, seat: s.seat, gy: '자연' }, 0);
+    return {
+      hasName: html.includes(s.name), hasNotice: html.includes('종합전형은 정성평가로 결과가 다를 수 있습니다'),
+      rows: (html.match(/<tr><td>\d+<\/td>/g) || []).length, picks: pf.picks.length,
+      bad: /undefined|\bNaN\b|>null</.test(html),
+      sections: ['① AI 6지원안', '② 4구간 분포', '③ 생기부 보완 필요', '④ 학급 내 지원 경합'].every(t => html.includes(t)),
+      yuboHasReason: yuboRow.includes('판정 유보') && yuboRow.includes('특목·자사고'),
+      pickYuboCount: pf.picks.filter(p => p.band === '유보').length
+    };
+  });
+  assert(`결과지#1: 4개 섹션·고지 문구·6지원 ${r.rows}행(=${r.picks}) 생성 + 오염 문자열 없음 + 유보 사유 방어 렌더`,
+    r.hasName && r.hasNotice && r.sections && r.rows === r.picks && r.bad === false
+      && r.yuboHasReason && r.pickYuboCount === 0,
+    JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {
