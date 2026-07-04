@@ -1056,6 +1056,39 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// adiga 카드 데이터 갱신 diff — 바뀐 카드가 담긴 바구니 학생 대조
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const orig = ADIGA_DIFF;
+    // 1) diff 없음(null) → 대조 결과 빈 목록 (정상 생략)
+    ADIGA_DIFF = null;
+    const none = adigaDiffBasketStudents();
+    // 2) 합성 diff: 실제 카드 2장을 '바뀐 카드'로 지정, 그중 1장을 한 학생 바구니에 담는다
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s).filter(c => !c.noCut).slice(0, 2);
+    const k0 = basketKeyOf(cards[0]), k1 = basketKeyOf(cards[1]);
+    const hadBasket = getBasket(s.seat).slice();
+    setBasketKeys(s.seat, [k0]);   // 바뀐 카드 중 k0만 담음
+    ADIGA_DIFF = { date: '2026-07-04', cutChanged: [k0], flipped: [k1], added: [], removed: [], changedKeys: [k0, k1] };
+    const affected = adigaDiffBasketStudents();
+    const mine = affected.find(a => a.seat === s.seat);
+    // 담기지 않은 다른 학생은 목록에 없어야
+    const others = affected.filter(a => a.seat !== s.seat);
+    // 관제 렌더에 배너 노출 + 오염 없음
+    if (!document.getElementById('cmdCenter')) document.body.insertAdjacentHTML('beforeend', '<div id="cmdCenter"></div>');
+    renderCommandCenter();
+    const h = document.getElementById('cmdCenter').innerHTML;
+    const bannerOk = h.includes('카드 데이터 갱신') && h.includes(s.name) && !/undefined|\bNaN\b|>null</.test(h);
+    setBasketKeys(s.seat, hadBasket);   // 정리
+    ADIGA_DIFF = orig;
+    return { noneN: none.length, mineCards: mine ? mine.cards.length : 0, othersN: others.length, bannerOk };
+  });
+  assert('adiga갱신#1(바구니 대조): diff null → 빈 목록(정상 생략) · 합성 diff에서 바뀐 카드(k0) 담은 학생만 검출(1장) · 미담은 학생 제외 · 관제 배너 오염 없음',
+    r.noneN === 0 && r.mineCards === 1 && r.othersN === 0 && r.bannerOk === true, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {

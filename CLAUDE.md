@@ -65,6 +65,11 @@
 - **스냅샷 자동 보관**: 갱신 실행 시 갱신 전 상태가 스크래치패드 `snapshots/YYYYMMDD/`에 보관된다
   (students.json 성적 원본 · state.json 카드 판정 RLE+4구간 분포+보완 목록 · summary.md 분포 표 —
   보관 항목·용량은 실행 로그로 출력). adiga 데이터 교체 전에는 `python3 refresh_grades.py --snapshot-only`.
+- **adiga 카드 데이터 갱신**: `python3 refresh_adiga.py <새adigaJSON>` — 스냅샷·비교 체계를 카드 데이터에
+  재사용한다. 재빌드(excel_ingest→dept_cutlines→HTML) 전후를 대조해 **컷 값 변경·판정 뒤집힘·신규/삭제
+  카드**를 집계(`adiga_update_report.md`) + `adiga_diff.json` 생성 → build.py가 `__ADIGA_DIFF__`로 주입 →
+  브라우저 `adigaDiffBasketStudents()`가 바뀐 카드가 담긴 바구니 학생을 실시간 대조(관제 배너 표시).
+  최초 실행 시 원본을 `adiga_original.json`으로 백업, 원복은 같은 명령에 백업 파일을 넘긴다.
 - **지난 상담 대비 변화**: build.py가 최신 `snapshots/*/state.json`을 `__PREV_SNAPSHOT__` 토큰으로 주입 →
   브라우저의 `comparePrevSnapshot(student)`가 평균 변화·바구니 카드 구간 변동·보완 항목 해소를 산출한다.
   구간이 바뀐 카드에는 "갱신 후 구간 변동" 플래그(바구니 패널·카드 행), 학부모용 결과지에는 상담 이력 블록이 붙는다.

@@ -4039,6 +4039,19 @@ function renderWhatIfArea(seat) {
 
 // ═══ 갱신 스냅샷 비교 (직전 스냅샷 대비 변화 — build.py가 최신 snapshots/*/state.json을 주입) ═══
 let PREV_SNAPSHOT = null;   // 스냅샷 없으면 null → 관련 블록 정상 생략
+let ADIGA_DIFF = null;         // adiga 카드 데이터 갱신 diff (refresh_adiga.py) — 없으면 null
+// 바뀐 카드(컷 변경·판정 뒤집힘·신규/삭제)가 담긴 바구니의 학생 목록.
+// 바구니는 브라우저 localStorage에만 있으므로 빌드가 아닌 이 시점에 실시간 대조한다.
+function adigaDiffBasketStudents() {
+  if (!ADIGA_DIFF || !ADIGA_DIFF.changedKeys || !ADIGA_DIFF.changedKeys.length) return [];
+  const changed = new Set(ADIGA_DIFF.changedKeys);
+  const out = [];
+  for (const s of STUDENTS) {
+    const hit = getBasket(s.seat).filter(k => changed.has(k));
+    if (hit.length) out.push({ seat: s.seat, name: s.name, cards: hit });
+  }
+  return out;
+}
 // 카드 목록 지문: 스냅샷 시점과 현재의 카드 목록(순서 포함) 일치 확인 — adiga 교체 시 인덱스 비교 차단
 function cardKeyFingerprint() {
   let n = 0, h = 0;
@@ -7305,6 +7318,18 @@ function renderCommandCenter() {
       <div style="font-size:11px;color:var(--sub);font-weight:600">${label}</div>
       <div style="font-size:9px;color:var(--muted)">${sub}</div></div>`;
   let h = '<div class="glass"><h3>담임 관제 <span style="font-size:10px;color:var(--muted);font-weight:400">(카드 클릭 → 학생 명단 · 이름 클릭 → 학생 화면)</span></h3>';
+  // adiga 카드 데이터 갱신 알림: 바뀐 카드가 담긴 바구니 학생 (diff 있을 때만)
+  if (ADIGA_DIFF && ADIGA_DIFF.changedKeys && ADIGA_DIFF.changedKeys.length) {
+    const affected = adigaDiffBasketStudents();
+    h += `<div style="margin-bottom:8px;padding:9px 11px;border-radius:10px;background:var(--card);border:1px solid #8b5cf6">
+      <div style="font-size:11px;font-weight:800;color:#8b5cf6;margin-bottom:4px">🗂 카드 데이터 갱신(${esc(ADIGA_DIFF.date || '')}) — 컷 변경 ${(ADIGA_DIFF.cutChanged || []).length}·판정 변경 ${(ADIGA_DIFF.flipped || []).length}·신규 ${(ADIGA_DIFF.added || []).length}·삭제 ${(ADIGA_DIFF.removed || []).length}장</div>`;
+    h += affected.length
+      ? '<div style="font-size:11px">바뀐 카드가 바구니에 담긴 학생: ' + affected.map(a =>
+          `<span onclick="selectStudent(${STUDENTS.findIndex(s => s.seat === a.seat)})" style="cursor:pointer;display:inline-block;padding:2px 8px;margin:2px;border-radius:8px;background:var(--cream);border:1px solid var(--border)"><strong>${a.seat}</strong> ${esc(a.name)} <span style="color:#8b5cf6">${a.cards.length}장</span></span>`).join('')
+        + '</div>'
+      : '<div style="font-size:11px;color:var(--muted)">바뀐 카드가 바구니에 담긴 학생 없음 — 바구니 재검토 불필요</div>';
+    h += '</div>';
+  }
   // 오늘의 호출 우선순위: 위험 점수 상위 5명 (0점 제외) — 사유 태그 병기
   const callList = [...rows].sort((a, b) => b.risk - a.risk || b.avg - a.avg).filter(r => r.risk > 0).slice(0, 5);
   h += '<div style="margin-bottom:8px;padding:9px 11px;border-radius:10px;background:var(--card);border:1px solid var(--red)">'
