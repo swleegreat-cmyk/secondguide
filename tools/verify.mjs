@@ -813,6 +813,55 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 최저 What-if 모드 — 스텝 재판정 · 레버리지 · 실성적 복원
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '오연서');
+    // 실제 모평 저장 (국·수·영 3 → 서강대류 '3개 합 7' 기준에 합 9로 미달)
+    saveMockExam(s.seat, { exam: '6월 모평', grades: { 국어: 3, 수학: 3, 영어: 3, 탐구1: 4, 탐구2: 4, 한국사: 4 } });
+    _minJudgeCache = {};
+    const actual = mockGradesOf(s).grades;
+    const pool = minPoolCards(s);
+    const before = minWhatIfCounts(s, actual, pool);
+    // 1) 스텝 조정 재판정: 수학 2등급 상승(3→1) 가상 등급 → 충족 증가 + 전이 정합
+    const virt = whatIfGrades(s, { 수학: -2 });
+    const after = minWhatIfCounts(s, virt, pool);
+    const trans = minTransitions(before, after);
+    const up = (trans['근접→충족'] || 0) + (trans['미충족→충족'] || 0) + (trans['판정불가→충족'] || 0);
+    const down = (trans['충족→근접'] || 0) + (trans['충족→미충족'] || 0);
+    // 2) 레버리지: best.gain = 전 영역 중 최대 + 단일 영역 재계산과 일치
+    const lev = minLeverage(s, actual);
+    const maxGain = Math.max(...lev.all.map(x => x.gain));
+    const recompute = (() => {
+      const g2 = Object.assign({}, actual);
+      g2[lev.best.area] -= 1;
+      return minWhatIfCounts(s, g2, pool).충족 - before.충족;
+    })();
+    // 3) 토글 해제 복원: 가상 조정 후 토글 off → 저장된 모평이 원본 그대로 + 판정도 실제 기준
+    _whatIf = { on: true, seat: s.seat, delta: { 수학: -2 } };
+    _whatIf = { on: false, seat: s.seat, delta: {} };   // toggleWhatIf(off)와 동일 상태
+    const storedAfter = JSON.parse(localStorage.getItem('mock_' + s.seat)).grades;
+    const restored = minWhatIfCounts(s, mockGradesOf(s).grades, pool);
+    localStorage.removeItem('mock_' + s.seat);   // 정리
+    _minJudgeCache = {};
+    return {
+      poolN: pool.length, before: { 충족: before.충족, 근접: before.근접, 미충족: before.미충족 },
+      after: { 충족: after.충족 }, gained: after.충족 - before.충족, up, down, trans,
+      best: lev.best, maxGain, recompute,
+      storedIntact: storedAfter.수학 === 3, restoredEq: restored.충족 === before.충족
+    };
+  });
+  assert(`왓이프#1(스텝 재판정): 수학 3→1 시 충족 ${r.before.충족}→${r.after.충족} (+${r.gained}) · 전이 정합(상승 ${r.up} − 하락 ${r.down} = ${r.gained})`,
+    r.gained > 0 && r.up - r.down === r.gained, JSON.stringify(r.trans));
+  assert(`왓이프#2(레버리지): 병목 ${r.best.area} +${r.best.gain}장 = 전 영역 최대(${r.maxGain}) = 단일 재계산(${r.recompute})`,
+    r.best.gain === r.maxGain && r.best.gain === r.recompute && r.best.gain > 0,
+    JSON.stringify(r.best));
+  assert('왓이프#3(복원): 가상 조정이 저장 모평을 오염시키지 않음(수학=3 유지) + 해제 후 집계 = 실제 기준',
+    r.storedIntact === true && r.restoredEq === true, JSON.stringify({ storedIntact: r.storedIntact, restoredEq: r.restoredEq }));
+}
+
+// ═══════════════════════════════════════════════
 // 담임 관제 레이어 — 경보 집계·경합 감지
 // ═══════════════════════════════════════════════
 {

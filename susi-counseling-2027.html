@@ -3860,6 +3860,139 @@ function minSimStatusHtml(student) {
   return h;
 }
 
+// ═══ 최저 What-if 모드 (가상 성적 시나리오 — 저장하지 않음, 실제 성적과 엄격 분리) ═══
+let _whatIf = { on: false, seat: null, delta: {} };
+const WHATIF_AREAS = ['국어', '수학', '영어', '탐구1', '탐구2'];
+// 실제 모평 + 가상 델타 → 가상 등급 (1~9 클램프). 저장소에는 절대 쓰지 않는다.
+function whatIfGrades(student, delta) {
+  const mock = mockGradesOf(student);
+  if (!mock) return null;
+  const g = Object.assign({}, mock.grades);
+  WHATIF_AREAS.forEach(a => {
+    if (g[a] != null && delta && delta[a]) g[a] = Math.max(1, Math.min(9, g[a] + delta[a]));
+  });
+  return g;
+}
+// 판정 대상 풀: 바구니 카드 + 희망 계열 카드 중 (컷 보유 · 최저 기준 보유) — 중복 제거
+function minPoolCards(student) {
+  const seen = new Set(), out = [];
+  const add = c => {
+    const k = basketKeyOf(c);
+    if (seen.has(k) || c.noCut) return;
+    seen.add(k);
+    if (findMinSpec(c.univ, c.dept)) out.push(c);
+  };
+  basketCards(student).forEach(add);
+  getCards(student).forEach(add);
+  return out;
+}
+// 등급 세트 → 풀 전체 충족 집계 (+카드별 상태 맵: 전이 계산용)
+function minWhatIfCounts(student, grades, pool) {
+  const res = { 충족: 0, 근접: 0, 미충족: 0, 판정불가: 0, byKey: {} };
+  for (const c of (pool || minPoolCards(student))) {
+    const j = judgeMin(grades, findMinSpec(c.univ, c.dept), c.gy || '');
+    if (j.status === '해당없음') continue;
+    res[j.status] = (res[j.status] || 0) + 1;
+    res.byKey[basketKeyOf(c)] = j.status;
+  }
+  return res;
+}
+// 영역별 레버리지: 각 영역 1등급 상승 시 충족 증가량 → 병목 영역 식별
+function minLeverage(student, grades) {
+  const pool = minPoolCards(student);
+  const base = minWhatIfCounts(student, grades, pool);
+  const all = WHATIF_AREAS.map(a => {
+    if (grades[a] == null || grades[a] <= 1) return { area: a, gain: 0 };
+    const g2 = Object.assign({}, grades);
+    g2[a] -= 1;
+    return { area: a, gain: minWhatIfCounts(student, g2, pool).충족 - base.충족 };
+  }).sort((x, y) => y.gain - x.gain);
+  return { base, best: all[0], all };
+}
+// 상태 전이 집계 (실제 → 가상): 근접→충족 / 미충족→근접 등
+function minTransitions(before, after) {
+  const t = {};
+  for (const k of Object.keys(after.byKey)) {
+    const b = before.byKey[k], a = after.byKey[k];
+    if (b && a && b !== a) t[`${b}→${a}`] = (t[`${b}→${a}`] || 0) + 1;
+  }
+  return t;
+}
+function toggleWhatIf(seat, on) {
+  _whatIf = { on: !!on, seat, delta: {} };
+  renderWhatIfArea(seat);
+}
+function whatIfStep(seat, area, d) {
+  if (!_whatIf.on || _whatIf.seat !== seat) return;
+  const s = STUDENTS.find(x => x.seat === seat);
+  const mock = s && mockGradesOf(s);
+  if (!mock || mock.grades[area] == null) return;
+  const cur = (_whatIf.delta[area] || 0) + d;
+  const virt = mock.grades[area] + cur;
+  if (virt < 1 || virt > 9) return;   // 1~9 범위 밖 조정 무시
+  _whatIf.delta[area] = cur;
+  renderWhatIfArea(seat);
+}
+function renderWhatIfArea(seat) {
+  const el = document.getElementById('whatIfMinArea');
+  if (!el) return;
+  const s = STUDENTS.find(x => x.seat === seat);
+  if (!s) return;
+  if (!_whatIf.on || _whatIf.seat !== seat) {
+    // 토글 해제/이탈 → 가상 상태 폐기, 실제 성적 기준 현황으로 복원
+    el.innerHTML = '';
+    const st = document.getElementById('minSimStatus');
+    if (st) st.innerHTML = minSimStatusHtml(s);
+    return;
+  }
+  const mock = mockGradesOf(s);
+  if (!mock) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:6px 0">What-if는 모평 등급 입력 후 사용할 수 있습니다.</div>';
+    return;
+  }
+  const actual = mock.grades;
+  const virt = whatIfGrades(s, _whatIf.delta);
+  const pool = minPoolCards(s);
+  const before = minWhatIfCounts(s, actual, pool);
+  const after = minWhatIfCounts(s, virt, pool);
+  const trans = minTransitions(before, after);
+  const lev = minLeverage(s, actual);
+  let h = `<div style="margin-top:10px;padding:10px 12px;border:2px dashed var(--orange);border-radius:10px;background:var(--orange-light)">
+    <div style="font-size:11px;font-weight:800;color:var(--orange);margin-bottom:6px">⚠ 가상 시나리오 — 실제 성적 아님 (저장되지 않으며, 토글 해제 시 실제 성적으로 복원)</div>`;
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+  WHATIF_AREAS.forEach(a => {
+    const av = actual[a], vv = virt[a];
+    if (av == null) { h += `<span style="font-size:10px;color:var(--muted);align-self:center">${a}: 미입력</span>`; return; }
+    const changed = av !== vv;
+    h += `<span style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;background:var(--card);border-radius:8px;border:1px solid ${changed ? 'var(--orange)' : 'var(--border)'};font-size:11px">
+      ${a} <span class="mono" style="font-weight:700${changed ? ';color:var(--orange)' : ''}">${changed ? av + '→' + vv : av}</span>
+      <button onclick="whatIfStep(${seat}, '${a}', -1)" title="1등급 상승" style="width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:var(--cream);cursor:pointer;line-height:1">▲</button>
+      <button onclick="whatIfStep(${seat}, '${a}', 1)" title="1등급 하락" style="width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:var(--cream);cursor:pointer;line-height:1">▼</button>
+    </span>`;
+  });
+  h += '</div>';
+  h += `<div style="font-size:12px;font-weight:700;margin-bottom:4px">가상 집계 <span style="font-size:10px;color:var(--muted);font-weight:400">(바구니+희망 계열 최저 보유 ${pool.length}장)</span> —
+    <span style="color:var(--green)">충족 ${after.충족}</span> · <span style="color:var(--orange)">근접 ${after.근접}</span> · <span style="color:var(--red)">미충족 ${after.미충족}</span>
+    <span style="font-size:10px;color:var(--muted)">(실제: 충족 ${before.충족} · 근접 ${before.근접} · 미충족 ${before.미충족})</span></div>`;
+  const adjusted = WHATIF_AREAS.filter(a => (_whatIf.delta[a] || 0) !== 0);
+  if (adjusted.length) {
+    const dSuf = after.충족 - before.충족;
+    const tStr = Object.entries(trans).map(([k, n]) => `${k} ${n}장`).join(' · ');
+    h += `<div style="font-size:11px;margin-bottom:4px">${adjusted.map(a => `${a} ${actual[a]}→${virt[a]}`).join(', ')} 시:
+      <strong style="color:${dSuf >= 0 ? 'var(--green)' : 'var(--red)'}">충족 ${dSuf >= 0 ? '+' : ''}${dSuf}장</strong>${tStr ? ` (${tStr})` : ''}</div>`;
+  } else {
+    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">▲(상승)/▼(하락)으로 영역 등급을 조정해 보세요.</div>';
+  }
+  if (lev.best && lev.best.gain > 0) {
+    h += `<div style="font-size:11px;font-weight:700;color:var(--teal)">이 학생의 최저 병목: ${lev.best.area} (1등급 상승 시 충족 +${lev.best.gain}장)
+      <span style="font-size:9px;color:var(--muted);font-weight:400">— ${lev.all.map(x => `${x.area} +${x.gain}`).join(' · ')}</span></div>`;
+  } else {
+    h += '<div style="font-size:10px;color:var(--muted)">어느 한 영역 1등급 상승으로 늘어나는 충족 카드가 없습니다.</div>';
+  }
+  h += '</div>';
+  el.innerHTML = h;
+}
+
 // ═══ 학생별 상담 결과지 인쇄 (A4 1~2장, 순수 생성 함수 — verify가 직접 검사) ═══
 const SHEET_BAND_SYM = { '안정': '●', '적정': '◐', '소신': '▲', '상향': '△', '유보': '⚠' };
 function counselSheetPickRow(pk, i) {
@@ -7808,6 +7941,11 @@ function renderSusiTab(student, analysis) {
         style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--cream);color:var(--sub);cursor:pointer;font-family:inherit;font-size:11px">지우기</button>
     </div>`;
     html += '<div id="minSimStatus">' + minSimStatusHtml(student) + '</div>';
+    // What-if 모드: 화면 재진입·학생 전환 시 가상 상태 자동 폐기 (저장 안 함)
+    if (_whatIf.seat !== student.seat) _whatIf = { on: false, seat: student.seat, delta: {} };
+    html += `<div style="margin-top:8px"><label style="font-size:11px;font-weight:700;color:var(--copper);cursor:pointer">
+      <input type="checkbox" id="whatIfToggle"${_whatIf.on ? ' checked' : ''} onchange="toggleWhatIf(${student.seat}, this.checked)" style="vertical-align:-2px"> What-if 모드 — 가상 성적 시나리오 (저장 안 됨)</label></div>`;
+    html += '<div id="whatIfMinArea"></div>';
     html += '</div>';
   }
 
