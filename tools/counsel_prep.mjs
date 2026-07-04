@@ -78,7 +78,8 @@ const r = await page.evaluate((name) => {
     seat: s.seat, stAvg: cards[0] ? cards[0].stAvg : null, total: cards.length, noCut, dist,
     basket, jtMix: pf.jtMix, minRisky: pf.minRisky,
     threads: threads.slice(0, 4).map(t => ({ topic: t.topic, aligned: t.aligned, continuity: t.continuity })),
-    todo, lowSamples, rivals, minSummary, risk
+    todo, lowSamples, rivals, minSummary, risk,
+    intake: (typeof intakeSummaryText === 'function') ? intakeSummaryText(s.seat) : null
   };
 }, name);
 await browser.close();
@@ -86,6 +87,8 @@ await browser.close();
 if (r.error) { console.error(r.error); process.exit(1); }
 
 console.log(`════════ /상담준비 ${name} (${r.seat}번) — 전과목 평균 ${r.stAvg} ════════`);
+console.log('\n■ 상담 전 확인 (결정 전 질문 카드)');
+console.log('  ' + (r.intake ? r.intake : '질문 카드 미실시 — 학생 화면 "상담 전 확인" 패널에서 응답 필요'));
 console.log(`\n■ 4구간 분포 (전체 카드 ${r.total}장, 컷 정보 없음 ${r.noCut}장 제외)`);
 console.log(`  안정 ${r.dist.안정} · 적정 ${r.dist.적정} · 소신 ${r.dist.소신} · 상향 ${r.dist.상향}`);
 console.log(`\n■ 후보 바구니 — AI 최적 6지원안 (교과 ${r.jtMix.교과}·종합 ${r.jtMix.종합}·논술 ${r.jtMix.논술}, 최저 리스크 ${r.minRisky}건)`);

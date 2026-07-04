@@ -3576,6 +3576,11 @@ function getCards(student, filters = {}) {
   if (subs && subs.length) cards = cards.filter(c => subs.includes(c.sub));
   if (filters.jt) cards = cards.filter(c => String(c.jt).includes(filters.jt));
   if (filters.region) cards = cards.filter(c => c.region === filters.region);
+  else if (filters.applyIntake !== false) {
+    // 상담 전 확인 '집에서 통학만' 응답 → 지역 기본 필터를 통학권(서울·경기인천)으로 (선별만, 판정 불변)
+    const cr = intakeCommuteRegions(student.seat);
+    if (cr) cards = cards.filter(c => cr.includes(c.region));
+  }
   if (filters.band) cards = cards.filter(c => c.band === filters.band);
   const sort = filters.sort || 'region';
   const regionPr = c => REGION_PRIORITY[c.region] ?? 3;
@@ -4456,6 +4461,7 @@ function cardRowHtml(c) {
     <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
     <span class="mono" style="white-space:nowrap">${c.scoreSrc || '환산'} ${c.score}${c.scoreSrc === '환산' ? '<span style="font-size:8px;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:0 3px;margin-left:2px;vertical-align:1px">참고</span>' : ''} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
     ${bandCell}
+    ${c.seat != null && intakeInterviewBurden(c.seat) && isInterviewCard(c) ? '<span title="상담 전 확인: 면접 자신감 낮음 — 면접형 종합 카드 참고 태그" style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid var(--copper);color:var(--copper);font-weight:700;white-space:nowrap">면접 부담</span>' : ''}
     ${snapChangeFlagHtml(c)}
     <span class="mono" style="font-size:10px;color:var(--sub);white-space:nowrap">${c.cw != null ? '충원 ' + c.cw.toFixed(1) + '배수' : '충원 -'}</span>
     ${judgeRelBadge(c.rel)}
@@ -4649,6 +4655,82 @@ function findMinSpec(univ, dept) {
 // P5. 수능최저 리스크 분산: 최저 미충족(위험) 카드가 5장 이상이면 같은 구간의
 //     최저 없는/충족 카드로 교체해 전 장이 최저 리스크에 노출되지 않게 한다.
 // ═══════════════════════════════════════════════
+// ═══ 상담 전 확인 "결정 전 질문 카드" — 응답 저장·반영 (판정 불변, 선별·정렬·표시만) ═══
+// 저장: localStorage intake_{seat} = { answers:{qid:선택지}, date:'YYYY.M.D.' }
+// 반영 규칙(숨은 로직 금지 — INTAKE_QUESTIONS[].reflect 및 패널 도움말에 동일 명시):
+//   · commute '집에서 통학만' → getCards 지역 기본 필터를 통학권(서울·경기인천)으로 좁힘
+//   · retake '없음'          → 6지원 골격 안3·적2·소1 (기본 안2·적2·도2)
+//   · interview '낮음'        → 면접형 종합 카드에 '면접 부담' 참고 태그
+//   · priority               → 표시만 (자동 정렬 변경 없음)
+const COMMUTE_REGIONS = ['서울', '경기인천'];   // 병점고(경기 화성) 통학 가능권
+function getIntake(seat) {
+  try { return JSON.parse(localStorage.getItem('intake_' + seat) || 'null'); } catch (e) { return null; }
+}
+function intakeAnswer(seat, qid) { const iv = getIntake(seat); return iv && iv.answers ? iv.answers[qid] : null; }
+function setIntakeAnswer(seat, qid, val) {
+  const cur = getIntake(seat) || { answers: {}, date: null };
+  cur.answers[qid] = val;
+  cur.date = new Date().toLocaleDateString('ko-KR');
+  try { localStorage.setItem('intake_' + seat, JSON.stringify(cur)); } catch (e) {}
+  const el = document.getElementById('intakePanel');
+  if (el) el.innerHTML = intakePanelHtml(STUDENTS.find(s => s.seat === seat));
+  // 반영 갱신: 6지원 시뮬·바구니·보드(지역 기본 필터·면접 태그)
+  _boardResetRegion(seat);
+  refreshBasketUI(seat);
+}
+// 통학만 응답 시 지역 필터 기본값(통학권), 아니면 null(전체)
+function intakeCommuteRegions(seat) {
+  return intakeAnswer(seat, 'commute') === '집에서 통학만' ? COMMUTE_REGIONS.slice() : null;
+}
+// 재수 없음 응답 시 6지원 골격 안3·적2·소1, 아니면 기본 안2·적2·도2 (합계 항상 6)
+function intakeSkeleton(seat) {
+  return intakeAnswer(seat, 'retake') === '없음'
+    ? { 안정: 3, 적정: 2, 도전: 1 } : { 안정: 2, 적정: 2, 도전: 2 };
+}
+function intakeInterviewBurden(seat) { return intakeAnswer(seat, 'interview') === '낮음'; }
+function isInterviewCard(c) { return String(c.jt).includes('종합') && /면접/.test(String(c.jn || '')); }
+// 보드 지역 필터를 통학권 기본값으로 리셋 (통학만 응답 시)
+function _boardResetRegion(seat) {
+  for (const [bid, st] of Object.entries(_boardState)) {
+    if (st.student && st.student.seat === seat) { st.region = null; renderBoardList(bid); }
+  }
+}
+// 응답 요약 (한 줄) — /상담준비·패널 공용. 미응답 항목은 '미응답'으로 표기
+function intakeSummaryText(seat) {
+  const iv = getIntake(seat);
+  if (!iv || !iv.answers || !Object.keys(iv.answers).length) return null;
+  return INTAKE_QUESTIONS.map(q => `${q.label} ${iv.answers[q.id] || '미응답'}`).join(' · ');
+}
+// "상담 전 확인" 패널 HTML (선택 저장·응답 일자·반영 도움말 명시)
+function intakePanelHtml(student) {
+  const seat = student.seat;
+  const iv = getIntake(seat);
+  const answered = iv && iv.answers ? Object.keys(iv.answers).length : 0;
+  let h = `<div class="glass"><h3>상담 전 확인 <span style="font-size:10px;color:var(--muted);font-weight:400">(결정 전 질문 카드 · 이 브라우저에만 저장${iv && iv.date ? ' · 응답일 ' + esc(iv.date) : ''})</span></h3>`;
+  h += `<div style="font-size:10px;color:var(--muted);margin-bottom:8px">응답 ${answered}/${INTAKE_QUESTIONS.length}문항 — 응답은 <strong>추천 선별·정렬·표시</strong>에만 참고 반영되며, <strong>4구간 판정은 바꾸지 않습니다.</strong></div>`;
+  INTAKE_QUESTIONS.forEach(q => {
+    const cur = iv && iv.answers ? iv.answers[q.id] : null;
+    h += `<div style="margin-bottom:7px"><div style="font-size:11px;font-weight:700;margin-bottom:3px">${esc(q.label)}
+      <span style="font-size:9px;color:var(--teal);font-weight:400">↳ ${esc(q.reflect)}</span></div><div style="display:flex;gap:5px;flex-wrap:wrap">`;
+    q.options.forEach(opt => {
+      const on = cur === opt;
+      h += `<button onclick="setIntakeAnswer(${seat}, '${q.id}', '${esc(opt)}')" style="cursor:pointer;font-size:11px;padding:3px 11px;border-radius:14px;font-family:inherit;
+        border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};background:${on ? 'var(--teal)' : 'var(--card)'};color:${on ? '#fff' : 'var(--sub)'};font-weight:${on ? 700 : 400}">${esc(opt)}</button>`;
+    });
+    h += '</div></div>';
+  });
+  if (answered) h += `<button onclick="clearIntake(${seat})" style="margin-top:2px;font-size:10px;padding:2px 10px;border-radius:8px;border:1px solid var(--border);background:var(--cream);color:var(--sub);cursor:pointer;font-family:inherit">응답 초기화</button>`;
+  h += '</div>';
+  return h;
+}
+function clearIntake(seat) {
+  try { localStorage.removeItem('intake_' + seat); } catch (e) {}
+  const el = document.getElementById('intakePanel');
+  if (el) el.innerHTML = intakePanelHtml(STUDENTS.find(s => s.seat === seat));
+  _boardResetRegion(seat);
+  refreshBasketUI(seat);
+}
+
 function calcOptimalPortfolioCards(student, candidateCards) {
   const cards = (candidateCards || getCards(student)).filter(c => !c.noCut);
   const keyOf = c => c.univ + '|' + (c.jn || c.jt) + '|' + c.dept;
@@ -4674,9 +4756,11 @@ function calcOptimalPortfolioCards(student, candidateCards) {
     }
     return got;
   };
-  fill(['안정'], 2, '안정');
-  fill(['적정'], 2, '적정');
-  fill(['소신', '상향'], 2, '도전');
+  // 골격: 상담 전 확인 '재수 없음' 응답 시 안3·적2·소1로 안정 비중 확대 (기본 안2·적2·도2)
+  const sk = intakeSkeleton(student.seat);
+  fill(['안정'], sk.안정, '안정');
+  fill(['적정'], sk.적정, '적정');
+  fill(['소신', '상향'], sk.도전, '도전');
   if (picks.length < 6) {
     for (const b of ['적정', '안정', '소신', '상향']) {
       for (const c of pool(b)) {
@@ -5715,6 +5799,22 @@ const GLOSSARY = [
   { term: '충원(추가합격) 배수', desc: '최초 합격자 중 이탈이 생겨 추가로 합격하는 규모를 나타냅니다. 배수가 클수록 대기번호를 받아도 최종 합격할 여지가 넓습니다.' },
   { term: '수능최저학력기준', desc: '수시에 합격해도 수능 성적이 일정 기준(예: 3개 영역 등급 합 6)을 넘어야 최종 합격이 확정되는 조건입니다. 충족 여부가 당락을 가릅니다.' },
   { term: '6지원 (안정2·적정2·도전2)', desc: '수시 지원 6장을 안정 2장·적정 2장·도전(소신/상향) 2장으로 나누는 기본 골격입니다. 합격 안정성과 상향 도전을 함께 확보하는 배분입니다.' },
+];
+
+// 상담 전 확인 "결정 전 질문 카드" 세트 (intake_questions.js에서 주입)
+// 상담 시작용 "결정 전 질문 카드" 세트 — 선생님이 이 파일 수정으로 문항·선택지를 추가·변경한다.
+// (build.py가 __INTAKE_QUESTIONS__ 토큰에 주입. 각 문항은 선택지형: id·label·options·help)
+// reflect 필드는 응답이 추천 선별/정렬에 어떻게 반영되는지 화면 도움말로 노출된다 — 숨은 로직 금지.
+// ★ 반영은 전부 '선별·정렬·표시'에만 적용되며 4구간 판정(classifyBand)은 절대 바꾸지 않는다.
+const INTAKE_QUESTIONS = [
+  { id: 'retake', label: '재수 선택지', options: ['있음', '없음', '미정'],
+    reflect: "'없음' → 6지원 골격을 안정 비중 확대(안3·적2·소1)로 기본 제안" },
+  { id: 'commute', label: '통학 범위', options: ['집에서 통학만', '기숙사·자취 가능'],
+    reflect: "'집에서 통학만' → 카드 지역 기본 필터를 통학권(서울·경기인천)으로 좁힘" },
+  { id: 'priority', label: '우선순위', options: ['학과 우선', '대학 우선', '균형'],
+    reflect: '상담 참고용 표시 (정렬·선별 자동 변경 없음 — 교사 해석용)' },
+  { id: 'interview', label: '종합 면접 자신감', options: ['높음', '보통', '낮음'],
+    reflect: "'낮음' → 면접형 종합 카드에 '면접 부담' 참고 태그 표시" },
 ];
 
 
@@ -8411,6 +8511,9 @@ function renderSusiTab(student, analysis) {
   const fitUnis = allComps.filter(r => r.comp.band === '적정');
   const reachUnis = allComps.filter(r => r.comp.band === '소신');
   const hardUnis = allComps.filter(r => r.comp.band === '상향');
+
+  // ═══ 상담 전 확인 "결정 전 질문 카드" 패널 ═══
+  html += `<div id="intakePanel">${intakePanelHtml(student)}</div>`;
 
   // ═══ 수능최저 시뮬레이터: 모평 등급 입력 + 바구니 카드 충족 현황 ═══
   {

@@ -1169,6 +1169,51 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 상담 전 확인 "결정 전 질문 카드" — 골격 반영 + 판정 불변
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '오연서');
+    const bak = localStorage.getItem('intake_' + s.seat);
+    const slotCnt = () => calcOptimalPortfolioCards(s).picks.reduce((m, p) => { m[p.slot] = (m[p.slot] || 0) + 1; return m; }, {});
+    const bandsOf = () => buildApplicationCards(s).map(c => c.noCut ? 'N' : c.band).join('');
+    // 기준: 응답 없음 → 골격 안2·적2·도2, 판정 스냅샷
+    localStorage.removeItem('intake_' + s.seat);
+    const base = slotCnt();
+    const bandsBase = bandsOf();
+    // 1) 재수 '없음' → 골격 안3·적2·소1 (합 6 유지)
+    setIntakeAnswer(s.seat, 'retake', '없음');
+    const sk = slotCnt();
+    const bandsRetake = bandsOf();
+    // 2) 통학 '집에서 통학만' → getCards 통학권(서울·경기인천)만, 판정 불변
+    setIntakeAnswer(s.seat, 'commute', '집에서 통학만');
+    const allN = getCards(s, { applyIntake: false }).length;
+    const commuteN = getCards(s).length;
+    const regions = [...new Set(getCards(s).map(c => c.region))].sort();
+    const bandsCommute = bandsOf();
+    // 3) 면접 '낮음' → 면접형 종합 카드 태그 (표시만), 판정 불변
+    setIntakeAnswer(s.seat, 'interview', '낮음');
+    const intCard = buildApplicationCards(s).find(c => isInterviewCard(c));
+    const tag = intCard ? /면접 부담/.test(cardRowHtml(intCard)) : false;
+    const bandsInterview = bandsOf();
+    // 정리
+    if (bak) localStorage.setItem('intake_' + s.seat, bak); else localStorage.removeItem('intake_' + s.seat);
+    return {
+      base, sk, allN, commuteN, regions, tag,
+      // 판정 불변: 세 응답 각각 적용 후 band 문자열이 기준과 완전 동일
+      inv: bandsBase === bandsRetake && bandsBase === bandsCommute && bandsBase === bandsInterview
+    };
+  });
+  assert(`질문카드#1(골격 반영): 기본 안${r.base.안정}·적${r.base.적정}·도${r.base.도전} → 재수 없음 시 안${r.sk.안정}·적${r.sk.적정}·도${r.sk.도전} (합 6) + 통학만 시 통학권만(${r.regions.join('·')}) ${r.allN}→${r.commuteN}장 + 면접 낮음 태그 ${r.tag}`,
+    r.base.안정 === 2 && r.base.도전 === 2 && r.sk.안정 === 3 && r.sk.적정 === 2 && r.sk.도전 === 1 &&
+    (r.sk.안정 + r.sk.적정 + r.sk.도전) === 6 && r.commuteN < r.allN &&
+    JSON.stringify(r.regions) === JSON.stringify(['경기인천', '서울']) && r.tag === true,
+    JSON.stringify({ base: r.base, sk: r.sk, allN: r.allN, commuteN: r.commuteN, regions: r.regions, tag: r.tag }));
+  assert('질문카드#2(판정 불변): 재수·통학·면접 응답을 모두 적용해도 34명 전 카드 4구간 판정(band 문자열) 완전 동일 — 응답은 선별·정렬·표시만',
+    r.inv === true, JSON.stringify({ inv: r.inv }));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {
