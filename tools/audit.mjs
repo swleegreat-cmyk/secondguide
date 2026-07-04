@@ -244,6 +244,41 @@ for (const [t, desc, list] of TYPES) {
   check(`불변식${{ a: 7, b: 8, c: 9, d: 10 }[t]}(${t}): ${desc} 0건`, list.length === 0, `${list.length}건`);
 }
 
+// ═══════════════════════════════════════════════
+// 불변식 11: 렌더 무결성 — 상·중·하위권 학생 3명 × 탭 3종(성적/수시/생기부)
+// 렌더 결과에 'undefined'/'NaN'/'>null<' 문자열이 없어야 한다 (표시 문자열 오염 검출).
+// 최종 검수(9ac388f)에서 '경쟁률 NaN' 결함을 잡아낸 검사를 상설화한 것.
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const byAvg = STUDENTS.map((s, i) => ({ i, avg: calcWeightedAvg(s) })).sort((a, b) => a.avg - b.avg);
+    const picks = [byAvg[0], byAvg[Math.floor(byAvg.length / 2)], byAvg[byAvg.length - 1]];
+    const BAD = [/undefined/, /\bNaN\b/, />null</];
+    const bad = [];
+    let rendered = 0;
+    for (const p of picks) {
+      try {
+        selectStudent(p.i);
+        renderSusiTab(STUDENTS[p.i], ANALYSIS[STUDENTS[p.i].seat] || {});
+      } catch (e) {
+        bad.push(`${STUDENTS[p.i].name}/렌더 예외: ${String(e).slice(0, 80)}`);
+        continue;
+      }
+      for (const tab of ['score', 'susi', 'record']) {
+        const el = document.getElementById('panel-' + tab);
+        const h = el ? el.innerHTML : '';
+        if (!h.length) { bad.push(`${STUDENTS[p.i].name}/${tab}: 빈 렌더`); continue; }
+        rendered++;
+        const hits = BAD.filter(re => re.test(h));
+        if (hits.length) bad.push(`${STUDENTS[p.i].name}/${tab}: ${hits.map(String).join(',')}`);
+      }
+    }
+    return { bad, rendered, names: picks.map(p => `${STUDENTS[p.i].name}(${p.avg.toFixed(2)})`) };
+  });
+  check(`불변식11: 렌더 무결성 — ${r.names.join('·')} × 3탭 오염 문자열 0건`,
+    r.bad.length === 0 && r.rendered === 9, r.bad.join(' | ') || `rendered=${r.rendered}`);
+}
+
 if (pageErrors.length) check('불변식0: JS 런타임 오류 없음', false, pageErrors.join(' | '));
 
 let fail = 0;
