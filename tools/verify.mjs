@@ -813,6 +813,40 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 담임 관제 레이어 — 경보 집계·경합 감지
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 경보#1: 안정 0장 감지 — 관제 데이터의 urgent 집계가 직접 재계산과 일치
+    const rows = commandCenterData();
+    const urgentFromCmd = rows.filter(x => x.safe === 0).map(x => x.seat).sort();
+    const urgentDirect = STUDENTS.filter(s =>
+      !buildApplicationCards(s).some(c => !c.noCut && c.band === '안정')).map(s => s.seat).sort();
+    // 경보#2: 경합 3명 감지 — 학생 3명 바구니에 같은 카드를 담으면 히트맵에 잡혀야 함
+    const key = '가천대학교|논술(논술)|경영학과';
+    const three = STUDENTS.slice(0, 3);
+    three.forEach(s => { const b = getBasket(s.seat); if (!b.includes(key)) { b.push(key); setBasketKeys(s.seat, [...b]); } });
+    const conf = cmdConflictRows(3);
+    const hit = conf.find(c => c.key === key);
+    three.forEach(s => setBasketKeys(s.seat, getBasket(s.seat).filter(k => k !== key)));   // 정리
+    const confAfter = cmdConflictRows(3).find(c => c.key === key);
+    // 렌더 스모크: 34명 전원 관제 레이어 렌더 → 오염 문자열 없음
+    document.body.insertAdjacentHTML('beforeend', '<div id="cmdCenter"></div>');
+    renderCommandCenter();
+    const h = document.getElementById('cmdCenter').innerHTML;
+    return { urgentMatch: JSON.stringify(urgentFromCmd) === JSON.stringify(urgentDirect),
+             urgentN: urgentFromCmd.length, rowsN: rows.length,
+             hit: hit ? hit.names.length : 0, cleaned: !confAfter,
+             renderOk: h.length > 2000 && !/undefined|\bNaN\b|>null</.test(h),
+             tableRows: (h.match(/<tr onclick/g) || []).length };
+  });
+  assert(`관제#1(안정 0장 감지): 경보 집계 = 직접 재계산 (${r.urgentN}명) · 34명 테이블 렌더 정상`,
+    r.urgentMatch && r.rowsN === 34 && r.tableRows === 34 && r.renderOk, JSON.stringify(r));
+  assert(`관제#2(경합 3명 감지): 동일 카드 3명 바구니 → 히트맵 ${r.hit}명 검출 + 정리 후 소멸`,
+    r.hit === 3 && r.cleaned === true, JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 상담 결과지 생성 (counselSheetHtml)
 // ═══════════════════════════════════════════════
 {

@@ -6759,6 +6759,141 @@ function filterRoster(query) {
 // ═══════════════════════════════════════════════
 // RENDER: DASHBOARD
 // ═══════════════════════════════════════════════
+// ═══ 담임 관제 레이어 (대시보드 상단 요약 — 기존 대시보드 데이터는 아래 유지) ═══
+function _needsCountOf(s) {
+  _cache.needsCount = _cache.needsCount || {};
+  if (s.seat in _cache.needsCount) return _cache.needsCount[s.seat];
+  let n = 0;
+  try {
+    const a = ANALYSIS[s.seat] || {};
+    const ra = analyzeRecord(s, a);
+    (ra.deptFit || []).slice(0, 3).forEach(df => { n += (df.gaps || []).length; });
+    const tot = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
+    s.records.filter(r => r.t === '세부능력및특기사항' && r.b).forEach(r => {
+      const c2 = hl5Counts(r.b, ra.concept);
+      Object.keys(tot).forEach(k => { tot[k] += c2[k]; });
+    });
+    n += Object.values(tot).filter(v => v === 0).length;
+  } catch (e) {}
+  return (_cache.needsCount[s.seat] = n);
+}
+function commandCenterData() {
+  const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
+  return STUDENTS.map((s, idx) => {
+    const cards = buildApplicationCards(s);
+    let safe = 0;
+    cards.forEach(c => { if (!c.noCut && c.band === '안정') safe++; });
+    const basketC = basketCards(s).filter(c => !c.noCut);
+    const pf = calcOptimalPortfolioCards(s, portfolioCandidateCards(s));
+    const comp = `안${pf.counts.안정}적${pf.counts.적정}소${pf.counts.소신}${pf.counts.상향 ? '상' + pf.counts.상향 : ''}`;
+    const mock = mockGradesOf(s);
+    let minTxt = '모평 미입력', minBad = 0, minMajor = false;
+    if (mock) {
+      const cnt = { 충족: 0, 근접: 0, 미충족: 0 };
+      basketC.forEach(c => { const j = judgeMinForCardCached(c); if (j && cnt[j.status] != null) cnt[j.status]++; });
+      minBad = cnt.미충족;
+      minTxt = basketC.length ? `충${cnt.충족}·근${cnt.근접}·미${cnt.미충족}` : '바구니 없음';
+      minMajor = basketC.length > 0 && minBad * 2 > basketC.length;
+    }
+    const memoList = memos['memo_' + s.seat] || [];
+    return {
+      idx, seat: s.seat, name: s.name,
+      avg: Math.round(calcWeightedAvg(s) * 100) / 100,
+      safe, basketN: basketC.length, comp, minTxt, minMajor,
+      needs: _needsCountOf(s),
+      memoDate: memoList.length ? String(memoList[0].time).split(/\s*오/)[0].trim() : '-'
+    };
+  });
+}
+// 바구니 기준 경합: 같은 카드(대학·전형·학과)에 3명 이상 겹치는 조합
+function cmdConflictRows(minCount) {
+  const map = {};
+  for (const s of STUDENTS) {
+    for (const k of getBasket(s.seat)) (map[k] = map[k] || []).push(s.name);
+  }
+  return Object.entries(map).filter(([, names]) => names.length >= (minCount || 3))
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([k, names]) => ({ key: k, names }));
+}
+let _cmdSort = { key: 'avg', dir: 1 };
+function cmdSort(key) {
+  if (_cmdSort.key === key) _cmdSort.dir *= -1; else _cmdSort = { key, dir: 1 };
+  renderCommandCenter();
+}
+function showCmdList(type) {
+  const rows = commandCenterData();
+  const sets = {
+    urgent: rows.filter(r => r.safe === 0),
+    nobasket: rows.filter(r => r.basketN === 0),
+    minmajor: rows.filter(r => r.minMajor),
+    needs: rows.filter(r => r.needs > 0),
+  };
+  const label = { urgent: '안정 카드 0장 (긴급)', nobasket: '후보 바구니 미작성', minmajor: '바구니 과반 최저 미충족', needs: '생기부 보완 미해소' };
+  const list = sets[type] || [];
+  const el = document.getElementById('cmdListArea');
+  if (!el) return;
+  el.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--teal);margin:6px 0 4px">${label[type]} — ${list.length}명</div>`
+    + (list.length ? list.map(r =>
+      `<span onclick="selectStudent(${r.idx})" style="display:inline-block;cursor:pointer;padding:3px 10px;margin:2px;border-radius:8px;background:var(--cream);border:1px solid var(--border);font-size:11px"><strong>${r.seat}</strong> ${esc(r.name)} <span style="color:var(--muted)">${r.avg}</span></span>`).join('')
+      : '<span style="font-size:11px;color:var(--muted)">해당 학생 없음</span>');
+}
+function renderCommandCenter() {
+  const el = document.getElementById('cmdCenter');
+  if (!el) return;
+  const rows = commandCenterData();
+  const urgent = rows.filter(r => r.safe === 0);
+  const nobasket = rows.filter(r => r.basketN === 0);
+  const minmajor = rows.filter(r => r.minMajor);
+  const needsOpen = rows.filter(r => r.needs > 0);
+  const alertCard = (type, n, label, color, sub) =>
+    `<div onclick="showCmdList('${type}')" style="flex:1;min-width:150px;cursor:pointer;padding:12px;border-radius:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid ${color}">
+      <div style="font-size:22px;font-weight:800;color:${color}">${n}<span style="font-size:11px;font-weight:600">명</span></div>
+      <div style="font-size:11px;color:var(--sub);font-weight:600">${label}</div>
+      <div style="font-size:9px;color:var(--muted)">${sub}</div></div>`;
+  let h = '<div class="glass"><h3>담임 관제 <span style="font-size:10px;color:var(--muted);font-weight:400">(카드 클릭 → 학생 명단 · 이름 클릭 → 학생 화면)</span></h3>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+    + alertCard('urgent', urgent.length, '안정 카드 0장 (긴급)', 'var(--red)', '전체 카드 기준 안정 구간 없음')
+    + alertCard('nobasket', nobasket.length, '후보 바구니 미작성', 'var(--orange)', '★ 담은 카드 0장')
+    + alertCard('minmajor', minmajor.length, '바구니 과반 최저 미충족', 'var(--copper)', '모평 입력 학생 중')
+    + alertCard('needs', needsOpen.length, '생기부 보완 미해소', 'var(--blue)', '실행형 보완 항목 1건 이상')
+    + '</div><div id="cmdListArea"></div>';
+  // 학생 테이블 (정렬 가능)
+  const cols = [['seat', '번호'], ['name', '이름'], ['avg', '평균등급'], ['basketN', '바구니'], ['comp', '6지원 구성'], ['minTxt', '최저 충족'], ['needs', '보완 잔여'], ['memoDate', '최근 메모']];
+  const sorted = [...rows].sort((a, b) => {
+    const x = a[_cmdSort.key], y = b[_cmdSort.key];
+    return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * _cmdSort.dir;
+  });
+  h += '<div class="scroll-table" style="margin-top:8px"><table class="g-table" style="font-size:11px"><thead><tr>'
+    + cols.map(([k, l]) => `<th onclick="cmdSort('${k}')" style="cursor:pointer;white-space:nowrap">${l}${_cmdSort.key === k ? (_cmdSort.dir === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')
+    + '</tr></thead><tbody>';
+  sorted.forEach(r => {
+    h += `<tr onclick="selectStudent(${r.idx})" style="cursor:pointer${r.safe === 0 ? ';background:var(--orange-light)' : ''}">
+      <td class="mono">${r.seat}</td><td style="font-weight:600">${esc(r.name)}</td>
+      <td class="mono">${r.avg.toFixed(2)}</td><td class="mono">${r.basketN}장</td>
+      <td class="mono">${esc(r.comp)}</td><td class="mono">${esc(r.minTxt)}</td>
+      <td class="mono"${r.needs ? ' style="color:var(--orange);font-weight:700"' : ''}>${r.needs}건</td>
+      <td class="small" style="font-size:10px;color:var(--muted)">${esc(r.memoDate)}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  // 경합 히트맵 (바구니 3명 이상 겹침)
+  const conf = cmdConflictRows(3);
+  h += '<div style="margin-top:10px;font-size:12px;font-weight:700;color:var(--teal)">바구니 경합 (같은 대학·전형·학과에 3명 이상)</div>';
+  if (conf.length) {
+    h += '<div class="scroll-table"><table class="g-table" style="font-size:11px"><thead><tr><th>카드</th><th>인원</th><th>학생</th></tr></thead><tbody>';
+    conf.forEach(c => {
+      const [univ, jn, dept] = c.key.split('|');
+      h += `<tr><td>${esc(univ)} ${esc(dept)} <span style="color:var(--muted);font-size:10px">${esc(jn)}</span></td>
+        <td class="mono" style="font-weight:800;color:${c.names.length >= 5 ? 'var(--red)' : 'var(--orange)'}">${c.names.length}명</td>
+        <td style="font-size:10px">${c.names.map(esc).join(', ')}</td></tr>`;
+    });
+    h += '</tbody></table></div>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">3명 이상 겹치는 바구니 카드 없음</div>';
+  }
+  h += '</div>';
+  el.innerHTML = h;
+}
+
 function renderDashboard() {
   selectedIdx = null;
   document.getElementById('studentView').style.display = 'none';
@@ -6772,7 +6907,7 @@ function renderDashboard() {
   const dist = [0,0,0,0,0,0,0,0,0];
   avgs.forEach(a => { const g = Math.min(9, Math.max(1, Math.round(a))); dist[g-1]++; });
 
-  let html = '<div class="glass"><h3>학급 현황 대시보드 <button onclick="exportClassReport()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--copper);background:none;color:var(--copper);cursor:pointer;font-family:inherit">학급 종합 보고서</button></h3>';
+  let html = '<div id="cmdCenter"></div>' + '<div class="glass"><h3>학급 현황 대시보드 <button onclick="exportClassReport()" style="float:right;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--copper);background:none;color:var(--copper);cursor:pointer;font-family:inherit">학급 종합 보고서</button></h3>';
   html += '<div class="stat-grid">';
   html += `<div class="stat-box"><div class="num">${classAvg.toFixed(2)}</div><div class="label">학급 평균등급</div></div>`;
   html += `<div class="stat-box"><div class="num">${STUDENTS.length}</div><div class="label">총 학생 수</div></div>`;
@@ -7053,6 +7188,7 @@ function renderDashboard() {
   html += '</tbody></table></div></div>';
 
   el.innerHTML = html;
+  renderCommandCenter();   // 담임 관제 레이어 (기존 대시보드 위)
 
   // Click handlers for dashboard students
   el.querySelectorAll('.dash-student').forEach(btn => {
