@@ -59,11 +59,26 @@ const r = await page.evaluate((name) => {
     others: (conflicts[b.key] || []).filter(x => x.name !== name).map(x => x.name)
   })).filter(x => x.others.length);
 
+  // 5) 최저 충족 요약 (모평 입력 시 최신 회차 기준, 미입력 시 내신 추정) — 6지원안 카드 기준
+  const mock = mockGradesOf(s);
+  const minCnt = { 충족: 0, 근접: 0, 미충족: 0, 판정불가: 0, 해당없음: 0 };
+  pf.picks.forEach(p => { const j = judgeMinForCard(p) || (findMinSpec(p.univ, p.dept) ? { status: '판정불가' } : { status: '해당없음' }); if (minCnt[j.status] != null) minCnt[j.status]++; });
+  const minSummary = { basis: mock ? mock.exam + ' 기준' : '모평 미입력 — 모평 입력 시 충족/근접/미충족 산출(현재 판정불가로 집계)', cnt: minCnt };
+
+  // 6) 위험 점수 + 사유 (담임 관제 riskScoreOf 재사용) — 헤드리스는 바구니/메모 없음 baseline
+  const memos = (() => { try { return JSON.parse(localStorage.getItem('susi27_memos') || '{}'); } catch (e) { return {}; } })();
+  const memoList = memos['memo_' + s.seat] || [];
+  let safe = 0; cards.forEach(c => { if (!c.noCut && c.band === '안정') safe++; });
+  const basketC = basketCards(s).filter(c => !c.noCut);
+  let minMajor = false;
+  if (mock && basketC.length) { const mc = { 미충족: 0 }; basketC.forEach(c => { const j = judgeMinForCard(c); if (j && mc[j.status] != null) mc[j.status]++; }); minMajor = mc.미충족 * 2 > basketC.length; }
+  const risk = riskScoreOf({ safe, basketN: basketC.length, minMajor, needs: (typeof counselNeeds === 'function' ? counselNeeds(s).length : 0), memoDays: memoList.length ? memoDaysOf(memoList[0].time) : null });
+
   return {
     seat: s.seat, stAvg: cards[0] ? cards[0].stAvg : null, total: cards.length, noCut, dist,
     basket, jtMix: pf.jtMix, minRisky: pf.minRisky,
     threads: threads.slice(0, 4).map(t => ({ topic: t.topic, aligned: t.aligned, continuity: t.continuity })),
-    todo, lowSamples, rivals
+    todo, lowSamples, rivals, minSummary, risk
   };
 }, name);
 await browser.close();
@@ -85,6 +100,12 @@ if (r.lowSamples.length) {
 }
 console.log('\n■ 활동 스레드 (상위 4)');
 r.threads.forEach(t => console.log(`  - ${t.topic} — ${t.continuity}${t.aligned ? ' · 계열 정합' : ''}`));
+console.log('\n■ 수능최저 충족 요약 (6지원안 기준)');
+console.log(`  ${r.minSummary.basis} — 충족 ${r.minSummary.cnt.충족} · 근접 ${r.minSummary.cnt.근접} · 미충족 ${r.minSummary.cnt.미충족}`
+  + `${r.minSummary.cnt.판정불가 ? ' · 판정불가 ' + r.minSummary.cnt.판정불가 : ''}${r.minSummary.cnt.해당없음 ? ' · 최저없음 ' + r.minSummary.cnt.해당없음 : ''}`);
+console.log('\n■ 위험 점수 (담임 관제 기준)');
+console.log(`  ${r.risk.score}점${r.risk.tags.length ? ' — ' + r.risk.tags.join(' · ') : ' — 위험 요인 없음'}`
+  + '\n  (헤드리스 실행이라 바구니·상담 메모는 비어 있는 baseline 기준 — 실제 값은 브라우저 관제 화면 참조)');
 console.log('\n■ 학급 내 지원 경합 (6지원안 기준)');
 if (!r.rivals.length) console.log('  경합 없음');
 r.rivals.forEach(x => console.log(`  - ${x.card}: ${x.others.join(', ')}와 경합`));
