@@ -209,6 +209,12 @@ body {
 .filter-btn.active { background:var(--teal); color:#fff; border-color:var(--teal); }
 
 /* 생기부 형광펜 하이라이트 */
+/* 5역량 구문 하이라이트 — 배경 + 밑줄 (구문/절 단위) */
+mark.hl5-acad  { background:rgba(184,220,246,0.45); border-bottom:2px solid #5EA8DE; color:inherit; padding:0 1px; border-radius:2px; }
+mark.hl5-career{ background:rgba(246,217,184,0.5);  border-bottom:2px solid #C77B3C; color:inherit; padding:0 1px; border-radius:2px; }
+mark.hl5-comm  { background:rgba(247,191,206,0.45); border-bottom:2px solid #D06A87; color:inherit; padding:0 1px; border-radius:2px; }
+mark.hl5-proc  { background:rgba(167,224,192,0.5);  border-bottom:2px solid #2E7D4A; color:inherit; padding:0 1px; border-radius:2px; }
+mark.hl5-teval { background:rgba(255,224,138,0.55); border-bottom:2px solid #C7A23C; color:inherit; padding:0 1px; border-radius:2px; }
 mark.hl-book { background:linear-gradient(transparent 55%, #FFE08A 55%); font-weight:600; color:inherit; padding:0 1px; border-radius:2px; }
 mark.hl-act { background:linear-gradient(transparent 55%, #A7E0C0 55%); font-weight:600; color:inherit; padding:0 1px; border-radius:2px; }
 mark.hl-comp { background:linear-gradient(transparent 55%, #F7BFCE 55%); font-weight:600; color:inherit; padding:0 1px; border-radius:2px; }
@@ -3228,26 +3234,53 @@ const HL_CAREER_KW = {
   '예술': ['미술','음악','디자인','작품','창작','연주','전시','색채'],
   '체육': ['운동','체육','스포츠','트레이닝','경기','선수','신체']
 };
+// ═══ 5역량 구문 하이라이트 (입학사정관 평가 기준) ═══
+// 명사 단위 4색 하이라이트는 폐지 — 행위 구문/절 전체에 배경+밑줄을 적용한다.
+// 단순 도서명·명사 나열은 하이라이트하지 않는다 (행위·평가 구문 패턴만 매칭).
+const HL5_CLASS = { 학업역량: 'hl5-acad', 진로역량: 'hl5-career', 공동체역량: 'hl5-comm', 탐구과정: 'hl5-proc', 교사평가: 'hl5-teval' };
+function hl5Spans(text, concept) {
+  const spans = [];
+  const add = (cls, re) => {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0].trim().length >= 6) spans.push({ s: m.index, e: m.index + m[0].length, cls });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+  };
+  for (const [cls, list] of Object.entries(HL5_DICT)) {
+    list.forEach(re => add(cls, new RegExp(re.source, 'g')));
+  }
+  // 탐구과정: 태깅 엔진의 과정 연결어 사전(SIGNAL_DICT.과정) 재사용 — 연결어 + 후속 절까지 스팬 확장
+  SIGNAL_DICT.과정.forEach(re => add('탐구과정', new RegExp(re.source + '[^.。]{0,28}', 'g')));
+  // 진로역량 보강: 지원 계열 고유 키워드 + 행위 동사 구문 (키워드 단독 명사는 미하이라이트)
+  const kws = (concept && HL_CAREER_KW[concept]) || [];
+  if (kws.length) {
+    const alt = kws.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    add('진로역량', new RegExp('(?<![가-힣])(?:' + alt + ')[^.。]{0,26}?(?:탐구|조사|분석|프로젝트|발표|제작|실험|설계|토론)[가-힣]{0,4}', 'g'));
+  }
+  // 겹침 제거: 시작 위치 순, 먼저 시작한(길게 잡힌) 스팬 우선
+  spans.sort((a, b) => a.s - b.s || b.e - a.e);
+  const out = [];
+  let last = 0;
+  for (const sp of spans) if (sp.s >= last) { out.push(sp); last = sp.e; }
+  return out;
+}
 function highlightRecord(text, concept) {
   if (!text) return '';
-  let h = esc(text);
-  const careerWords = (concept && HL_CAREER_KW[concept]) ? HL_CAREER_KW[concept] : [];
-  const careerAlt = careerWords.length ? careerWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') : null;
-  // 한 번의 패스로 겹침 없이 처리: 책 → 활동 → 역량 → 진로
-  const actAlt = '탐구|실험|연구|프로젝트|논문|설계|제작|분석|조사|발표|토론|캠페인|출품|보고서|가설|검증';
-  const compAlt = '스스로|자발적으로|자발적|주도적으로|주도적|주도하여|우수한|탁월한|탁월|뛰어난|심화|끈기|몰입|열정|리더십|리더|조장|반장|부장|멘토링|멘토|협력|협업|봉사|배려|나눔|성실';
-  const bookAlt = '「[^」]{1,40}」|『[^』]{1,40}』|《[^》]{1,40}》|〈[^〉]{1,40}〉|“[^”]{1,40}”|‘[^’]{1,40}’|"[^"]{1,40}"|\'[^\']{1,40}\'';
-  let re = '(' + bookAlt + ')|(' + actAlt + ')|(' + compAlt + ')';
-  if (careerAlt) re += '|(' + careerAlt + ')';
-  const rx = new RegExp(re, 'g');
-  h = h.replace(rx, (m, book, act, comp, career) => {
-    if (book) return '<mark class="hl-book">' + book + '</mark>';
-    if (act) return '<mark class="hl-act">' + act + '</mark>';
-    if (comp) return '<mark class="hl-comp">' + comp + '</mark>';
-    if (career) return '<mark class="hl-career">' + career + '</mark>';
-    return m;
-  });
-  return h;
+  const spans = hl5Spans(text, concept);
+  let h = '', last = 0;
+  for (const sp of spans) {
+    h += esc(text.slice(last, sp.s));
+    h += `<mark class="${HL5_CLASS[sp.cls]}" title="${sp.cls} — ${HL5_DESC[sp.cls]}">` + esc(text.slice(sp.s, sp.e)) + '</mark>';
+    last = sp.e;
+  }
+  return h + esc(text.slice(last));
+}
+// 역량별 감지 개수 (문단 우측 미니 요약·보완 필요 연동용)
+function hl5Counts(text, concept) {
+  const c = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
+  hl5Spans(text, concept).forEach(sp => { c[sp.cls]++; });
+  return c;
 }
 
 function gradeColor(g) {
@@ -4279,6 +4312,34 @@ const TOPIC_STOPWORDS = new Set([
   '발표', '친구', '학습', '태도', '관심', '노력', '참여', '능력', '부분', '문제',
   '주제', '다양', '통해', '대한', '위해', '바탕', '이후', '함께', '관련', '작성',
 ]);
+
+// ── 5역량 하이라이트 구문 사전 (입학사정관 평가 기준 — 화면 표현 계층 전용) ──
+// 하이라이트 단위는 단어가 아닌 행위 구문/절. 탐구과정은 SIGNAL_DICT.과정을 재사용해
+// highlightRecord에서 구문 스팬으로 확장한다. 교사평가는 종합 평가 어휘 사전(신설).
+const HL5_DICT = {
+  학업역량: [
+    /[가-힣\s,·'"‘’“”]{0,16}(?:연계하여|연계해|연관\s*지어|접목하여|관점에서|비교하여|대조하여|근거를\s*들어|논리적으로|비판적으로|심화하여|확장하여|적용하여)[^.。]{0,32}?(?:분석|고찰|해석|탐구|설명|논증|증명|도출|평가)[가-힣]{0,4}/g,
+  ],
+  진로역량: [
+    /[^.。]{0,10}진로[^.。]{0,28}?(?:고려하여|연계하여|관련하여|연결하여|탐색하[여고]|희망하[여며])[^.。]{0,32}/g,
+    /(?:희망\s*(?:학과|전공|계열)|지원\s*(?:학과|전공))[^.。]{0,36}/g,
+  ],
+  공동체역량: [
+    /(?:협동하여|협업하여|협력하여|조원들과|팀원들과|모둠(?:원|별)?[과의]?\s)[^.。]{0,32}/g,
+    /(?:역할을\s*맡아|리더로서|멘토로서|조장으로서|반장으로서|부장으로서)[^.。]{0,30}/g,
+    /(?:갈등을\s*중재|의견을\s*조율|도움을\s*주|배려하[여는]|나눔을\s*실천)[가-힣]{0,8}/g,
+  ],
+  교사평가: [
+    /[^.。]{0,24}(?:인상적|돋보임|돋보이|내면화|탁월|우수함|뛰어남|남다[르른]|주목할\s*만|성장이\s*기대|잠재력|진정성|진솔하게|모범이\s*[되됨]|귀감)[가-힣]{0,6}/g,
+  ],
+};
+const HL5_DESC = {
+  학업역량: '대학이 보는 것: 지식을 연계·확장·분석하는 학습 행위 — 단순 암기가 아닌 사고 과정',
+  진로역량: '대학이 보는 것: 활동이 지원 전공과 실제로 연결되는가 — 진로 접점의 명시',
+  공동체역량: '대학이 보는 것: 협업 속 역할 수행과 기여 — 함께한 활동의 근거',
+  탐구과정: '대학이 보는 것: 동기→과정→결과의 연쇄 — 왜 시작했고 어떻게 검증했는가',
+  교사평가: '대학이 보는 것: 교사의 종합 평가 서술 — 관찰에 기반한 질적 코멘트',
+};
 
 
 // 문장 분리 — 개조식('~함.', '~음.') 및 일반 문장 모두 처리
@@ -8966,12 +9027,15 @@ function renderRecordTab(student, analysis) {
     byYear[r.y].push(r);
   });
 
-  const hlLegend = `<div class="hl-legend">
-    <span><i style="background:#FFE08A"></i>도서·핵심어</span>
-    <span><i style="background:#A7E0C0"></i>탐구·활동</span>
-    <span><i style="background:#F7BFCE"></i>역량·태도</span>
-    <span><i style="background:#B8DCF6"></i>진로 연계</span>
-  </div>`;
+  // 범례: 5역량 (입학사정관 평가 기준) — 항목 클릭/탭 시 "대학이 이 역량에서 보는 것" 설명 표시
+  const HL5_SWATCH = { 학업역량: '#B8DCF6', 진로역량: '#F6D9B8', 공동체역량: '#F7BFCE', 탐구과정: '#A7E0C0', 교사평가: '#FFE08A' };
+  const hlLegend = `<div class="hl-legend">` +
+    Object.entries(HL5_SWATCH).map(([k, col]) =>
+      `<span tabindex="0" title="${esc(HL5_DESC[k])}" onclick="const d=document.getElementById('hl5desc');d.style.display='block';d.textContent=${JSON.stringify(k)} + ': ' + ${JSON.stringify(HL5_DESC[k])}" style="cursor:pointer"><i style="background:${col}"></i>${k}</span>`
+    ).join('') +
+    `</div><div id="hl5desc" style="display:none;font-size:11px;color:var(--sub);background:var(--cream);border-radius:8px;padding:6px 10px;margin-bottom:8px"></div>`;
+  // 5역량 감지 총계 (0인 역량 → 보완 필요 연동)
+  const hl5Total = { 학업역량: 0, 진로역량: 0, 공동체역량: 0, 탐구과정: 0, 교사평가: 0 };
   let firstRecordBlock = true;
   for (const year of Object.keys(byYear).sort()) {
     html += `<div class="glass"><h3>${year}학년 세부능력특기사항</h3>`;
@@ -8980,11 +9044,16 @@ function renderRecordTab(student, analysis) {
       if (r.t === '창의적체험활동상황' && r.b.length < 20) return;
       const tagColor = r.t === '세부능력및특기사항' ? 'var(--teal)' : 'var(--purple)';
       const tagBg = r.t === '세부능력및특기사항' ? 'var(--teal-light)' : 'var(--purple-light)';
+      const cnt = hl5Counts(r.b, ra.concept);
+      Object.keys(hl5Total).forEach(k => { hl5Total[k] += cnt[k]; });
+      const mini = Object.entries(cnt).map(([k, n]) =>
+        `<span style="${n ? '' : 'opacity:0.4'}">${k.replace('역량', '').replace('교사평가', '교사')} ${n}</span>`).join(' · ');
       html += `<div class="rec-item">
-        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
           ${r.c ? `<span class="rec-tag" style="background:var(--blue-light);color:var(--blue)">${esc(r.c)}</span>` : ''}
           <span class="rec-tag" style="background:${tagBg};color:${tagColor}">${esc(r.t)}</span>
           ${r.sem ? `<span class="rec-tag" style="background:var(--cream);color:var(--muted)">${esc(r.sem)}</span>` : ''}
+          <span class="mono" style="margin-left:auto;font-size:10px;color:var(--sub);white-space:nowrap">${mini}</span>
         </div>
         <div style="font-size:13px;line-height:1.9">${highlightRecord(r.b, ra.concept)}</div>
       </div>`;
@@ -9074,6 +9143,10 @@ function renderRecordTab(student, analysis) {
     if (!hasAligned) needs.push('<strong style="color:var(--red)">지원 계열 관련 연속 활동 없음</strong> — 지원 소계열과 연결되는 학년간 연속 주제가 발견되지 않았습니다.');
     lowSubjects.forEach(k => needs.push(`<strong>${esc(k)}</strong> — 구체성 하 문장만으로 구성 (정량·고유·산출물 신호 없음)`));
     consistFlags.forEach(f => needs.push(`<strong>${esc(f.subject)}</strong> — 일관성 주의: 세특 구체성 상 ${f.highCount}문장이나 등급 ${f.subjGrade} (평균 ${f.stAvg} 대비 +1.5 이상)`));
+    // 5역량 하이라이트 감지 0건 역량 → 보완 필요 연동
+    Object.entries(hl5Total).forEach(([k, n]) => {
+      if (n === 0) needs.push(`<strong>${k} 서술 없음</strong> — 세특 전체에서 ${k} 구문이 감지되지 않음. 남은 3학년 기록에서 보완 필요 (${esc(HL5_DESC[k])})`);
+    });
     if (needs.length) {
       html += '<div class="glass"><h3>보완 필요</h3><ul style="font-size:12px;line-height:1.8;padding-left:18px">';
       needs.forEach(n => html += `<li>${n}</li>`);

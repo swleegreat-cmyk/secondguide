@@ -813,6 +813,32 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 5역량 구문 하이라이트 (입학사정관 평가 기준)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 1) 행위 구문: 단어가 아닌 구문/절 전체가 하나의 마크로 감싸져야 한다
+    const acad = highlightRecord('작품의 주제를 사회 현상과 연계하여 비판적으로 분석함.', null);
+    const acadMark = (acad.match(/<mark class="hl5-acad"[^>]*>([^<]+)<\/mark>/) || [])[1] || '';
+    // 2) 교사평가 서술 감지 (goal 지정 문장) — 연속 마크 전체를 합쳐 검사
+    const teval = highlightRecord('준비 과정에서 자신이 성찰한 바를 진솔하게 전달하는 모습이 인상적임.', null);
+    const tevalMark = [...teval.matchAll(/<mark class="hl5-teval"[^>]*>([^<]+)<\/mark>/g)].map(m => m[1]).join('');
+    // 3) 단순 도서명·명사 나열은 하이라이트하지 않음
+    const noun = highlightRecord('『동물농장』과 「데미안」을 읽음. 수학, 과학, 영어 과목을 수강함.', null);
+    return { acadMark, tevalMark, nounHasMark: noun.includes('<mark'),
+             counts: hl5Counts('조원들과 협동하여 역할을 분담함. 의문을 갖고 자료를 조사함.', null) };
+  });
+  assert(`하이라이트#1(행위 구문): "연계하여 ~ 분석" 절 단위 마크 — "${r.acadMark.slice(0, 30)}…" (${r.acadMark.length}자)`,
+    r.acadMark.includes('연계하여') && r.acadMark.includes('분석') && r.acadMark.length >= 12,
+    JSON.stringify(r.acadMark));
+  assert(`하이라이트#2(교사평가): "~모습이 인상적" 감지 — "${r.tevalMark.slice(0, 30)}…"`,
+    r.tevalMark.includes('인상적') && r.tevalMark.length >= 8, JSON.stringify(r.tevalMark));
+  assert('하이라이트#3(단순 명사 비하이라이트): 도서명·과목 나열 문장에 마크 0개 + 공동체·과정 감지 정상',
+    r.nounHasMark === false && r.counts.공동체역량 >= 1 && r.counts.탐구과정 >= 1,
+    JSON.stringify({ nounHasMark: r.nounHasMark, counts: r.counts }));
+}
+
+// ═══════════════════════════════════════════════
 // 학과 매칭 2단 키워드 (강한 정합 / 계열 정합 / 근거 부족 + 근거 중복 금지)
 // ═══════════════════════════════════════════════
 {
