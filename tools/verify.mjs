@@ -1247,6 +1247,57 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 상담 메모 약속 구조 — 마이그레이션 보존 · 할 일 이월 · 예정일 경보
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const key = 'memo_' + s.seat;
+    const store = () => JSON.parse(localStorage.getItem('susi27_memos') || '{}');
+    const bak = store()[key];
+    const fmt = d => d.toLocaleString('ko-KR');
+    const ymd = off => { const d = new Date(); d.setDate(d.getDate() + off); return d.toISOString().slice(0, 10); };
+    // 1) 마이그레이션 보존: 구형식 {text,time}만 저장 → normMemo가 text를 ④로 유지, 나머지 기본값
+    const legacy = { text: '구버전 자유 메모 내용', time: fmt(new Date()) };
+    const mm = store(); mm[key] = [legacy]; localStorage.setItem('susi27_memos', JSON.stringify(mm));
+    const norm = normMemo(store()[key][0]);
+    const migOk = norm.text === '구버전 자유 메모 내용' && Array.isArray(norm.todos) && norm.todos.length === 0
+      && norm.agree === '' && norm.nextDate === null;
+    // 2) 할 일 이월: 직전 메모의 미완료 todo가 새 메모 작성 시 carried로 채워지는지 (렌더 로직과 동일 계산)
+    const prevMemo = { time: fmt(new Date()), agree: '', text: '', nextDate: null,
+      todos: [{ text: '자소서 1차 초안', done: false, carried: false }, { text: '봉사 시간 정리', done: true, carried: false }] };
+    const m2 = store(); m2[key] = [prevMemo]; localStorage.setItem('susi27_memos', JSON.stringify(m2));
+    const prev = normMemo(store()[key][0]);
+    const carried = prev.todos.filter(t => !t.done).map(t => '(이월) ' + t.text.replace(/^\(이월\)\s*/, ''));
+    const carryOk = carried.length === 1 && carried[0] === '(이월) 자소서 1차 초안';   // 완료된 '봉사 시간 정리'는 이월 제외
+    // 3) 다음 상담 예정일 경보: 어제 예정일 → memoNextOverdue true + 위험 점수 staleCounsel 반영
+    const overdueMemo = { time: fmt(new Date()), agree: '', text: '', todos: [], nextDate: ymd(-1) };
+    const m3 = store(); m3[key] = [overdueMemo]; localStorage.setItem('susi27_memos', JSON.stringify(m3));
+    const overdue = memoNextOverdue(s.seat);
+    const odDays = memoNextOverdueDays(s.seat);
+    // 예정일 경과만으로 staleCounsel 발동 (오늘 상담 기록이라 memoDays=0, 21일 미초과)
+    const riskWithNext = riskScoreOf({ safe: 5, basketN: 3, minMajor: false, needs: 0, memoDays: 0, nextOverdueDays: odDays });
+    const riskNoNext = riskScoreOf({ safe: 5, basketN: 3, minMajor: false, needs: 0, memoDays: 0, nextOverdueDays: null });
+    const alertHas = commandCenterData().filter(x => x.nextOverdueDays != null && x.nextOverdueDays > 0).some(x => x.seat === s.seat);
+    // 정리
+    const mm2 = store(); if (bak) mm2[key] = bak; else delete mm2[key]; localStorage.setItem('susi27_memos', JSON.stringify(mm2));
+    return {
+      migOk, migText: norm.text, carryOk, carried,
+      overdue, odDays, riskWithNext: riskWithNext.score, riskWithTags: riskWithNext.tags,
+      riskNoNext: riskNoNext.score, alertHas
+    };
+  });
+  assert(`메모약속#1(마이그레이션 보존): 구형식 {text,time} → ④자유(${JSON.stringify(r.migText)}) 유지 + 나머지 필드 기본값`,
+    r.migOk === true, JSON.stringify({ migOk: r.migOk, migText: r.migText }));
+  assert(`메모약속#2(할 일 이월): 미완료 todo만 '(이월)' 접두로 승계 (${JSON.stringify(r.carried)}) · 완료 todo 제외`,
+    r.carryOk === true, JSON.stringify({ carried: r.carried }));
+  assert(`메모약속#3(예정일 경보): 어제 예정일 → overdue ${r.overdue}(${r.odDays}일) + 위험 staleCounsel 반영(${r.riskNoNext}→${r.riskWithNext}점, 태그 '${r.riskWithTags.join('·')}') + 관제 경보 집계`,
+    r.overdue === true && r.odDays >= 1 && r.riskWithNext === r.riskNoNext + 2 &&
+    r.riskWithTags.some(t => /예정일.*경과/.test(t)) && r.alertHas === true,
+    JSON.stringify({ overdue: r.overdue, odDays: r.odDays, riskWithNext: r.riskWithNext, riskNoNext: r.riskNoNext, alertHas: r.alertHas }));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {

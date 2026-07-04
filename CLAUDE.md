@@ -45,7 +45,8 @@
 | `checkMinRequirement(student, minText, dept)` | 수능 최저 충족 판정 (verify.mjs 총 69건 중 최저 판정 케이스가 대부분) |
 | `getMockRecord`/`saveMockForExam`/`mockAreaTrends` | 모평 회차별 저장(`{exams:{회차:등급}}`, 구형식 자동 마이그레이션). **판정 입력은 항상 최신 회차**(`mockGradesOf`→`latestMockExam`). 추이는 직전 회차 대비 상승/유지/하락, 근접 카드에만 `nearTrendComment`(판정 불변·표시 전용) |
 | `classOverviewData`/`printClassOverview` | 학급 개요: 평균등급 0.5구간 히스토그램·학급 전체 바구니 구간 합계·전형 유형 분포. A4 1장 "학급 수시 현황" 인쇄 뷰 겸용 |
-| `riskScoreOf`/`weeklyCounselStats`/`memoDaysOf` | 담임 관제: 위험 점수 합성(`RISK_WEIGHTS`)·상담 경과일(21일 초과 경보)·주간 상담 페이스(8주 2회전=목표 9명) |
+| `riskScoreOf`/`weeklyCounselStats`/`memoDaysOf` | 담임 관제: 위험 점수 합성(`RISK_WEIGHTS`)·상담 경과일(21일 초과 OR 예정일 경과 경보)·주간 상담 페이스(8주 2회전=목표 9명) |
+| `normMemo`/`saveMemo`/`toggleMemoTodo`/`memoNextOverdue` | 상담 메모 4필드 약속 구조(①합의 ②할일 체크박스 ③예정일 ④자유). 구형식 `{text,time}`→④ 정규화 보존, 미완료 할 일 다음 메모 자동 이월, 예정일 경과 시 관제 경보·위험 점수 반영, 결과지 학생용 ③에 ②·③ 자동 표시 |
 | `intakePanelHtml`/`intakeSkeleton`/`intakeCommuteRegions` | 상담 전 확인 "결정 전 질문 카드"(`INTAKE_QUESTIONS`=intake_questions.js 주입). 응답(`intake_{seat}`)은 **선별·정렬·표시만** 반영(판정 불변): 재수 없음→골격 안3적2소1, 통학만→통학권 지역 필터, 면접 낮음→'면접 부담' 태그 |
 | `calcOptimalPortfolioCards(student)` | AI 6지원안: 안정2/적정2/도전2 골격, 대학당 최대 2장, 교과·종합 혼합, 최저 리스크 분산 |
 | `classCardConflicts()` | 학급 내 같은 (대학·전형·학과) 6지원 경합 맵 |

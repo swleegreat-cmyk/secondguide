@@ -4273,7 +4273,13 @@ function counselSheetStudentHtml(student, docNo) {
     minBlock = '<div class="lead">모의고사 성적이 입력되지 않아 최저 병목 분석을 생략합니다. 최근 모평 성적을 입력하면 영역별 레버리지를 계산합니다.</div>';
   }
   // 다음 상담까지 할 일 (실행 체크리스트)
+  // 최신 상담 메모의 약속(②할 일·③예정일)을 "다음 상담까지" 블록에 자동 표시
+  const lastMemo = latestMemoOf(student.seat);
+  const promiseTodos = lastMemo ? lastMemo.todos.filter(t => !t.done).map(t => `[상담 약속] ${t.text.replace(/^\(이월\)\s*/, '')}`) : [];
+  const nextDateLine = lastMemo && lastMemo.nextDate ? `다음 상담 예정일: ${lastMemo.nextDate}` : null;
   const todos = [];
+  if (nextDateLine) todos.push(nextDateLine);
+  promiseTodos.forEach(t => todos.push(t));
   if (basketN === 0) todos.push('지원 후보 바구니를 3장 이상 담아 다음 상담 때 함께 검토하기');
   if (bottleneck) todos.push(`수능 ${bottleneck.area} 영역 집중 대비 — 1등급 상승 시 최저 충족 +${bottleneck.gain}장`);
   needs.slice(0, 4).forEach(n => todos.push(`${n}`));
@@ -7394,7 +7400,7 @@ function _needsCountOf(s) {
 //   ② 후보 바구니 미작성        → +noBasket (3)
 //   ③ 바구니 과반 최저 미충족    → +minMajor (2)  (모평 입력 학생만 발동 가능)
 //   ④ 생기부 보완 미해소 3건 이상 → +needs3 (1)
-//   ⑤ 최근 상담 21일 초과        → +staleCounsel (2)  (상담 기록 없음도 동일 가산)
+//   ⑤ 최근 상담 21일 초과 OR 다음 상담 예정일 경과 → +staleCounsel (2)  (상담 기록 없음도 동일 가산)
 const RISK_WEIGHTS = { noSafe: 4, noBasket: 3, minMajor: 2, needs3: 1, staleCounsel: 2 };
 const RISK_STALE_DAYS = 21;   // 최근 상담 경과 기준(일)
 // 메모 time 문자열 → 자정 기준 타임스탬프(ms) 또는 null. 형식: toLocaleString('ko-KR') "2026. 7. 4. 오전 …"
@@ -7409,6 +7415,40 @@ function memoDaysOf(memoTime) {
   return ms == null ? null : Math.max(0, Math.floor((Date.now() - ms) / 86400000));
 }
 const COUNSEL_STALE_DAYS = 21;   // 상담 경보 기준(일) — RISK_STALE_DAYS와 일치
+// ── 상담 메모 약속 구조 (4필드) ─────────────────────────────────────────────
+// 저장 형태: { time, agree(①합의), todos:[{text,done,carried}](②할일), nextDate(③예정일), text(④자유) }
+// 구형식 { text, time } → text를 ④로 두고 나머지 기본값 (읽는 시점 정규화, 파괴적 이관 없음)
+function normMemo(m) {
+  if (!m) return null;
+  return {
+    time: m.time || '',
+    agree: m.agree || '',
+    todos: Array.isArray(m.todos) ? m.todos.map(t => (typeof t === 'string'
+      ? { text: t, done: false, carried: false }
+      : { text: t.text || '', done: !!t.done, carried: !!t.carried })) : [],
+    nextDate: m.nextDate || null,
+    text: m.text || ''
+  };
+}
+function memoListOf(seat) {
+  const l = (JSON.parse(localStorage.getItem('susi27_memos') || '{}')['memo_' + seat]) || [];
+  return l.map(normMemo);
+}
+function latestMemoOf(seat) { const l = memoListOf(seat); return l.length ? l[0] : null; }
+// 다음 상담 예정일(YYYY-MM-DD)이 오늘을 지났는지 (예정일 없으면 false)
+function memoNextOverdue(seat) {
+  const m = latestMemoOf(seat);
+  if (!m || !m.nextDate) return false;
+  const t = Date.parse(m.nextDate + 'T23:59:59');
+  return !isNaN(t) && Date.now() > t;
+}
+// 예정일 경과 일수 (예정일 없으면 null)
+function memoNextOverdueDays(seat) {
+  const m = latestMemoOf(seat);
+  if (!m || !m.nextDate) return null;
+  const t = Date.parse(m.nextDate + 'T00:00:00');
+  return isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
+}
 // 주간 상담 페이스: 이번 주(월요일 0시부터) 최근 상담일이 잡힌 학생 수 / 목표(8주 2회전 = 34×2/8 ≈ 9명)
 function weeklyCounselStats() {
   const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
@@ -7424,7 +7464,8 @@ function weeklyCounselStats() {
   });
   return { count, target: 9 };
 }
-// 순수 합성 함수 (verify가 직접 검사) — row: {safe, basketN, minMajor, needs, memoDays(null=기록 없음)}
+// 순수 합성 함수 (verify가 직접 검사) — row: {safe, basketN, minMajor, needs, memoDays(null=기록 없음),
+//   nextOverdueDays(다음 상담 예정일 경과 일수 · null=예정일 없음)}
 function riskScoreOf(r) {
   const tags = [];
   let score = 0;
@@ -7432,8 +7473,15 @@ function riskScoreOf(r) {
   if (r.basketN === 0) { score += RISK_WEIGHTS.noBasket; tags.push('바구니 미작성'); }
   if (r.minMajor) { score += RISK_WEIGHTS.minMajor; tags.push('바구니 과반 최저 미충족'); }
   if (r.needs >= 3) { score += RISK_WEIGHTS.needs3; tags.push(`보완 미해소 ${r.needs}건`); }
-  if (r.memoDays == null) { score += RISK_WEIGHTS.staleCounsel; tags.push('상담 기록 없음'); }
-  else if (r.memoDays > RISK_STALE_DAYS) { score += RISK_WEIGHTS.staleCounsel; tags.push(`상담 ${r.memoDays}일 경과`); }
+  // ⑤ 상담 경과: 최근 상담 21일 초과 / 기록 없음 / 다음 상담 예정일 경과 — 하나라도 발동 시 1회 가산
+  const nextOver = r.nextOverdueDays != null && r.nextOverdueDays > 0;
+  const stale = r.memoDays == null || r.memoDays > RISK_STALE_DAYS;
+  if (stale || nextOver) {
+    score += RISK_WEIGHTS.staleCounsel;
+    if (nextOver) tags.push(`상담 예정일 ${r.nextOverdueDays}일 경과`);
+    else if (r.memoDays == null) tags.push('상담 기록 없음');
+    else tags.push(`상담 ${r.memoDays}일 경과`);
+  }
   return { score, tags };
 }
 function commandCenterData() {
@@ -7462,7 +7510,9 @@ function commandCenterData() {
       needs: _needsCountOf(s),
       memoDays: memoList.length ? memoDaysOf(memoList[0].time) : null,
       memoDate: memoList.length ? String(memoList[0].time).split(/\s*오/)[0].trim() : '-',
-      elapsed: memoList.length ? (memoDaysOf(memoList[0].time) ?? 9999) : 9999   // 정렬용 (미상담=최대)
+      elapsed: memoList.length ? (memoDaysOf(memoList[0].time) ?? 9999) : 9999,   // 정렬용 (미상담=최대)
+      nextDate: (normMemo(memoList[0]) || {}).nextDate || null,
+      nextOverdueDays: memoNextOverdueDays(s.seat)   // 다음 상담 예정일 경과 일수 (null=예정일 없음)
     };
     const rk = riskScoreOf(row);
     row.risk = rk.score;
@@ -7492,9 +7542,9 @@ function showCmdList(type) {
     nobasket: rows.filter(r => r.basketN === 0),
     minmajor: rows.filter(r => r.minMajor),
     needs: rows.filter(r => r.needs > 0),
-    stale: rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS),
+    stale: rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS || (r.nextOverdueDays != null && r.nextOverdueDays > 0)),
   };
-  const label = { urgent: '안정 카드 0장 (긴급)', nobasket: '후보 바구니 미작성', minmajor: '바구니 과반 최저 미충족', needs: '생기부 보완 미해소', stale: '상담 21일 초과(미상담 포함)' };
+  const label = { urgent: '안정 카드 0장 (긴급)', nobasket: '후보 바구니 미작성', minmajor: '바구니 과반 최저 미충족', needs: '생기부 보완 미해소', stale: '상담 주기 경과 — 21일 초과 또는 예정일 경과(미상담 포함)' };
   const list = sets[type] || [];
   const el = document.getElementById('cmdListArea');
   if (!el) return;
@@ -7511,7 +7561,7 @@ function renderCommandCenter() {
   const nobasket = rows.filter(r => r.basketN === 0);
   const minmajor = rows.filter(r => r.minMajor);
   const needsOpen = rows.filter(r => r.needs > 0);
-  const stale = rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS);   // 상담 21일 초과(미상담 포함)
+  const stale = rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS || (r.nextOverdueDays != null && r.nextOverdueDays > 0));   // 21일 초과 OR 예정일 경과(미상담 포함)
   const pace = weeklyCounselStats();
   const alertCard = (type, n, label, color, sub) =>
     `<div onclick="showCmdList('${type}')" style="flex:1;min-width:150px;cursor:pointer;padding:12px;border-radius:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid ${color}">
@@ -7546,7 +7596,7 @@ function renderCommandCenter() {
     + alertCard('nobasket', nobasket.length, '후보 바구니 미작성', 'var(--orange)', '★ 담은 카드 0장')
     + alertCard('minmajor', minmajor.length, '바구니 과반 최저 미충족', 'var(--copper)', '모평 입력 학생 중')
     + alertCard('needs', needsOpen.length, '생기부 보완 미해소', 'var(--blue)', '실행형 보완 항목 1건 이상')
-    + alertCard('stale', stale.length, '상담 21일 초과', 'var(--copper)', '미상담 포함 — 회전 주기 경과')
+    + alertCard('stale', stale.length, '상담 주기 경과', 'var(--copper)', '21일 초과 또는 예정일 경과(미상담 포함)')
     + '</div><div id="cmdListArea"></div>';
   // 주간 상담 페이스 (8주 2회전 기준 목표 9명)
   const paceRatio = Math.min(1, pace.count / pace.target);
@@ -10501,16 +10551,35 @@ function renderMemoTab(student) {
   });
   html += '</div>';
 
-  html += `<textarea class="memo-input" id="memoInput" placeholder="상담 내용을 입력하세요..."></textarea>`;
+  // ── 4필드 약속 구조 입력 (①합의 ②할일 체크박스 ③예정일 ④자유) ──
+  // 이월: 직전 메모의 미완료 할 일을 새 메모 ②에 '(이월)' 접두로 자동 채운다.
+  const _prev = studentMemos.length ? normMemo(studentMemos[0]) : null;
+  const carried = _prev ? _prev.todos.filter(t => !t.done).map(t => '(이월) ' + t.text.replace(/^\(이월\)\s*/, '')) : [];
+  html += `<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:8px">
+    <label style="font-size:11px;font-weight:700">① 오늘 합의한 것
+      <input id="memoAgree" type="text" placeholder="예: 6월 모평 뒤 바구니 재검토하기로 함" style="display:block;width:100%;margin-top:3px;padding:7px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;background:var(--card)"></label>
+    <label style="font-size:11px;font-weight:700">② 학생이 다음까지 할 일 <span style="font-size:9px;color:var(--muted);font-weight:400">(한 줄에 하나 · 저장 시 체크박스로 · 미완료는 다음 메모에 자동 이월)</span>
+      <textarea id="memoTodos" rows="3" placeholder="한 줄에 하나씩" style="display:block;width:100%;margin-top:3px;padding:7px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;background:var(--card)">${esc(carried.join('\n'))}</textarea></label>
+    <label style="font-size:11px;font-weight:700">③ 다음 상담 예정일
+      <input id="memoNext" type="date" style="display:block;margin-top:3px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;background:var(--card)"></label>
+    <label style="font-size:11px;font-weight:700">④ 자유 메모
+      <textarea class="memo-input" id="memoInput" placeholder="상담 내용을 입력하세요..." style="margin-top:3px"></textarea></label>
+  </div>`;
   html += `<button class="memo-save" onclick="saveMemo()">메모 저장</button>`;
+  if (carried.length) html += `<span style="font-size:10px;color:var(--copper);margin-left:8px">↳ 이월된 미완료 할 일 ${carried.length}건이 ②에 채워졌습니다</span>`;
   html += '</div>';
 
   if (studentMemos.length > 0) {
     html += '<div class="glass"><h3>저장된 메모</h3>';
-    studentMemos.forEach((m, i) => {
+    studentMemos.forEach((raw, i) => {
+      const m = normMemo(raw);
+      const overdue = m.nextDate && Date.parse(m.nextDate + 'T23:59:59') < Date.now();
       html += `<div class="memo-item">
-        <div class="memo-time">${esc(m.time)}</div>
-        <div style="margin-top:4px">${esc(m.text)}</div>
+        <div class="memo-time">${esc(m.time)}${m.nextDate ? ` · 다음 상담 ${esc(m.nextDate)}${overdue ? ' <span style="color:var(--red);font-weight:700">(예정일 경과)</span>' : ''}` : ''}</div>
+        ${m.agree ? `<div style="margin-top:4px"><strong>합의:</strong> ${esc(m.agree)}</div>` : ''}
+        ${m.todos.length ? '<div style="margin-top:4px"><strong>할 일:</strong>' + m.todos.map((t, j) =>
+          `<div style="font-size:12px"><label style="cursor:pointer"><input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleMemoTodo(${i},${j})" style="vertical-align:-1px"> <span style="${t.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${t.carried ? '<span style="color:var(--copper);font-size:9px">[이월]</span> ' : ''}${esc(t.text.replace(/^\(이월\)\s*/, ''))}</span></label></div>`).join('') + '</div>' : ''}
+        ${m.text ? `<div style="margin-top:4px">${esc(m.text)}</div>` : ''}
         <button class="memo-del" onclick="deleteMemo(${i})">×</button>
       </div>`;
     });
@@ -10554,13 +10623,27 @@ function saveMemo() {
   if (selectedIdx == null) return;
   const student = STUDENTS[selectedIdx];
   const memoKey = `memo_${student.seat}`;
-  const text = document.getElementById('memoInput').value.trim();
-  if (!text) return;
+  const agree = (document.getElementById('memoAgree') || {}).value?.trim() || '';
+  const text = (document.getElementById('memoInput') || {}).value?.trim() || '';
+  const nextDate = (document.getElementById('memoNext') || {}).value || null;
+  const todoLines = ((document.getElementById('memoTodos') || {}).value || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const todos = todoLines.map(l => ({ text: l.replace(/^\(이월\)\s*/, ''), done: false, carried: /^\(이월\)/.test(l) }));
+  // 4필드 모두 비면 저장하지 않음
+  if (!agree && !text && !nextDate && !todos.length) return;
   if (!memos[memoKey]) memos[memoKey] = [];
-  memos[memoKey].unshift({
-    text,
-    time: new Date().toLocaleString('ko-KR')
-  });
+  memos[memoKey].unshift({ time: new Date().toLocaleString('ko-KR'), agree, todos, nextDate, text });
+  localStorage.setItem('susi27_memos', JSON.stringify(memos));
+  renderMemoTab(student);
+}
+// 저장된 메모의 할 일 완료 토글 (다음 상담에서 체크)
+function toggleMemoTodo(memoIdx, todoIdx) {
+  if (selectedIdx == null) return;
+  const student = STUDENTS[selectedIdx];
+  const list = memos[`memo_${student.seat}`];
+  if (!list || !list[memoIdx]) return;
+  const m = list[memoIdx];
+  m.todos = (m.todos || []).map(t => (typeof t === 'string' ? { text: t, done: false, carried: false } : t));
+  if (m.todos[todoIdx]) m.todos[todoIdx].done = !m.todos[todoIdx].done;
   localStorage.setItem('susi27_memos', JSON.stringify(memos));
   renderMemoTab(student);
 }
