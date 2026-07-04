@@ -7220,12 +7220,32 @@ function _needsCountOf(s) {
 //   ⑤ 최근 상담 21일 초과        → +staleCounsel (2)  (상담 기록 없음도 동일 가산)
 const RISK_WEIGHTS = { noSafe: 4, noBasket: 3, minMajor: 2, needs3: 1, staleCounsel: 2 };
 const RISK_STALE_DAYS = 21;   // 최근 상담 경과 기준(일)
-// 최근 메모 경과 일수 (메모 없음 → null). 메모 time 형식: toLocaleString('ko-KR') "2026. 7. 4. 오전 …"
-function memoDaysOf(memoTime) {
+// 메모 time 문자열 → 자정 기준 타임스탬프(ms) 또는 null. 형식: toLocaleString('ko-KR') "2026. 7. 4. 오전 …"
+function memoDateMs(memoTime) {
   const m = /(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\./.exec(String(memoTime || ''));
   if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}
+// 최근 메모 경과 일수 (메모 없음 → null)
+function memoDaysOf(memoTime) {
+  const ms = memoDateMs(memoTime);
+  return ms == null ? null : Math.max(0, Math.floor((Date.now() - ms) / 86400000));
+}
+const COUNSEL_STALE_DAYS = 21;   // 상담 경보 기준(일) — RISK_STALE_DAYS와 일치
+// 주간 상담 페이스: 이번 주(월요일 0시부터) 최근 상담일이 잡힌 학생 수 / 목표(8주 2회전 = 34×2/8 ≈ 9명)
+function weeklyCounselStats() {
+  const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7;   // 월=0
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow).getTime();
+  let count = 0;
+  STUDENTS.forEach(s => {
+    const list = memos['memo_' + s.seat];
+    if (!list || !list.length) return;
+    const ms = memoDateMs(list[0].time);
+    if (ms != null && ms >= weekStart) count++;
+  });
+  return { count, target: 9 };
 }
 // 순수 합성 함수 (verify가 직접 검사) — row: {safe, basketN, minMajor, needs, memoDays(null=기록 없음)}
 function riskScoreOf(r) {
@@ -7264,7 +7284,8 @@ function commandCenterData() {
       safe, basketN: basketC.length, comp, minTxt, minMajor,
       needs: _needsCountOf(s),
       memoDays: memoList.length ? memoDaysOf(memoList[0].time) : null,
-      memoDate: memoList.length ? String(memoList[0].time).split(/\s*오/)[0].trim() : '-'
+      memoDate: memoList.length ? String(memoList[0].time).split(/\s*오/)[0].trim() : '-',
+      elapsed: memoList.length ? (memoDaysOf(memoList[0].time) ?? 9999) : 9999   // 정렬용 (미상담=최대)
     };
     const rk = riskScoreOf(row);
     row.risk = rk.score;
@@ -7294,8 +7315,9 @@ function showCmdList(type) {
     nobasket: rows.filter(r => r.basketN === 0),
     minmajor: rows.filter(r => r.minMajor),
     needs: rows.filter(r => r.needs > 0),
+    stale: rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS),
   };
-  const label = { urgent: '안정 카드 0장 (긴급)', nobasket: '후보 바구니 미작성', minmajor: '바구니 과반 최저 미충족', needs: '생기부 보완 미해소' };
+  const label = { urgent: '안정 카드 0장 (긴급)', nobasket: '후보 바구니 미작성', minmajor: '바구니 과반 최저 미충족', needs: '생기부 보완 미해소', stale: '상담 21일 초과(미상담 포함)' };
   const list = sets[type] || [];
   const el = document.getElementById('cmdListArea');
   if (!el) return;
@@ -7312,6 +7334,8 @@ function renderCommandCenter() {
   const nobasket = rows.filter(r => r.basketN === 0);
   const minmajor = rows.filter(r => r.minMajor);
   const needsOpen = rows.filter(r => r.needs > 0);
+  const stale = rows.filter(r => r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS);   // 상담 21일 초과(미상담 포함)
+  const pace = weeklyCounselStats();
   const alertCard = (type, n, label, color, sub) =>
     `<div onclick="showCmdList('${type}')" style="flex:1;min-width:150px;cursor:pointer;padding:12px;border-radius:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid ${color}">
       <div style="font-size:22px;font-weight:800;color:${color}">${n}<span style="font-size:11px;font-weight:600">명</span></div>
@@ -7345,9 +7369,17 @@ function renderCommandCenter() {
     + alertCard('nobasket', nobasket.length, '후보 바구니 미작성', 'var(--orange)', '★ 담은 카드 0장')
     + alertCard('minmajor', minmajor.length, '바구니 과반 최저 미충족', 'var(--copper)', '모평 입력 학생 중')
     + alertCard('needs', needsOpen.length, '생기부 보완 미해소', 'var(--blue)', '실행형 보완 항목 1건 이상')
+    + alertCard('stale', stale.length, '상담 21일 초과', 'var(--copper)', '미상담 포함 — 회전 주기 경과')
     + '</div><div id="cmdListArea"></div>';
+  // 주간 상담 페이스 (8주 2회전 기준 목표 9명)
+  const paceRatio = Math.min(1, pace.count / pace.target);
+  h += `<div style="margin:2px 0 8px;padding:8px 11px;border-radius:10px;background:var(--cream);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;font-weight:800;color:var(--teal)">📅 이번 주 상담 ${pace.count}명 / 목표 ${pace.target}명</span>
+    <span style="flex:1;min-width:120px;height:10px;background:var(--border);border-radius:5px;overflow:hidden;display:inline-block">
+      <span style="display:block;height:100%;width:${paceRatio * 100}%;background:${pace.count >= pace.target ? 'var(--green)' : 'var(--orange)'}"></span></span>
+    <span style="font-size:9px;color:var(--muted)">8주 2회전 기준(34명×2회÷8주)</span></div>`;
   // 학생 테이블 (정렬 가능)
-  const cols = [['seat', '번호'], ['name', '이름'], ['risk', '위험 점수'], ['avg', '평균등급'], ['basketN', '바구니'], ['comp', '6지원 구성'], ['minTxt', '최저 충족'], ['needs', '보완 잔여'], ['memoDate', '최근 메모']];
+  const cols = [['seat', '번호'], ['name', '이름'], ['risk', '위험 점수'], ['avg', '평균등급'], ['basketN', '바구니'], ['comp', '6지원 구성'], ['minTxt', '최저 충족'], ['needs', '보완 잔여'], ['memoDate', '최근 상담일'], ['elapsed', '경과일']];
   const sorted = [...rows].sort((a, b) => {
     const x = a[_cmdSort.key], y = b[_cmdSort.key];
     return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * _cmdSort.dir;
@@ -7362,7 +7394,8 @@ function renderCommandCenter() {
       <td class="mono">${r.avg.toFixed(2)}</td><td class="mono">${r.basketN}장</td>
       <td class="mono">${esc(r.comp)}</td><td class="mono">${esc(r.minTxt)}</td>
       <td class="mono"${r.needs ? ' style="color:var(--orange);font-weight:700"' : ''}>${r.needs}건</td>
-      <td class="small" style="font-size:10px;color:var(--muted)">${esc(r.memoDate)}</td></tr>`;
+      <td class="small" style="font-size:10px;color:var(--muted)">${esc(r.memoDate)}</td>
+      <td class="mono" style="font-size:10px;${r.memoDays == null || r.memoDays > COUNSEL_STALE_DAYS ? 'color:var(--copper);font-weight:700' : 'color:var(--muted)'}">${r.memoDays == null ? '미상담' : r.memoDays + '일'}</td></tr>`;
   });
   h += '</tbody></table></div>';
   // 경합 히트맵 (바구니 3명 이상 겹침)

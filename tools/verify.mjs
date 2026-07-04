@@ -1127,6 +1127,48 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 상담 회전율 — 경과일 계산 · 21일 초과 집계 · 주간 페이스
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const memos = JSON.parse(localStorage.getItem('susi27_memos') || '{}');
+    const bak = memos['memo_' + s.seat];
+    const fmt = d => d.toLocaleString('ko-KR');
+    const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+    // 1) 경과일 계산: 5일 전 메모 → memoDaysOf === 5
+    const d5 = daysAgo(5);
+    const days5 = memoDaysOf(fmt(d5));
+    // 2) 25일 전 메모 → 21일 초과 집계에 포함, 이번 주 페이스에는 미포함
+    memos['memo_' + s.seat] = [{ text: '(검증용)', time: fmt(daysAgo(25)) }];
+    localStorage.setItem('susi27_memos', JSON.stringify(memos));
+    const rows25 = commandCenterData();
+    const row25 = rows25.find(x => x.seat === s.seat);
+    const staleHas25 = rows25.filter(x => x.memoDays == null || x.memoDays > 21).some(x => x.seat === s.seat);
+    // 3) 오늘 메모 → 이번 주 페이스 count +1, 21일 초과에서 빠짐
+    memos['memo_' + s.seat] = [{ text: '(검증용)', time: fmt(new Date()) }];
+    localStorage.setItem('susi27_memos', JSON.stringify(memos));
+    const paceWith = weeklyCounselStats();
+    const rows0 = commandCenterData();
+    const staleHas0 = rows0.filter(x => x.memoDays == null || x.memoDays > 21).some(x => x.seat === s.seat);
+    const row0 = rows0.find(x => x.seat === s.seat);
+    // 미상담(파싱 불가/없음) → null
+    const nullDays = memoDaysOf('형식아님');
+    // 정리
+    if (bak) memos['memo_' + s.seat] = bak; else delete memos['memo_' + s.seat];
+    localStorage.setItem('susi27_memos', JSON.stringify(memos));
+    return {
+      days5, day25: row25.memoDays, staleHas25, today0: row0.memoDays, staleHas0,
+      paceCount: paceWith.count, paceTarget: paceWith.target, nullDays
+    };
+  });
+  assert(`회전율#1(경과일·21일 집계·주간 페이스): 5일전=${r.days5}일 · 25일전(경보 포함=${r.staleHas25}) · 오늘 메모(경과 ${r.today0}일·경보 제외=${!r.staleHas0}) · 이번 주 페이스 ${r.paceCount}명/목표 ${r.paceTarget} · 미상담→null`,
+    r.days5 === 5 && r.day25 === 25 && r.staleHas25 === true &&
+    r.today0 === 0 && r.staleHas0 === false && r.paceCount >= 1 && r.paceTarget === 9 && r.nullDays === null,
+    JSON.stringify(r));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {
