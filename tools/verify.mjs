@@ -945,29 +945,44 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
-// 상담 결과지 생성 (counselSheetHtml)
+// 상담 결과지 생성 — 학부모용(6지원 표) · 학생용(보완 액션) 2종
 // ═══════════════════════════════════════════════
 {
   const r = await page.evaluate(() => {
     const s = STUDENTS.find(x => x.name === '강리영');
-    const html = counselSheetHtml(s);
+    const parent = counselSheetParentHtml(s, '1-20260704-001');
+    const stu = counselSheetStudentHtml(s, '1-20260704-002');
     const pf = calcOptimalPortfolioCards(s, portfolioCandidateCards(s));
     // 유보 카드 방어 렌더: 합성 유보 카드의 사유가 행에 포함되는지
     const yuboRow = counselSheetPickRow({ univ: '성균관대학교', dept: '물리학과', jn: '종합(면접형-과학인재)',
       jt: '종합', band: '유보', cautionReason: '특목·자사고 지원자 혼재 가능성으로 발표 컷이 일반고 합격선과 다를 수 있음',
       cw: 3.4, seat: s.seat, gy: '자연' }, 0);
+    const bad = h => /undefined|\bNaN\b|>null</.test(h);
+    const footerOk = h => h.includes('발행일') && h.includes('문서번호') && h.includes('상담교사') && h.includes('(서명)')
+      && h.includes('종합전형은 정성평가로 결과가 다를 수 있습니다');
     return {
-      hasName: html.includes(s.name), hasNotice: html.includes('종합전형은 정성평가로 결과가 다를 수 있습니다'),
-      rows: (html.match(/<tr><td>\d+<\/td>/g) || []).length, picks: pf.picks.length,
-      bad: /undefined|\bNaN\b|>null</.test(html),
-      sections: ['① AI 6지원안', '② 4구간 분포', '③ 생기부 보완 필요', '④ 학급 내 지원 경합'].every(t => html.includes(t)),
+      // 학부모용: 6지원 표 + 용어 풀이(GLOSSARY) + 구성 논리
+      pRows: (parent.match(/<tr><td>\d+<\/td>/g) || []).length, picks: pf.picks.length,
+      pGlossary: parent.includes('② 용어 풀이') && parent.includes(GLOSSARY[0].term) && parent.includes('충원(추가합격) 배수'),
+      pLogic: parent.includes('AI 6지원안') && /안정 \d+장 · 적정 \d+장 · 도전/.test(parent),
+      pKind: parent.includes('>학부모용<'), pBad: bad(parent), pFooter: footerOk(parent),
+      // 학생용: 세특 기록 필요 전체 + 최저 병목/레버리지 + 할 일 체크리스트
+      sNeeds: stu.includes('① 세특 기록 필요 항목'),
+      sLev: stu.includes('② 수능최저 병목 & 1등급 레버리지'),
+      sTodo: stu.includes('③ 다음 상담까지 할 일') && stu.includes('☐'),
+      sKind: stu.includes('>학생용<'), sBad: bad(stu), sFooter: footerOk(stu),
+      // 문서번호 형식(학생번호-YYYYMMDD-일련) 반영
+      docOk: parent.includes('1-20260704-001') && stu.includes('1-20260704-002'),
       yuboHasReason: yuboRow.includes('판정 유보') && yuboRow.includes('특목·자사고'),
       pickYuboCount: pf.picks.filter(p => p.band === '유보').length
     };
   });
-  assert(`결과지#1: 4개 섹션·고지 문구·6지원 ${r.rows}행(=${r.picks}) 생성 + 오염 문자열 없음 + 유보 사유 방어 렌더`,
-    r.hasName && r.hasNotice && r.sections && r.rows === r.picks && r.bad === false
+  assert(`결과지#1(학부모용): 6지원 ${r.pRows}행(=${r.picks}) + 용어 풀이 박스 + 구성 논리 해설 + 배지·하단부(발행일·문서번호·서명란·고지) + 오염 없음 + 유보 사유 방어`,
+    r.pRows === r.picks && r.pGlossary && r.pLogic && r.pKind && r.pBad === false && r.pFooter
       && r.yuboHasReason && r.pickYuboCount === 0,
+    JSON.stringify(r));
+  assert('결과지#2(학생용 2종 분리): 세특 기록 필요·최저 병목/레버리지·할 일 체크리스트 + 배지·하단부 + 문서번호 형식(번호-YYYYMMDD-일련) + 두 종 모두 undefined/NaN 없음',
+    r.sNeeds && r.sLev && r.sTodo && r.sKind && r.sBad === false && r.sFooter && r.docOk,
     JSON.stringify(r));
 }
 
@@ -981,7 +996,7 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     // 1) 현 빌드 상태 그대로의 일관성: 스냅샷 없으면 비교 null + 결과지 블록 생략 / 있으면 둘 다 존재
     _snapCmpCache = {};
     const cmp0 = comparePrevSnapshot(s);
-    const sheet0 = counselSheetHtml(s);
+    const sheet0 = counselSheetParentHtml(s, '1-20260704-001');
     const nullConsistent = orig == null
       ? (cmp0 === null && !sheet0.includes('지난 상담 대비 변화'))
       : (cmp0 !== null && cmp0.prevDate === orig.date && sheet0.includes('지난 상담 대비 변화'));
@@ -1007,14 +1022,14 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     const cmp = comparePrevSnapshot(s);
     const chB = changedBasketCards(s);
     const flag = snapChangeFlagHtml(target);
-    const sheet = counselSheetHtml(s);
+    const sheet = counselSheetParentHtml(s, '1-20260704-002');
     // 3) 카드 목록 지문 불일치(adiga 교체 상황) → 구간 비교 차단, 평균·보완 비교는 유지
     PREV_SNAPSHOT = Object.assign({}, PREV_SNAPSHOT, { fingerprint: 'X:none' });
     _snapCmpCache = {};
     const cmpX = comparePrevSnapshot(s);
     const chBX = changedBasketCards(s);
     const flagX = snapChangeFlagHtml(target);
-    const sheetX = counselSheetHtml(s);
+    const sheetX = counselSheetParentHtml(s, '1-20260704-003');
     setBasketKeys(s.seat, hadBasket);   // 정리
     PREV_SNAPSHOT = orig;
     _snapCmpCache = {};
@@ -1023,10 +1038,10 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
       delta: cmp.delta, prevName, toName: target.band, chBN: chB.length,
       flagOk: flag.includes('갱신 후 구간 변동') && flag.includes(prevName + '→' + target.band),
       resolved: cmp.needsResolved,
-      sheetHas: sheet.includes('⑤ 지난 상담 대비 변화') && sheet.includes('스냅샷 2026-06-01')
+      sheetHas: sheet.includes('③ 지난 상담 대비 변화') && sheet.includes('스냅샷 2026-06-01')
         && sheet.includes('-0.30 개선') && sheet.includes(prevName + '→' + target.band) && sheet.includes('1건 해소'),
       xComparable: cmpX.cardsComparable, xDelta: cmpX.delta, xChB: chBX.length, xFlag: flagX,
-      xSheet: sheetX.includes('교체되어 카드 구간 비교 생략') && sheetX.includes('⑤ 지난 상담 대비 변화'),
+      xSheet: sheetX.includes('교체되어 카드 구간 비교 생략') && sheetX.includes('③ 지난 상담 대비 변화'),
     };
   });
   assert(`스냅샷#1(정상 생략/표시 일관성): 스냅샷 ${r.snapNull ? '없음 → 비교 null + 결과지 블록 생략 (오류 아님)' : '있음 → 비교 생성 + 결과지 블록 표시'}`,

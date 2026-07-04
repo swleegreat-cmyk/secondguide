@@ -66,9 +66,21 @@
   보관 항목·용량은 실행 로그로 출력). adiga 데이터 교체 전에는 `python3 refresh_grades.py --snapshot-only`.
 - **지난 상담 대비 변화**: build.py가 최신 `snapshots/*/state.json`을 `__PREV_SNAPSHOT__` 토큰으로 주입 →
   브라우저의 `comparePrevSnapshot(student)`가 평균 변화·바구니 카드 구간 변동·보완 항목 해소를 산출한다.
-  구간이 바뀐 카드에는 "갱신 후 구간 변동" 플래그(바구니 패널·카드 행), 결과지에는 ⑤블록이 붙는다.
+  구간이 바뀐 카드에는 "갱신 후 구간 변동" 플래그(바구니 패널·카드 행), 학부모용 결과지에는 상담 이력 블록이 붙는다.
   스냅샷이 없으면 전부 정상 생략(오류 아님). 카드 목록 지문(`cardKeyFingerprint`) 불일치(adiga 교체) 시
   구간 비교만 차단되고 평균·보완 비교는 유지된다.
+
+## 상담 결과지 2종 (학생용 · 학부모용)
+
+- **인쇄 진입점**: 학생 화면의 "결과지 인쇄: 학생용/학부모용" 버튼 → `printCounselSheet(seat, kind)`
+  (kind: `'student'` | `'parent'`). 각각 `counselSheetStudentHtml` / `counselSheetParentHtml`.
+- **학생용**(보완 액션 중심): ① 세특 기록 필요 항목 전체(축약 없음) · ② 최저 병목 & What-if 1등급
+  레버리지(`minLeverage`) · ③ 다음 상담까지 할 일 체크리스트.
+- **학부모용**(전략 설명 중심): ① AI 6지원안 표 + 구성 논리 해설(안정2·적정2·도전2 배분) ·
+  ② 용어 풀이 박스(`GLOSSARY`) · ③ 상담 이력 블록(`sheetHistoryBlockHtml`, 스냅샷 없으면 생략).
+- **공통 하단부**(`sheetFooterHtml`): 고지 문구 + 발행일 · 문서번호(`sheetDocNo` = 학생번호-YYYYMMDD-일련,
+  일련은 발행일별 localStorage 카운터) · 상담교사 서명란.
+- **용어 풀이 문구는 `scratchpad/glossary.js`로 분리**(build.py `__GLOSSARY__` 토큰 주입) — 교사가 자유 수정.
 - **리포트 내용**: 학생별 평균등급 변화(±·악화/개선), 4구간 판정이 바뀐 카드 수,
   6지원안 무효화(기존 조합 카드의 구간 하락·유보 전환) 학생·카드 목록, 안정 0장 긴급 학생.
 - **갱신 후 확인 항목**: ① `node tools/verify.mjs && node tools/audit.mjs` 전부 PASS,

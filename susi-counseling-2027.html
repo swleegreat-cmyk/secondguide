@@ -4099,10 +4099,69 @@ function counselSheetPickRow(pk, i) {
   return `<tr><td>${i + 1}</td><td>${bandCell}</td><td>${esc(pk.univ)}</td><td class="small">${esc(pk.jn || pk.jt)}</td>
     <td>${esc(pk.dept)}</td><td class="small">${esc(minTxt)}</td><td>${pk.cw != null ? pk.cw.toFixed(1) + '배수' : '-'}</td></tr>`;
 }
-function counselSheetHtml(student) {
+// 결과지 공통 CSS (학생용·학부모용 공유)
+const SHEET_CSS = `*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR','Malgun Gothic',sans-serif;font-size:11px;line-height:1.55;color:#222;padding:20px;max-width:800px;margin:0 auto;background:#fff}
+h1{font-size:16px;border-bottom:2px solid #143A40;padding-bottom:6px;margin-bottom:8px;color:#143A40}
+h1 .kind{font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;vertical-align:middle;margin-left:6px}
+h2{font-size:12px;color:#1C5A60;margin:12px 0 5px;border-left:3px solid #C77B3C;padding-left:7px}
+table{width:100%;border-collapse:collapse;font-size:10px}
+th,td{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+th{background:#f2f0ea;font-weight:700;white-space:nowrap}
+ul{padding-left:16px}li{margin:2px 0}
+.mono{font-family:'Courier New',monospace}
+.meta{font-size:11px;color:#333;margin-bottom:8px;padding:7px 10px;background:#f7f5f0;border-radius:6px;border:1px solid #ddd}
+.small{font-size:9px}.muted{color:#777}
+.lead{font-size:10.5px;color:#333;margin:3px 0 6px;padding:6px 9px;background:#f7f5f0;border-radius:6px}
+.glossary{border:1px solid #C77B3C;border-radius:8px;padding:8px 10px;background:#fbf7f1}
+.glossary dt{font-weight:700;color:#1C5A60;margin-top:5px;font-size:10.5px}
+.glossary dd{font-size:10px;color:#444;margin-left:0}
+.todo li{margin:3px 0;font-size:11px}
+.notice{margin-top:14px;padding:8px 10px;border:1px solid #999;border-radius:6px;font-size:10px;color:#555;text-align:center;font-weight:600}
+.doc-footer{margin-top:10px;padding-top:8px;border-top:1px dashed #aaa;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px;color:#444}
+.doc-footer .sign{white-space:nowrap}
+.doc-footer .sign-line{display:inline-block;width:90px;border-bottom:1px solid #333;margin:0 4px}
+@media print{
+  body{padding:6mm;font-size:10px}
+  h1{font-size:14px}
+  th{background:#eee !important;-webkit-print-color-adjust:exact}
+  .meta,.lead,.glossary{background:none !important;border:1px solid #999}
+  @page{size:A4;margin:10mm}
+}`;
+// 문서번호: 학생번호-YYYYMMDD-일련(3자리). 일련은 발행일별 localStorage 카운터로 증가.
+function sheetDocNo(seat) {
+  const d = new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  let serial = 1;
+  try {
+    const key = 'docserial_' + ymd;
+    serial = (parseInt(localStorage.getItem(key), 10) || 0) + 1;
+    localStorage.setItem(key, String(serial));
+  } catch (e) {}
+  return `${seat}-${ymd}-${String(serial).padStart(3, '0')}`;
+}
+// 공통 하단부: 고지 문구 + 발행일·문서번호·상담교사 서명란 (두 종 모두 고정 배치)
+function sheetFooterHtml(kindLabel, docNo) {
+  const today = new Date().toLocaleDateString('ko-KR');
+  return `<div class="notice">본 자료는 공시 입결 기반 참고자료이며, 종합전형은 정성평가로 결과가 다를 수 있습니다.</div>
+<div class="doc-footer">
+  <div>발행일 ${today} · 문서번호 <span class="mono">${esc(docNo)}</span> · ${esc(kindLabel)}</div>
+  <div class="sign">상담교사 <span class="sign-line"></span> (서명)</div>
+</div>`;
+}
+// 공통 문서 껍데기 (제목 배지 + 본문 + 하단부)
+function sheetShell(student, kindLabel, badgeColor, bodyHtml, docNo) {
+  return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>상담 결과지(${esc(kindLabel)}) — ${esc(student.name)}</title>
+<style>${SHEET_CSS}</style></head><body>
+<h1>2027 수시 상담 결과지<span class="kind" style="background:${badgeColor}">${esc(kindLabel)}</span></h1>
+${bodyHtml}
+${sheetFooterHtml(kindLabel, docNo)}
+</body></html>`;
+}
+// 공통 상단 메타 라인 (이름·번호·평균·최저 요약)
+function sheetMetaLine(student) {
   const stAvg = calcWeightedAvg(student);
   const pf = calcOptimalPortfolioCards(student, portfolioCandidateCards(student));
-  const basketN = basketCards(student).filter(c => !c.noCut).length;
   const mock = mockGradesOf(student);
   let minSummary = '모평 미입력 — 최저 판정은 내신 추정 기준';
   if (mock) {
@@ -4110,84 +4169,102 @@ function counselSheetHtml(student) {
     pf.picks.forEach(p => { const j = judgeMinForCardCached(p); if (j && cnt[j.status] != null) cnt[j.status]++; });
     minSummary = `${mock.exam} 기준 6지원 중 충족 ${cnt.충족} · 근접 ${cnt.근접} · 미충족 ${cnt.미충족}`;
   }
-  const cards = buildApplicationCards(student);
-  const dist = { 안정: 0, 적정: 0, 소신: 0, 상향: 0, 유보: 0 };
-  let noCut = 0;
-  cards.forEach(c => { if (c.noCut) noCut++; else if (dist[c.band] != null) dist[c.band]++; });
-  // 생기부 보완 필요 상위 5 (실행형 문구 그대로: 학과 매칭 gaps + 5역량 미감지 — counselNeeds 공용)
-  const needs = counselNeeds(student);
-  let shown = needs.slice(0, 5);
-  // 2페이지 초과 방지 휴리스틱: 보완 항목 총 문자량이 크면 3건으로 자동 축약
-  const compact = shown.join('').length > 400;
-  if (compact) shown = shown.slice(0, 3);
-  const conflicts = classCardConflicts();
-  const rivals = pf.picks.map(p => {
-    const k = p.univ + '|' + (p.jn || p.jt) + '|' + p.dept;
-    const others = (conflicts[k] || []).filter(x => x.seat !== student.seat);
-    return others.length ? `${p.univ} ${p.dept} (${p.jn || p.jt}) — ${others.map(o => o.name).join(', ')}` : null;
-  }).filter(Boolean);
-  const today = new Date().toLocaleDateString('ko-KR');
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>상담 결과지 — ${esc(student.name)}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Noto Sans KR','Malgun Gothic',sans-serif;font-size:11px;line-height:1.55;color:#222;padding:20px;max-width:800px;margin:0 auto;background:#fff}
-h1{font-size:16px;border-bottom:2px solid #143A40;padding-bottom:6px;margin-bottom:8px;color:#143A40}
-h2{font-size:12px;color:#1C5A60;margin:12px 0 5px;border-left:3px solid #C77B3C;padding-left:7px}
-table{width:100%;border-collapse:collapse;font-size:10px}
-th,td{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
-th{background:#f2f0ea;font-weight:700;white-space:nowrap}
-ul{padding-left:16px}li{margin:2px 0}
-.meta{font-size:11px;color:#333;margin-bottom:8px;padding:7px 10px;background:#f7f5f0;border-radius:6px;border:1px solid #ddd}
-.small{font-size:9px}.muted{color:#777}
-.notice{margin-top:14px;padding:8px 10px;border:1px solid #999;border-radius:6px;font-size:10px;color:#555;text-align:center;font-weight:600}
-@media print{
-  body{padding:6mm;font-size:10px}
-  h1{font-size:14px}
-  th{background:#eee !important;-webkit-print-color-adjust:exact}
-  .meta{background:none;border:1px solid #999}
-  @page{size:A4;margin:10mm}
+  return `<div class="meta"><strong>${esc(student.name)}</strong> (${student.seat}번) · 기준일 ${new Date().toLocaleDateString('ko-KR')} · 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 수능최저: ${esc(minSummary)}</div>`;
 }
-</style></head><body>
-<h1>2027 수시 상담 결과지</h1>
-<div class="meta"><strong>${esc(student.name)}</strong> (${student.seat}번) · 기준일 ${today} · 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 수능최저: ${esc(minSummary)}</div>
-<h2>① AI 6지원안 <span class="small muted">(${basketN ? '★ 후보 바구니 ' + basketN + '장 우선 반영' : '전체 계열 기준'} · 기호: ●안정 ◐적정 ▲소신 △상향 ⚠유보)</span></h2>
-<table><tr><th>순위</th><th>구간</th><th>대학</th><th>전형</th><th>학과</th><th>수능최저</th><th>충원</th></tr>
-${pf.picks.map((p, i) => counselSheetPickRow(p, i)).join('')}</table>
-<h2>② 4구간 분포 <span class="small muted">(컷 보유 카드 ${(cards.length - noCut).toLocaleString()}장 기준)</span></h2>
-<div>● 안정 ${dist.안정.toLocaleString()} · ◐ 적정 ${dist.적정.toLocaleString()} · ▲ 소신 ${dist.소신.toLocaleString()} · △ 상향 ${dist.상향.toLocaleString()} · ⚠ 판정 유보 ${dist.유보.toLocaleString()}장 <span class="small muted">(컷 정보 없음 ${noCut.toLocaleString()}장 별도)</span></div>
-<h2>③ 생기부 보완 필요 <span class="small muted">(상위 ${shown.length}건${compact ? ' — 지면상 자동 축약' : ''})</span></h2>
-${shown.length ? '<ul>' + shown.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '<div>중대 보완 항목 없음</div>'}
-<h2>④ 학급 내 지원 경합 주의</h2>
-${rivals.length ? '<ul>' + rivals.map(r => `<li>${esc(r)}</li>`).join('') + '</ul>' : '<div>학급 내 동일 카드 경합 없음</div>'}
-${(() => {   // ⑤ 지난 상담 대비 변화 — 직전 스냅샷이 없으면 블록 자체 생략 (정상)
-    const cmp = comparePrevSnapshot(student);
-    if (!cmp) return '';
-    const chB = changedBasketCards(student);
-    const avgTxt = cmp.delta > 0 ? `+${cmp.delta.toFixed(2)} 악화` : cmp.delta < 0 ? `${cmp.delta.toFixed(2)} 개선` : '변동 없음';
-    const basketTxt = !cmp.cardsComparable
-      ? '대학·학과 데이터가 교체되어 카드 구간 비교 생략'
-      : chB.length
-        ? chB.slice(0, 6).map(x => `${esc(x.univ)} ${esc(x.dept)} (${esc(x.jn)}) ${x.from}→${x.to}`).join(' · ') + (chB.length > 6 ? ` 외 ${chB.length - 6}장` : '')
-        : '바구니 카드 구간 변동 없음';
-    const resTxt = cmp.needsResolved.length
-      ? `${cmp.needsResolved.length}건 해소 (${cmp.needsResolved.slice(0, 3).map(esc).join(' / ')}${cmp.needsResolved.length > 3 ? ' 외' : ''})`
-      : '해소된 항목 없음';
-    return `<h2>⑤ 지난 상담 대비 변화 <span class="small muted">(스냅샷 ${esc(cmp.prevDate)} 기준)</span></h2>
+// 상담 이력 블록 (직전 스냅샷 대비 변화) — 스냅샷 없으면 '' (정상 생략). 학부모용에서 사용.
+function sheetHistoryBlockHtml(student) {
+  const cmp = comparePrevSnapshot(student);
+  if (!cmp) return '';
+  const chB = changedBasketCards(student);
+  const avgTxt = cmp.delta > 0 ? `+${cmp.delta.toFixed(2)} 악화` : cmp.delta < 0 ? `${cmp.delta.toFixed(2)} 개선` : '변동 없음';
+  const basketTxt = !cmp.cardsComparable
+    ? '대학·학과 데이터가 교체되어 카드 구간 비교 생략'
+    : chB.length
+      ? chB.slice(0, 6).map(x => `${esc(x.univ)} ${esc(x.dept)} (${esc(x.jn)}) ${x.from}→${x.to}`).join(' · ') + (chB.length > 6 ? ` 외 ${chB.length - 6}장` : '')
+      : '바구니 카드 구간 변동 없음';
+  const resTxt = cmp.needsResolved.length
+    ? `${cmp.needsResolved.length}건 해소 (${cmp.needsResolved.slice(0, 3).map(esc).join(' / ')}${cmp.needsResolved.length > 3 ? ' 외' : ''})`
+    : '해소된 항목 없음';
+  return `<h2>③ 지난 상담 대비 변화 <span class="small muted">(스냅샷 ${esc(cmp.prevDate)} 기준)</span></h2>
 <ul>
 <li>평균등급: ${cmp.avgPrev.toFixed(2)} → ${cmp.avgNow.toFixed(2)} (${avgTxt})</li>
 <li>바구니 구간 변동: ${basketTxt}</li>
 <li>생기부 보완 항목: ${resTxt} · 잔여 ${cmp.needsNowCount}건 (이전 ${cmp.needsPrevCount}건)</li>
 </ul>`;
-  })()}
-<div class="notice">본 자료는 공시 입결 기반 참고자료이며, 종합전형은 정성평가로 결과가 다를 수 있습니다.</div>
-</body></html>`;
 }
-function printCounselSheet(seat) {
+
+// ── 학생용 결과지: 보완 액션 중심 ──
+function counselSheetStudentHtml(student, docNo) {
+  docNo = docNo || sheetDocNo(student.seat);
+  const needs = counselNeeds(student);          // 세특 기록 필요 항목 전체 (축약 없음)
+  const basketN = basketCards(student).filter(c => !c.noCut).length;
+  // 최저 병목 & What-if 레버리지
+  const mock = mockGradesOf(student);
+  let minBlock, bottleneck = null;
+  if (mock) {
+    const lev = minLeverage(student, mock.grades);
+    bottleneck = (lev.best && lev.best.gain > 0) ? lev.best : null;
+    const gainRows = lev.all.filter(x => x.gain > 0);
+    minBlock = `<div class="lead">${esc(mock.exam)} 기준 최저 충족 대상 카드 <strong>${lev.base.충족}장 충족 · ${lev.base.근접}장 근접 · ${lev.base.미충족}장 미충족</strong> (바구니+희망 계열)</div>`
+      + (bottleneck
+        ? `<div><strong style="color:#B4472A">병목: ${esc(bottleneck.area)}</strong> — 이 영역 1등급만 올리면 최저 충족 카드가 <strong>+${bottleneck.gain}장</strong> 늘어납니다.</div>`
+        : '<div>어느 한 영역 1등급 상승으로 새로 충족되는 카드가 없습니다. 전 영역 고르게 관리하세요.</div>')
+      + (gainRows.length ? `<div class="small muted" style="margin-top:2px">영역별 1등급 상승 효과: ${gainRows.map(x => `${esc(x.area)} +${x.gain}장`).join(' · ')}</div>` : '');
+  } else {
+    minBlock = '<div class="lead">모의고사 성적이 입력되지 않아 최저 병목 분석을 생략합니다. 최근 모평 성적을 입력하면 영역별 레버리지를 계산합니다.</div>';
+  }
+  // 다음 상담까지 할 일 (실행 체크리스트)
+  const todos = [];
+  if (basketN === 0) todos.push('지원 후보 바구니를 3장 이상 담아 다음 상담 때 함께 검토하기');
+  if (bottleneck) todos.push(`수능 ${bottleneck.area} 영역 집중 대비 — 1등급 상승 시 최저 충족 +${bottleneck.gain}장`);
+  needs.slice(0, 4).forEach(n => todos.push(`${n}`));
+  if (!mock) todos.push('최근 모의고사 성적(국·수·영·탐구) 입력하기');
+  todos.push('다음 상담 전까지 위 항목 진행 상황 메모 준비');
+  const body = sheetMetaLine(student)
+    + `<h2>① 세특 기록 필요 항목 <span class="small muted">(생기부 보완 — 전체 ${needs.length}건)</span></h2>`
+    + (needs.length ? '<ul>' + needs.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '<div>현재 중대 보완 항목 없음 — 강점을 심화·유지하세요.</div>')
+    + '<h2>② 수능최저 병목 & 1등급 레버리지</h2>' + minBlock
+    + '<h2>③ 다음 상담까지 할 일</h2>'
+    + '<ul class="todo">' + todos.map(t => `<li>☐ ${esc(t)}</li>`).join('') + '</ul>';
+  return sheetShell(student, '학생용', '#1C5A60', body, docNo);
+}
+
+// ── 학부모용 결과지: 전략 설명 중심 ──
+function counselSheetParentHtml(student, docNo) {
+  docNo = docNo || sheetDocNo(student.seat);
+  const pf = calcOptimalPortfolioCards(student, portfolioCandidateCards(student));
+  const basketN = basketCards(student).filter(c => !c.noCut).length;
+  // 6지원 구성 논리 해설
+  const slotCnt = {};
+  pf.picks.forEach(p => { const k = p.slot === '도전' ? '도전' : p.slot === '보충' ? '보충' : p.band; slotCnt[k] = (slotCnt[k] || 0) + 1; });
+  const jtSet = new Set(pf.picks.map(p => String(p.jt).includes('교과') ? '교과' : String(p.jt).includes('종합') ? '종합' : '기타'));
+  const univReuse = pf.picks.reduce((m, p) => { m[p.univ] = (m[p.univ] || 0) + 1; return m; }, {});
+  const dblUniv = Object.entries(univReuse).filter(([, n]) => n >= 2).map(([u]) => u);
+  const logic = `이 학생의 6지원은 <strong>안정 ${pf.counts.안정}장 · 적정 ${pf.counts.적정}장 · 도전(소신·상향) ${pf.counts.소신 + pf.counts.상향}장</strong>으로 구성했습니다. `
+    + '안정 지원으로 합격 안전망을 확보하고, 적정 지원으로 현실적 합격을 노리며, 도전 지원으로 상향 기회를 함께 잡는 배분입니다. '
+    + `전형 유형은 ${[...jtSet].filter(x => x !== '기타').join('·') || '단일 유형'}을 혼합해 한쪽 전형에 쏠린 위험을 줄였고, 한 대학에 최대 2장까지만 배정했습니다.`
+    + (dblUniv.length ? ` (2장 지원 대학: ${dblUniv.map(esc).join(', ')})` : '')
+    + (basketN ? ` 교사·학생이 함께 담은 후보 바구니 ${basketN}장을 우선 반영했습니다.` : '');
+  const glossaryHtml = GLOSSARY.map(g => `<dt>${esc(g.term)}</dt><dd>${esc(g.desc)}</dd>`).join('');
+  const body = sheetMetaLine(student)
+    + '<h2>① AI 6지원안 <span class="small muted">(기호: ●안정 ◐적정 ▲소신 △상향 ⚠유보)</span></h2>'
+    + '<table><tr><th>순위</th><th>구간</th><th>대학</th><th>전형</th><th>학과</th><th>수능최저</th><th>충원</th></tr>'
+    + pf.picks.map((p, i) => counselSheetPickRow(p, i)).join('') + '</table>'
+    + `<div class="lead">${logic}</div>`
+    + '<h2>② 용어 풀이 <span class="small muted">(결과지 이해를 돕는 안내)</span></h2>'
+    + `<dl class="glossary">${glossaryHtml}</dl>`
+    + (sheetHistoryBlockHtml(student) || '');
+  return sheetShell(student, '학부모용', '#8a5a2b', body, docNo);
+}
+
+// 인쇄 진입점 — kind: 'student' | 'parent' (기본 학생용)
+function printCounselSheet(seat, kind) {
   const s = STUDENTS.find(x => x.seat === seat);
   if (!s) return;
   const w = window.open('', '_blank');
   if (!w) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
-  w.document.write(counselSheetHtml(s));
+  const html = kind === 'parent' ? counselSheetParentHtml(s) : counselSheetStudentHtml(s);
+  w.document.write(html);
   w.document.close();
   setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 350);
 }
@@ -5569,6 +5646,21 @@ function judgeMin(grades, text, gyeol) {
   const lackText = fails.map(f => f[1]).join(' / ');
   return { status: totalLack <= 1 ? '근접' : '미충족', lackText, detail: lackText };
 }
+
+// 결과지 용어 풀이 (glossary.js에서 주입 — 학부모용 용어 풀이 박스)
+// 상담 결과지 용어 풀이 — 학부모용 결과지의 "용어 풀이 박스"에 사용.
+// 교사가 문구를 자유롭게 고칠 수 있도록 데이터로 분리 (build.py가 __GLOSSARY__ 토큰에 주입).
+// 순서대로 표시된다. term=용어, desc=풀이(1~2문장, 학부모 눈높이).
+const GLOSSARY = [
+  { term: '안정 (●)', desc: '학생의 내신 평균이 최근 합격선(50%·70% 컷)보다 뚜렷이 앞서는 지원입니다. 합격 가능성이 높아 포트폴리오의 버팀목이 됩니다.' },
+  { term: '적정 (◐)', desc: '내신 평균이 합격선과 비슷한 구간입니다. 무리하지 않으면서 합격을 기대할 수 있는 현실적인 지원입니다.' },
+  { term: '소신 (▲)', desc: '합격선보다 다소 높은(불리한) 성적이지만, 생활기록부·면접 등으로 만회를 노려볼 수 있는 도전적 지원입니다.' },
+  { term: '상향 (△)', desc: '합격선과 격차가 커 합격이 쉽지 않은 지원입니다. 상향 1~2장은 도전 카드로 두되, 안정·적정으로 균형을 맞춥니다.' },
+  { term: '판정 유보 (⚠)', desc: '특목고·자사고 합격자가 섞여 발표 합격선이 실제보다 높게 잡힌 전형입니다. 수치만으로 안정/적정을 단정할 수 없어 판정을 보류합니다.' },
+  { term: '충원(추가합격) 배수', desc: '최초 합격자 중 이탈이 생겨 추가로 합격하는 규모를 나타냅니다. 배수가 클수록 대기번호를 받아도 최종 합격할 여지가 넓습니다.' },
+  { term: '수능최저학력기준', desc: '수시에 합격해도 수능 성적이 일정 기준(예: 3개 영역 등급 합 6)을 넘어야 최종 합격이 확정되는 조건입니다. 충족 여부가 당락을 가릅니다.' },
+  { term: '6지원 (안정2·적정2·도전2)', desc: '수시 지원 6장을 안정 2장·적정 2장·도전(소신/상향) 2장으로 나누는 기본 골격입니다. 합격 안정성과 상향 도전을 함께 확보하는 배분입니다.' },
+];
 
 
 function assessCompetencies(student, analysis) {
@@ -7513,7 +7605,7 @@ function renderProfileHeader(student, analysis) {
   el.innerHTML = `<div class="profile-header">
     <div class="profile-avatar">${student.seat}</div>
     <div class="profile-info">
-      <div class="pname">${esc(student.name)} <button onclick="exportReport()" style="font-size:11px;padding:2px 10px;border:1px solid var(--copper);border-radius:6px;background:none;color:var(--copper);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:6px">보고서</button><button onclick="printCounselSheet(${student.seat})" style="font-size:11px;padding:2px 10px;border:1px solid var(--teal);border-radius:6px;background:none;color:var(--teal);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:4px">결과지 인쇄</button></div>
+      <div class="pname">${esc(student.name)} <button onclick="exportReport()" style="font-size:11px;padding:2px 10px;border:1px solid var(--copper);border-radius:6px;background:none;color:var(--copper);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:6px">보고서</button><span style="margin-left:4px;font-size:11px;color:var(--muted);vertical-align:middle">결과지 인쇄:</span><button onclick="printCounselSheet(${student.seat}, 'student')" style="font-size:11px;padding:2px 10px;border:1px solid var(--teal);border-radius:6px;background:none;color:var(--teal);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:2px">학생용</button><button onclick="printCounselSheet(${student.seat}, 'parent')" style="font-size:11px;padding:2px 10px;border:1px solid var(--copper);border-radius:6px;background:none;color:var(--copper);cursor:pointer;font-family:inherit;vertical-align:middle;margin-left:2px">학부모용</button></div>
       <div class="pmeta">3학년 4반 ${student.seat}번 · 병점고등학교</div>
     </div>
     <div class="profile-chips">${chips}</div>
