@@ -4279,12 +4279,32 @@ function counselSheetStudentHtml(student, docNo) {
   needs.slice(0, 4).forEach(n => todos.push(`${n}`));
   if (!mock) todos.push('최근 모의고사 성적(국·수·영·탐구) 입력하기');
   todos.push('다음 상담 전까지 위 항목 진행 상황 메모 준비');
+  // ④ 나의 서사 틀 + 예상 질문 (학생이 손으로 채워올 숙제 형태)
+  const ra = analyzeRecord(student, ANALYSIS[student.seat] || {});
+  const narr = studentNarrativeThreads(student, ra, 3);
+  let narrBlock;
+  if (narr.length) {
+    narrBlock = narr.map((n, i) => {
+      const qHtml = n.questions.length
+        ? '<div class="small" style="margin:2px 0 0 4px">예상 면접 질문:<ol style="margin:2px 0 0 16px">'
+          + n.questions.map(q => `<li>${esc(q.q)} <span class="muted">(${esc(q.reason)})</span></li>`).join('') + '</ol></div>'
+        : '<div class="small muted" style="margin:2px 0 0 4px">⚠ 매칭 문항 없음 — <strong>직접 대비 필요</strong> (은행에 이 주제 문항이 아직 없습니다)</div>';
+      return `<div style="margin:5px 0;padding:5px 8px;border:1px solid #ccc;border-radius:6px">
+        <div style="font-weight:700">스레드 ${i + 1}. ${esc(n.thread.topic)} <span class="small muted">(${esc(n.thread.continuity)})</span></div>
+        <div class="small" style="margin:2px 0">${esc(n.narrative.text)}</div>
+        <div class="small muted">↳ [ ] 안은 내 활동명·표현으로 직접 채우고 다듬어 오기</div>
+        ${qHtml}</div>`;
+    }).join('');
+  } else {
+    narrBlock = '<div class="small muted">희망 계열과 정합하는 연속(2개 학기 이상) 활동 스레드가 아직 없습니다 — 진로 연계 탐구 활동을 만든 뒤 서사를 구성합니다.</div>';
+  }
   const body = sheetMetaLine(student)
     + `<h2>① 세특 기록 필요 항목 <span class="small muted">(생기부 보완 — 전체 ${needs.length}건)</span></h2>`
     + (needs.length ? '<ul>' + needs.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '<div>현재 중대 보완 항목 없음 — 강점을 심화·유지하세요.</div>')
     + '<h2>② 수능최저 병목 & 1등급 레버리지</h2>' + minBlock
     + '<h2>③ 다음 상담까지 할 일</h2>'
-    + '<ul class="todo">' + todos.map(t => `<li>☐ ${esc(t)}</li>`).join('') + '</ul>';
+    + '<ul class="todo">' + todos.map(t => `<li>☐ ${esc(t)}</li>`).join('') + '</ul>'
+    + '<h2>④ 나의 서사 틀 + 예상 질문 <span class="small muted">(빈칸을 내 언어로 채워 오기 — 면접 준비 숙제)</span></h2>' + narrBlock;
   return sheetShell(student, '학생용', '#1C5A60', body, docNo);
 }
 
@@ -5152,6 +5172,60 @@ function studentTopicThreads(student, ra) {
   return extractTopicThreads(student.records || [], { deptKeywords: kws });
 }
 
+// ═══ 주제 스레드 → 서사 문장 틀 + 예상 면접 질문 ═══
+// concept(과학/수학/...) → 면접 은행 계열 태그 매핑 ('과학'은 은행에서 '자연과학')
+const CONCEPT_TO_FIELD = { '과학': '자연과학', '수학': '수학', '공학': '공학', '의료': '의료',
+  '교육': '교육', '경영': '경영', '법률': '법률', '인문': '인문', '예술': '예술', '체육': '체육' };
+// 서사 문장 틀: 스레드 연속 학년 × [빈칸] 활동 + 지원 학과. 대괄호는 학생이 자기 언어로 다듬을 빈칸.
+// 반환: { topic, dept, clauses:[{year, role, hint}], text } — hint는 스레드 실제 토큰(출발 활동 앵커)
+function threadNarrative(thread, dept) {
+  const ys = (thread.years || []).slice().sort((a, b) => a - b);
+  const useYs = ys.length ? ys : [1, 2, 3];
+  const clauses = useYs.map((y, i) => {
+    const isFirst = i === 0, isLast = i === useYs.length - 1;
+    const role = isFirst ? '스레드 출발 활동' : isLast ? '심화 활동' : '확장 활동';
+    const verb = isFirst ? '에서 시작해' : isLast ? '(으)로 이어졌습니다' : '(으)로 넓혔고';
+    return { year: y, role, verb, hint: isFirst ? (thread.topic || '') : '' };
+  });
+  const text = clauses.map(c => `${c.year}학년 [${c.role}${c.hint ? ': ' + c.hint + ' 관련' : ''}]${c.verb}`).join(', ')
+    + `. 그래서 [${dept || '지원 학과'}]를 지원합니다.`;
+  return { topic: thread.topic, dept: dept || null, clauses, text };
+}
+// 스레드×학과 → 예상 면접 질문 상위 N (키워드 겹침·계열 정합). 근거(연결 키워드) 동반.
+// 매칭 없으면 [] (호출부에서 '직접 대비 필요' 표시). 판정·선별과 무관한 표시 전용.
+function threadInterviewMatches(thread, dept, concept, topN) {
+  const anchors = new Set();
+  const topicNorm = thread.topic ? String(thread.topic).replace(/\s+/g, '') : '';
+  if (topicNorm.length >= 2) anchors.add(topicNorm);
+  // 학과명 어근: '학과/학부/전공/계열' 우선 제거 후 잔여 '과' 제거. 단일 글자 어근은 오매칭 방지로 제외.
+  const base = String(dept || '').replace(/(학과|학부|전공|계열)$/, '').replace(/과$/, '');
+  if (base.length >= 2) anchors.add(base);
+  for (const k of (DEPT_KEYWORDS[dept] || [])) { const kk = String(k).replace(/\s+/g, ''); if (kk.length >= 2) anchors.add(kk); }
+  const field = CONCEPT_TO_FIELD[concept] || null;
+  const scored = [];
+  for (const q of (INTERVIEW_QBANK || [])) {
+    const hitKw = q.kw.filter(k => {
+      const kk = k.replace(/\s+/g, '');
+      for (const a of anchors) { if (a && (a.includes(kk) || kk.includes(a))) return true; }
+      return false;
+    });
+    const fieldMatch = field && q.field === field;
+    const score = hitKw.length * 2 + (fieldMatch ? 1 : 0);
+    if (score > 0) scored.push({ q: q.q, field: q.field, score, reason: hitKw.length ? '키워드: ' + hitKw.join('·') : '계열 정합: ' + q.field });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topN || 3);
+}
+// 학생의 계열 정합 스레드별 서사 틀 + 예상 질문 묶음 (결과지·화면 공용)
+function studentNarrativeThreads(student, ra, maxThreads) {
+  const dept = (ra.deptMatch || [])[0] || null;
+  const threads = studentTopicThreads(student, ra).filter(t => t.aligned && t.continuity !== '단발');
+  return threads.slice(0, maxThreads || 3).map(t => ({
+    thread: t, narrative: threadNarrative(t, dept),
+    questions: threadInterviewMatches(t, dept, ra.concept, 3)
+  }));
+}
+
 // ═══════════════════════════════════════════════
 // 생기부 ANALYSIS ENGINE
 // ═══════════════════════════════════════════════
@@ -5817,6 +5891,8 @@ const INTAKE_QUESTIONS = [
     reflect: "'낮음' → 면접형 종합 카드에 '면접 부담' 참고 태그 표시" },
 ];
 
+// 면접 문항 은행 (interview_bank.csv → JSON 주입) — [{field계열, kw:[키워드], q문항}]
+const INTERVIEW_QBANK = [{"field":"공학","kw":["프로그래밍","알고리즘","코딩","소프트웨어"],"q":"관심 있는 알고리즘 문제를 하나 소개하고 어떤 방식으로 접근했는지 설명해 보세요."},{"field":"공학","kw":["로봇","자동화","설계","하드웨어"],"q":"직접 설계하거나 개선해 본 장치·프로그램이 있다면 그 원리와 한계를 말해 보세요."},{"field":"공학","kw":["인공지능","데이터","머신러닝","모델"],"q":"인공지능이 사회에 미칠 부정적 영향 한 가지와 공학도로서의 대응을 말해 보세요."},{"field":"공학","kw":["회로","전자","신호","반도체"],"q":"전공에서 배우고 싶은 핵심 개념 하나를 고르고 왜 흥미로운지 설명해 보세요."},{"field":"자연과학","kw":["실험","탐구","관찰","가설","변인"],"q":"가장 인상 깊었던 탐구 활동의 가설·변인·결론을 순서대로 설명해 보세요."},{"field":"자연과학","kw":["물리","역학","에너지","힘"],"q":"일상에서 관찰한 물리 현상을 하나 골라 원리로 설명해 보세요."},{"field":"자연과학","kw":["화학","반응","분자","실험"],"q":"실험 중 예상과 다른 결과가 나왔을 때 어떻게 원인을 찾았는지 말해 보세요."},{"field":"자연과학","kw":["생명","세포","유전","생태"],"q":"생명과학에서 최근 관심 있게 본 주제와 그 사회적 의미를 말해 보세요."},{"field":"수학","kw":["증명","논리","함수","수열","통계"],"q":"수학 개념 하나를 실생활 문제에 적용해 본 경험을 설명해 보세요."},{"field":"수학","kw":["모델링","확률","미적분","기하"],"q":"풀이가 막혔을 때 끝까지 시도해 해결한 문제의 과정을 말해 보세요."},{"field":"의료","kw":["간호","환자","돌봄","보건","생명"],"q":"의료인에게 가장 중요한 자질이 무엇이라고 생각하는지 근거와 함께 말해 보세요."},{"field":"의료","kw":["의학","질병","공중보건","윤리"],"q":"의료 자원이 부족한 상황에서의 우선순위 판단 기준을 설명해 보세요."},{"field":"교육","kw":["교육","수업","멘토링","학생","배움"],"q":"또래를 가르치거나 도운 경험에서 배운 교육의 의미를 말해 보세요."},{"field":"교육","kw":["진로","성장","공동체","협력"],"q":"좋은 교사가 갖춰야 할 역량 하나를 자신의 경험과 연결해 말해 보세요."},{"field":"경영","kw":["경영","경제","시장","소비자","창업"],"q":"관심 있는 기업·산업의 문제를 하나 짚고 개선 아이디어를 말해 보세요."},{"field":"경영","kw":["금융","회계","투자","데이터"],"q":"데이터를 근거로 의사결정을 내려 본 경험이 있다면 설명해 보세요."},{"field":"법률","kw":["법","정의","권리","규범","판례"],"q":"사회적으로 논쟁적인 규칙 하나를 골라 찬반 논거를 균형 있게 말해 보세요."},{"field":"법률","kw":["행정","정책","공공","시민"],"q":"공공 문제 해결을 위해 제안하고 싶은 정책과 그 근거를 말해 보세요."},{"field":"인문","kw":["문학","해석","서사","텍스트","비평"],"q":"감명 깊게 읽은 책 한 권을 골라 자신의 관점으로 재해석해 보세요."},{"field":"인문","kw":["역사","철학","사상","맥락"],"q":"역사·철학 개념 하나가 오늘의 문제에 주는 시사점을 말해 보세요."},{"field":"인문","kw":["언어","어학","소통","번역"],"q":"언어를 통해 다른 문화를 이해한 경험을 구체적으로 말해 보세요."},{"field":"사회","kw":["사회","공동체","불평등","미디어","여론"],"q":"관심 있는 사회 문제의 원인을 다각도로 분석해 말해 보세요."},{"field":"사회","kw":["심리","인간","행동","관계"],"q":"사람의 행동을 이해하려 관찰·조사해 본 경험을 설명해 보세요."},{"field":"예술","kw":["디자인","표현","창작","미술","영상"],"q":"자신의 창작물에 담은 메시지와 표현 의도를 설명해 보세요."},{"field":"체육","kw":["스포츠","운동","체육","훈련","협동"],"q":"팀 활동에서 갈등을 조정하거나 목표를 이룬 경험을 말해 보세요."},{"field":"공통","kw":["리더십","협력","갈등","소통","주도"],"q":"팀에서 의견이 갈렸을 때 어떻게 조율했는지 구체적으로 말해 보세요."},{"field":"공통","kw":["실패","극복","성장","도전"],"q":"실패했지만 배움이 컸던 경험과 그 이후의 변화를 말해 보세요."},{"field":"공통","kw":["독서","탐구","호기심","자기주도"],"q":"스스로 파고들어 알아낸 주제 하나를 소개하고 왜 끌렸는지 말해 보세요."}];
 
 function assessCompetencies(student, analysis) {
   const scores = {

@@ -1214,6 +1214,39 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 주제 스레드 → 서사 문장 틀 + 예상 면접 질문 매칭
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 1) 서사 틀 생성: 합성 스레드(1→2→3) × 학과 → 학년별 빈칸 + '그래서 [학과]를 지원합니다'
+    const th = { topic: '화학', years: [1, 2, 3], continuity: '1→2→3학년 연속', aligned: true };
+    const narr = threadNarrative(th, '화학과');
+    const narrOk = narr.text.includes('1학년 [스레드 출발 활동: 화학 관련]에서 시작해')
+      && narr.text.includes('2학년 [확장 활동]')
+      && narr.text.includes('3학년 [심화 활동]')
+      && narr.text.includes('그래서 [화학과]를 지원합니다') && narr.clauses.length === 3;
+    // 2) 문항 매칭: 화학 스레드 × 자연과학 → 은행에서 상위 질문 + 근거(키워드/계열)
+    const q = threadInterviewMatches(th, '화학과', '과학', 3);
+    const matchOk = q.length >= 1 && q.length <= 3 && q.every(x => x.q && x.reason)
+      && q.some(x => /화학|실험|계열 정합/.test(x.reason));
+    // 3) 무매칭 정직 표시: 은행과 겹치지 않는 토큰·학과·계열 → 빈 배열(직접 대비 필요)
+    const none = threadInterviewMatches({ topic: 'ㅁㄴㅇㄹ존재불가', years: [2, 3] }, '가상무관학과', null, 3);
+    // 결과지 학생용에 ④ 블록 렌더 (실학생) — 오염 없음
+    const s = STUDENTS.find(x => x.name === '오연서');
+    const sheet = counselSheetStudentHtml(s, 'x');
+    const sheetOk = sheet.includes('④ 나의 서사 틀 + 예상 질문') && !/undefined|NaN|>null</.test(sheet);
+    return { narrText: narr.text, narrOk, qN: q.length, reasons: q.map(x => x.reason), matchOk, noneN: none.length, sheetOk,
+      qbankN: INTERVIEW_QBANK.length };
+  });
+  assert(`서사질문#1(서사 틀 생성): "${r.narrText.slice(0, 46)}…" — 학년별 빈칸 + '그래서 [학과] 지원' 3절`,
+    r.narrOk === true, JSON.stringify({ narrText: r.narrText }));
+  assert(`서사질문#2(문항 매칭): 화학 스레드 → 상위 ${r.qN}문항 + 근거(${r.reasons.join(' / ')}) · 은행 ${r.qbankN}문항`,
+    r.matchOk === true && r.sheetOk === true, JSON.stringify({ qN: r.qN, reasons: r.reasons, sheetOk: r.sheetOk }));
+  assert(`서사질문#3(무매칭 정직 표시): 은행에 없는 주제·계열 → 매칭 ${r.noneN}건(빈 배열=직접 대비 필요)`,
+    r.noneN === 0, JSON.stringify({ noneN: r.noneN }));
+}
+
+// ═══════════════════════════════════════════════
 // 수능최저 시뮬레이터 — judgeMin (충족/근접/미충족/판정불가)
 // ═══════════════════════════════════════════════
 {

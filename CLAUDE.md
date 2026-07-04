@@ -51,6 +51,7 @@
 | `classCardConflicts()` | 학급 내 같은 (대학·전형·학과) 6지원 경합 맵 |
 | `tagSentence` / `tagStudentRecords` | 세특 문장 태깅 (신호 2종=상 / 1종=중 / 0종=하) |
 | `analyzeRecord` / `studentTopicThreads` | 생기부 질적 분석 · 주제 스레드(연속성·계열 정합) |
+| `threadNarrative`/`threadInterviewMatches`/`studentNarrativeThreads` | 계열 정합 스레드 → 서사 문장 틀(학년별 빈칸+지원 학과) + 예상 면접 질문(`INTERVIEW_QBANK`=interview_bank.csv, 키워드·계열 매칭, 근거 동반, 무매칭 시 '직접 대비 필요'). 결과지 학생용 ④블록·표시 전용 |
 
 ## 검증 절차
 
