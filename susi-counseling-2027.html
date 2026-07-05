@@ -383,8 +383,15 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 @media (prefers-color-scheme: dark) {
   #buildStamp { color:rgba(200,200,200,.6); background:rgba(30,30,30,.6); border-color:rgba(255,255,255,.12); }
 }
+#counselModeBar {
+  position:fixed; top:8px; right:12px; z-index:2147483100;
+  display:flex; align-items:center; gap:8px; padding:5px 12px; border-radius:20px;
+  background:var(--card); border:1px solid var(--teal); font-size:12px; color:var(--sub);
+  box-shadow:0 2px 10px rgba(0,0,0,.12);
+}
+@media (max-width:640px){ #counselModeBar{ top:6px; right:8px; padding:4px 9px; font-size:11px; } }
 @media print {
-  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn, #buildStamp { display:none !important; }
+  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn, #buildStamp, #counselModeBar { display:none !important; }
   .main { margin-left:0; max-width:100%; padding:10px; }
   .tab-panel { display:block !important; page-break-before:always; }
   body { background:#fff; font-size:11px; }
@@ -472,7 +479,12 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 </head>
 <body>
 <!-- 빌드 버전 표식 (build.py 자동 주입: 빌드 일시 · 커밋 7자리) — 화면 우하단 고정, 인쇄 시 숨김 -->
-<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 04:22 · 44a18bb</div>
+<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 04:46 · 26ea510</div>
+<!-- 상담 모드 토글 (화면 상단 고정, 인쇄 시 숨김) — 기본 켜짐 -->
+<div id="counselModeBar" title="켜짐: 다른 학생 정보를 숨깁니다 (개인정보 보호). 끄면 교사 전용 정보가 표시됩니다.">
+  <span style="font-weight:800">🔒 상담 모드</span>
+  <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="checkbox" id="counselModeChk" onchange="setCounselMode(this.checked)" style="vertical-align:-2px"> <span id="counselModeState" style="font-weight:700"></span></label>
+</div>
 <button class="menu-toggle" id="menuToggle">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app-layout">
@@ -3327,6 +3339,34 @@ function judgeBand(diff, source) {
 // STATE
 // ═══════════════════════════════════════════════
 let selectedIdx = null;
+// ═══ 상담 모드 (개인정보 교차 노출 차단) — 기본 켜짐(안전 우선) ═══
+// 켜짐: 다른 학생 실명 미표시. 경합은 인원수만("경합: 학급 내 N명"). 학급 전체 화면 차단.
+// 끄기: 확인 대화상자 경유(교사 단독 화면 경고). ※ 결과지는 토글 무관 항상 타 학생 실명 0건.
+let _counselMode = (() => { try { const v = localStorage.getItem('counselMode'); return v === null ? true : v !== 'false'; } catch (e) { return true; } })();
+function setCounselMode(on) {
+  if (!on && !confirm('다른 학생 정보가 표시됩니다. 교사 단독 화면에서만 사용하세요.')) { syncCounselToggle(); return; }
+  _counselMode = !!on;
+  try { localStorage.setItem('counselMode', String(_counselMode)); } catch (e) {}
+  syncCounselToggle();
+  if (selectedIdx != null) selectStudent(selectedIdx); else renderDashboard();
+  renderRoster();
+}
+function syncCounselToggle() {
+  const t = document.getElementById('counselModeChk'); if (t) t.checked = _counselMode;
+  const lbl = document.getElementById('counselModeState');
+  if (lbl) { lbl.textContent = _counselMode ? '켜짐 · 개인정보 보호' : '꺼짐 · 교사 전용'; lbl.style.color = _counselMode ? 'var(--teal)' : 'var(--red)'; }
+  const bar = document.getElementById('counselModeBar');
+  if (bar) bar.style.borderColor = _counselMode ? 'var(--teal)' : 'var(--red)';
+}
+// 상담 모드에서 학급 전체 화면 접근 시 대체 안내
+function counselBlockNoticeHtml() {
+  return `<div class="glass" style="text-align:center;padding:40px 20px">
+    <div style="font-size:40px;margin-bottom:8px">🔒</div>
+    <div style="font-size:16px;font-weight:800;color:var(--teal);margin-bottom:6px">교사 전용 — 상담 모드 해제 필요</div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.7;max-width:420px;margin:0 auto">학급 대시보드·관제·경합 히트맵에는 다른 학생의 정보가 포함됩니다.<br>상담 모드가 켜져 있어 표시하지 않습니다. 교사 단독 화면에서만 확인하세요.</div>
+    <button onclick="setCounselMode(false)" style="margin-top:14px;padding:8px 18px;border-radius:8px;border:1px solid var(--red);background:none;color:var(--red);cursor:pointer;font-family:inherit;font-size:12px">상담 모드 끄기 (교사 확인)</button>
+  </div>`;
+}
 let currentTab = 'score';
 let univResults = [];
 let favorites = JSON.parse(localStorage.getItem('susi27_favs') || '{}');
@@ -4997,7 +5037,7 @@ function portfolioSimHtml(student) {
         }
         return pk.minInfo && pk.minInfo.has ? `<div style="font-size:9px;margin-top:2px;color:${pk.minInfo.risky ? 'var(--red)' : 'var(--green)'};font-weight:600">수능최저 ${pk.minInfo.risky ? '미충족 위험(내신 추정)' : '충족 가능(내신 추정)'}</div>` : '';
       })()}
-      ${rivals.length ? `<div style="font-size:9px;margin-top:2px;color:var(--purple);font-weight:700">경합(동일 대학·전형·학과): ${rivals.map(x => x.seat + '번 ' + esc(x.name)).join(', ')}</div>` : ''}
+      ${rivals.length ? `<div style="font-size:9px;margin-top:2px;color:var(--purple);font-weight:700">경합: 학급 내 ${rivals.length}명${_counselMode ? '' : ' (' + rivals.map(x => x.seat + '번 ' + esc(x.name)).join(', ') + ')'}</div>` : ''}
     </div>`;
   });
   html += '</div>';
@@ -7657,11 +7697,15 @@ function renderRoster() {
   STUDENTS.forEach((s, i) => {
     const avg = calcWeightedAvg(s);
     const cls = selectedIdx === i ? ' active' : '';
+    // 상담 모드: 선택된 본인 외 다른 학생의 실명·등급은 로스터에서 가림 (번호만 남겨 교사 내비게이션 유지)
+    const mask = _counselMode && selectedIdx !== i;
+    const nameHtml = mask ? '<div class="name" style="color:var(--muted)">●●●</div>' : `<div class="name">${esc(s.name)}</div>`;
+    const gradeHtml = mask ? '' : `<div class="grade-chip" style="color:${gradeColor(avg)}">${avg.toFixed(2)}등급</div>`;
     html += `<button class="student-btn${cls}" data-idx="${i}">
       <div class="student-avatar">${s.seat}</div>
       <div class="student-meta">
-        <div class="name">${esc(s.name)}</div>
-        <div class="grade-chip" style="color:${gradeColor(avg)}">${avg.toFixed(2)}등급</div>
+        ${nameHtml}
+        ${gradeHtml}
       </div>
     </button>`;
   });
@@ -8043,6 +8087,8 @@ function renderDashboard() {
   document.getElementById('studentView').style.display = 'none';
   const el = document.getElementById('dashboard');
   el.style.display = '';
+  // 상담 모드: 학급 전체 화면(대시보드·관제·경합 히트맵)은 다른 학생 정보 포함 → 차단 안내
+  if (_counselMode) { el.innerHTML = counselBlockNoticeHtml(); return; }
 
   const avgs = STUDENTS.map(s => calcWeightedAvg(s));
   const classAvg = avgs.reduce((a,b) => a+b, 0) / avgs.length;
@@ -11315,6 +11361,7 @@ document.getElementById('homeBtn').addEventListener('click', () => {
   renderDashboard();
   renderRoster();
 });
+syncCounselToggle();   // 상담 모드 토글 초기 상태 반영 (기본 켜짐)
 
 function downloadFile() {
   const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;

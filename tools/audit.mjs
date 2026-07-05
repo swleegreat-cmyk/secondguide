@@ -304,6 +304,32 @@ for (const [t, desc, list] of TYPES) {
     r.bad.length === 0, r.bad.join(' | '));
 }
 
+// ═══════════════════════════════════════════════
+// 불변식 13: 결과지 개인정보 격리 — 결과지(학생용·학부모용) 출력에 본인 외 학생 실명 0건
+// (토글과 무관하게 항상. 상담 모드 ON/OFF 양쪽에서 검사)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const bad = [];
+    const seats = [STUDENTS[0], STUDENTS[Math.floor(STUDENTS.length / 2)], STUDENTS[STUDENTS.length - 1]];
+    for (const mode of [true, false]) {
+      _counselMode = mode;
+      for (const s of seats) {
+        const others = STUDENTS.filter(x => x.seat !== s.seat && x.name && x.name.length >= 2).map(x => x.name);
+        let html = '';
+        try { html = counselSheetStudentHtml(s, 'x') + counselSheetParentHtml(s, 'y'); }
+        catch (e) { bad.push(`${s.name}/결과지 예외`); continue; }
+        const hits = others.filter(n => html.includes(n));
+        if (hits.length) bad.push(`${s.name}(모드${mode ? 'ON' : 'OFF'}): 타 학생 실명 ${hits.slice(0, 3).join(',')}`);
+      }
+    }
+    _counselMode = true;
+    return { bad };
+  });
+  check('불변식13: 결과지 개인정보 격리 — 학생용·학부모용 출력에 본인 외 학생 실명 0건(토글 무관)',
+    r.bad.length === 0, r.bad.join(' | '));
+}
+
 if (pageErrors.length) check('불변식0: JS 런타임 오류 없음', false, pageErrors.join(' | '));
 
 let fail = 0;

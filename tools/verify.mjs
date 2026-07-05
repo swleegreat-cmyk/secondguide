@@ -1340,6 +1340,57 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 상담 모드 — 타 학생 실명 0건(모드 ON) · 결과지 실명 0건(토글 무관) · 교사 모드 명단 표시
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '김수안');
+    const others = STUDENTS.filter(x => x.seat !== s.seat && x.name && x.name.length >= 2).map(x => x.name);
+    const otherHits = h => others.filter(n => h.includes(n));
+    const saved = _counselMode;
+    // 1) 상담 모드 ON: 학생 화면 전체(6지원 시뮬 포함)에 타 학생 실명 0건 + 경합 인원수 표기
+    _counselMode = true;
+    selectedIdx = STUDENTS.indexOf(s);
+    univResults = runAllUniversities(s);
+    ['panel-susi', 'panel-score', 'panel-record'].forEach(id => { if (!document.getElementById(id)) document.body.insertAdjacentHTML('beforeend', `<div id="${id}"></div>`); });
+    renderSusiTab(s, ANALYSIS[s.seat] || {});
+    const simOn = portfolioSimHtml(s);
+    const onOtherNames = otherHits(simOn);
+    const onCount = /경합: 학급 내 \d+명/.test(simOn) && !/경합: 학급 내 \d+명 \(/.test(simOn);
+    // 로스터 마스킹: 상담 모드 → 비선택 학생 실명 미표시(●●●)
+    renderRoster();
+    const rosterHtml = document.getElementById('roster') ? document.getElementById('roster').innerHTML : '';
+    const rosterOtherNames = otherHits(rosterHtml);
+    // 대시보드 접근 차단
+    if (!document.getElementById('dashboard')) document.body.insertAdjacentHTML('beforeend', '<div id="dashboard"></div>');
+    renderDashboard();
+    const dashBlocked = document.getElementById('dashboard').innerHTML.includes('교사 전용 — 상담 모드 해제 필요');
+    // 2) 결과지: 토글과 무관하게 타 학생 실명 0건 (ON/OFF 각각)
+    const sheetOnOther = otherHits(counselSheetStudentHtml(s, 'a') + counselSheetParentHtml(s, 'b'));
+    _counselMode = false;
+    const sheetOffOther = otherHits(counselSheetStudentHtml(s, 'c') + counselSheetParentHtml(s, 'd'));
+    // 3) 교사 모드(OFF): 6지원 경합에 실명 명단 표시
+    selectedIdx = STUDENTS.indexOf(s);
+    const simOff = portfolioSimHtml(s);
+    const offNamesShown = otherHits(simOff).length > 0 && /경합: 학급 내 \d+명 \(/.test(simOff);
+    _counselMode = saved;
+    return {
+      onOtherNames, onCount, rosterOtherNames, dashBlocked,
+      sheetOnOther, sheetOffOther, offNamesShown,
+      offNameCount: otherHits(simOff).length
+    };
+  });
+  assert(`상담모드#1(ON 타 학생 실명 0건): 김수안 학생 화면·6지원 경합 실명 ${r.onOtherNames.length}건 + 인원수 표기(${r.onCount}) + 로스터 실명 ${r.rosterOtherNames.length}건 + 대시보드 차단(${r.dashBlocked})`,
+    r.onOtherNames.length === 0 && r.onCount === true && r.rosterOtherNames.length === 0 && r.dashBlocked === true,
+    JSON.stringify({ onOtherNames: r.onOtherNames.slice(0, 3), rosterOtherNames: r.rosterOtherNames.slice(0, 3) }));
+  assert(`상담모드#2(결과지 실명 0건·토글 무관): 학생용+학부모용 타 학생 실명 — ON ${r.sheetOnOther.length}건 · OFF ${r.sheetOffOther.length}건`,
+    r.sheetOnOther.length === 0 && r.sheetOffOther.length === 0,
+    JSON.stringify({ sheetOnOther: r.sheetOnOther.slice(0, 3), sheetOffOther: r.sheetOffOther.slice(0, 3) }));
+  assert(`상담모드#3(교사 모드 명단 표시): OFF에서 6지원 경합에 실명 ${r.offNameCount}건 노출(명단 형식)`,
+    r.offNamesShown === true, JSON.stringify({ offNamesShown: r.offNamesShown, offNameCount: r.offNameCount }));
+}
+
+// ═══════════════════════════════════════════════
 // 상담 메모 약속 구조 — 마이그레이션 보존 · 할 일 이월 · 예정일 경보
 // ═══════════════════════════════════════════════
 {
