@@ -472,7 +472,7 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 </head>
 <body>
 <!-- 빌드 버전 표식 (build.py 자동 주입: 빌드 일시 · 커밋 7자리) — 화면 우하단 고정, 인쇄 시 숨김 -->
-<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 01:20 · e80499c</div>
+<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 04:22 · 44a18bb</div>
 <button class="menu-toggle" id="menuToggle">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app-layout">
@@ -7016,13 +7016,20 @@ function calcAdmissionStrategy(student, analysis) {
   else if (yearChars[2] > yearChars[1]) 종합 += 5;
   else 종합 += 2;
 
-  // Fit score
-  const concept = analyzeRecord(student, a).concept;
-  const fitData = calcFitScore(student, a, concept);
-  if (fitData.score >= 70) 종합 += 12;
-  else if (fitData.score >= 50) 종합 += 8;
-  else if (fitData.score >= 30) 종합 += 4;
-  else 종합 += 1;
+  // 전공 적합 신호 — deptFit 3등급 기반 (구형 calcFitScore 점수 게이트 대체)
+  // 근거: 종합전형 서류는 '지원 학과 고유 활동 근거'를 본다. deptFit는 학과 고유 키워드 문장
+  //   매칭으로 이를 3등급화한다. 가점: '강한 정합'(고유+공통) 존재 → +12(근거 강함),
+  //   최상이 '계열 정합'(공통만) → +8(근거 중간), '근거 부족'만 → +0 + 종합근거부족 플래그.
+  //   학과 미매칭(deptFit 없음) → 가점·플래그 없음. (구형 fitData.score≥70/50/30→+12/8/4는 학과
+  //   무관 카운트라 폐기 — 같은 종합전형 신호를 이제 학과 정합 근거로만 준다.)
+  const _deptFit = analyzeRecord(student, a).deptFit || [];
+  const _bestFit = _deptFit.some(d => d.grade === '강한 정합') ? '강한 정합'
+    : _deptFit.some(d => d.grade === '계열 정합') ? '계열 정합'
+    : _deptFit.length ? '근거 부족' : null;
+  let 종합근거부족 = false;
+  if (_bestFit === '강한 정합') 종합 += 12;
+  else if (_bestFit === '계열 정합') 종합 += 8;
+  else if (_bestFit === '근거 부족') 종합근거부족 = true;   // +0
 
   // 종합 advantage when grades are weak but records are strong
   if (avg > 5.0 && totalChars > 4000 && keywordCount >= 8) 종합 += 10;
@@ -7118,6 +7125,7 @@ function calcAdmissionStrategy(student, analysis) {
     } else {
       detail = '생기부 활동이 풍부하고 진로 일관성이 있어 종합전형에서 유리합니다. 서류와 면접 준비에 집중하세요.';
     }
+    if (종합근거부족) detail += ' (참고: 지원 학과 고유 활동 근거가 부족해 종합전형 근거 보강이 필요합니다.)';
   } else {
     strategy = '논술전형 병행';
     detail = '수학/과학 교과 역량이 강해 논술전형에서 좋은 결과를 기대할 수 있습니다. 교과 또는 종합전형과 병행하세요.';
@@ -7142,7 +7150,8 @@ function calcAdmissionStrategy(student, analysis) {
     keywordCount,
     foundKeywords: foundKeywords.slice(0, 6),
     recordChars: totalChars,
-    fitScore: fitData.score
+    deptFitGrade: _bestFit,          // 종합 가점 근거 (강한/계열/근거 부족/null)
+    종합근거부족: 종합근거부족
   };
 }
 
@@ -8108,8 +8117,8 @@ function renderDashboard() {
     html += '</div>';
   }
 
-  // 전공적합성 분포
-  html += '<h3 style="margin-top:20px">전공적합성 분포</h3>';
+  // 생기부 충실도 분포 (구형 calcFitScore — '전공적합성' 표시명은 학과별 매칭 등급 전용)
+  html += '<h3 style="margin-top:20px">생기부 충실도 분포 <span style="font-size:11px;color:var(--muted);font-weight:400">(기록 충실도 점수 · 전공 적합은 생기부 분석 탭 학과별 매칭 등급 참조)</span></h3>';
   const fitBuckets = [0,0,0,0]; // 0-25, 26-50, 51-75, 76-100
   const fitLabels = ['25이하','26-50','51-75','76+'];
   const fitColors = ['var(--red)','var(--orange)','var(--blue)','var(--green)'];
@@ -8222,7 +8231,7 @@ function renderDashboard() {
       if (diff > 1.0) reasons.push({text:'성적 급락 (' + Math.abs(diff).toFixed(1) + '등급↓)', severity:3});
       else if (diff < -1.0) reasons.push({text:'성적 급상승 (' + Math.abs(diff).toFixed(1) + '등급↑)', severity:1});
     }
-    if (fit.score < 30) reasons.push({text:'전공적합성 낮음', severity:2});   // 단일 점수 표기 없이 판정만
+    if (fit.score < 30) reasons.push({text:'생기부 충실도 낮음', severity:2});   // 단일 점수 표기 없이 판정만 (구형 calcFitScore)
     if (!ra.concept) reasons.push({text:'진로 방향 미설정', severity:2});
     if (ra.storyArc.length >= 2) {
       const first = ra.storyArc[0], last = ra.storyArc[ra.storyArc.length-1];
@@ -9006,7 +9015,7 @@ function renderSusiTab(student, analysis) {
   </div>`;
 
   // Key indicators
-  if (strat.foundKeywords.length > 0 || strat.fitScore > 0) {
+  if (strat.foundKeywords.length > 0 || strat.deptFitGrade) {
     html += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
     if (strat.foundKeywords.length > 0) {
       html += `<span style="font-size:10px;padding:2px 8px;background:rgba(0,122,255,0.08);border-radius:10px;color:var(--blue)">생기부 키워드: ${strat.foundKeywords.join(', ')}</span>`;
@@ -9849,8 +9858,8 @@ function showUnivDetail(univName) {
     // 단일 점수(N점/100점 만점) 게이지는 규칙상 표시하지 않음 — 요인별 근거만 보여준다.
     const fitLabel = fitData.score >= 70 ? '높음' : fitData.score >= 40 ? '보통' : '낮음';
     html += `<div style="margin:12px 0;font-size:12px">
-      <strong style="color:${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}">전공적합성 ${fitLabel}</strong>
-      <span style="color:var(--muted);font-size:10px"> — 아래 요인별 근거로 판단</span>
+      <strong style="color:${fitData.score >= 70 ? 'var(--green)' : fitData.score >= 40 ? 'var(--blue)' : 'var(--orange)'}">생기부 충실도 ${fitLabel}</strong>
+      <span style="color:var(--muted);font-size:10px"> — 아래 요인별 근거로 판단 (전공 적합은 학과별 매칭 등급 참조)</span>
     </div>`;
 
     fitData.factors.forEach(f => {
@@ -9912,8 +9921,8 @@ function showUnivDetail(univName) {
   if (analysis.wk && analysis.wk.length >= 2) disadvantages.push('약점 교과 ' + analysis.wk.length + '개 — 약점 보완 노력 설명 준비 필요');
   if (recordAnalysis.concept) advantages.push(`진로 분야 '${recordAnalysis.concept}' 명확 — 학과 선택 근거 확보`);
   if (result.cutline && result.cutline.min) disadvantages.push('수능최저 충족 필요 — 수능 대비도 병행해야 함');
-  if (comp.is종합 && comp.fitData.score >= 60) advantages.push('전공적합성 높음 — 서류 경쟁력 양호');
-  else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push('전공적합성 낮음 — 서류 보완 필요');
+  if (comp.is종합 && comp.fitData.score >= 60) advantages.push('생기부 충실도 높음 — 서류 경쟁력 양호');
+  else if (comp.is종합 && comp.fitData.score < 40) disadvantages.push('생기부 충실도 낮음 — 서류 보완 필요');
   if (comp.is논술) {
     const avg = calcWeightedAvg(student);
     if (avg <= 3.5) advantages.push('내신 3.5 이내 — 논술전형 내신 감점 최소화');
@@ -10416,9 +10425,10 @@ function renderRecordTab(student, analysis) {
   // 역량 분석 (5대 핵심 역량)
   const compData = assessCompetencies(student, analysis);
   html += '<div class="glass"><h3>핵심 역량 분석</h3>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">대학이 평가하는 5대 핵심 역량을 생기부 기반으로 분석합니다.</p>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">대학이 평가하는 핵심 역량을 생기부 기반으로 분석합니다. (전공 적합은 아래 학과별 매칭 등급으로 통일)</p>';
   const compMax = 30;
-  const compOrder = ['학업역량','전공적합성','자기주도성','창의융합','나눔배려'];
+  // '전공적합성'은 위 학과별 매칭 등급(deptFit)으로 통일 — 여기 역량 바에서는 제외해 중복 노출 방지
+  const compOrder = ['학업역량','자기주도성','창의융합','나눔배려'];
   compOrder.forEach(name => {
     const val = compData.scores[name];
     const pct = Math.min(100, (val / compMax) * 100);
@@ -10435,6 +10445,16 @@ function renderRecordTab(student, analysis) {
       ${evList.length > 0 ? `<div style="font-size:10px;color:var(--sub);margin-top:2px">${evList.map(e => esc(e)).join(' / ')}</div>` : ''}
     </div>`;
   });
+  // 전공적합성 = deptFit 3등급으로 표기 (역량 바 점수 대신 학과별 매칭 등급)
+  {
+    const _best = (ra.deptFit || []).some(d => d.grade === '강한 정합') ? '강한 정합'
+      : (ra.deptFit || []).some(d => d.grade === '계열 정합') ? '계열 정합'
+      : (ra.deptFit || []).length ? '근거 부족' : '학과 미매칭';
+    const _bc = _best === '강한 정합' ? 'var(--green)' : _best === '계열 정합' ? 'var(--blue)' : 'var(--orange)';
+    html += `<div style="margin:8px 0;display:flex;justify-content:space-between;font-size:12px">
+      <span style="font-weight:600">전공적합성 <span style="font-size:9px;color:var(--muted);font-weight:400">(학과별 매칭 등급)</span></span>
+      <span style="color:${_bc};font-weight:700">${esc(_best)}</span></div>`;
+  }
   const strongComp = compOrder.filter(n => compData.scores[n] >= 20);
   const weakComp = compOrder.filter(n => compData.scores[n] < 10);
   if (strongComp.length > 0 || weakComp.length > 0) {
@@ -10890,18 +10910,18 @@ function renderMemoTab(student) {
     html += `<div><strong>진로:</strong> ${analysis.career_flow.map(([y,c]) => `${y}학년:${c}`).join(' → ')}</div>`;
   }
 
-  // Top 5 university matches
-  const top5 = univResults.filter(r => r.reliability === 'high').slice(0, 5);
-  if (top5.length > 0) {
-    html += '<div style="margin-top:12px"><strong>상위 5개 대학 매칭:</strong></div>';
-    top5.forEach(r => {
-      const comp = calcCompositeScore(r, student, analysis);
-      html += `<div style="padding:4px 0">· ${esc(r.univ)} — ${r.score.toFixed(2)}등급${r.band ? ' (' + r.band.label + ')' : ''} · <strong>${comp.probability}%</strong></div>`;
-    });
-  }
-  // Fit score for print
+  // 바구니 카드 4구간 요약 (구형 대학 단위 확률% 표시 대체 — 판정은 카드 4구간)
+  const _bk = basketCards(student).filter(c => !c.noCut);
+  const _bkDist = { 안정: 0, 적정: 0, 소신: 0, 상향: 0, 유보: 0 };
+  _bk.forEach(c => { if (_bkDist[c.band] != null) _bkDist[c.band]++; });
+  html += '<div style="margin-top:12px"><strong>후보 바구니 4구간 요약:</strong> ';
+  html += _bk.length
+    ? `안정 ${_bkDist.안정} · 적정 ${_bkDist.적정} · 소신 ${_bkDist.소신} · 상향 ${_bkDist.상향}${_bkDist.유보 ? ' · 유보 ' + _bkDist.유보 : ''} <span style="font-size:11px;color:var(--muted)">(담은 카드 ${_bk.length}장)</span>`
+    : '<span style="font-size:12px;color:var(--muted)">바구니에 담은 카드가 없습니다 — 수시 탐색에서 ☆로 후보를 담으세요.</span>';
+  html += '</div>';
+  // 생기부 충실도 (구형 calcFitScore — 이름 정리: '전공적합성'은 학과별 매칭 등급 전용)
   const printFit = calcFitScore(student, analysis, null);
-  html += `<div style="margin-top:8px"><strong>전공적합성:</strong> ${printFit.score}점/100점</div>`;
+  html += `<div style="margin-top:8px"><strong>생기부 충실도:</strong> ${printFit.score}점/100점</div>`;
   html += '</div>';
   html += `<div style="margin-top:12px;display:flex;gap:8px">
     <button onclick="window.print()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--teal);color:#fff;font-family:inherit;font-size:13px;cursor:pointer">현재 화면 인쇄</button>
@@ -10998,7 +11018,7 @@ th{background:#f5f5f0;font-weight:700}
 <h2>1. 학생 기본 정보</h2>
 <div class="grid2">
 <div class="box"><strong>전체 평균등급:</strong> ${avg.toFixed(2)}등급</div>
-<div class="box"><strong>전공적합성:</strong> ${fitData.score}점/100점 (${fitData.score >= 60 ? '우수' : fitData.score >= 35 ? '양호' : '보완필요'})</div>
+<div class="box"><strong>생기부 충실도:</strong> ${fitData.score}점/100점 (${fitData.score >= 60 ? '우수' : fitData.score >= 35 ? '양호' : '보완필요'})</div>
 <div class="box"><strong>진로 키워드:</strong> ${ra.concept || '미설정'}</div>
 <div class="box"><strong>강점 교과:</strong> ${(analysis.str || []).join(', ') || '-'}</div>
 </div>`;

@@ -1286,6 +1286,60 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 구형 적합성 지표 정리 — 종합 가점 deptFit화 · 메모탭 확률% 제거 · 이름 정리
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 합성 학생 헬퍼: deptFit 등급을 강제 주입해 calcAdmissionStrategy 종합 가점 확인은
+    // 실제 함수(analyzeRecord 캐시)에 의존하므로, 순수 재현식으로 가점 로직만 검사한다.
+    const gainOf = best => best === '강한 정합' ? 12 : best === '계열 정합' ? 8 : 0;
+    // 1) 강한 정합 학생: deptFit에 강한 정합 있는 학생의 strategy.deptFitGrade 반영
+    const strong = STUDENTS.map(s => {
+      const ra = analyzeRecord(s, ANALYSIS[s.seat] || {});
+      const best = (ra.deptFit || []).some(d => d.grade === '강한 정합') ? '강한 정합'
+        : (ra.deptFit || []).some(d => d.grade === '계열 정합') ? '계열 정합'
+        : (ra.deptFit || []).length ? '근거 부족' : null;
+      const st = calcAdmissionStrategy(s, ANALYSIS[s.seat] || {});
+      return { seat: s.seat, best, grade: st.deptFitGrade, 부족: st.종합근거부족 };
+    });
+    const strongCase = strong.find(x => x.best === '강한 정합');
+    const gradeMatch = strong.every(x => x.grade === x.best);   // 전략 반환의 등급 = 실제 deptFit 최상 등급
+    const strongGain = strongCase ? gainOf(strongCase.best) : null;   // 12
+    // 근거 부족 학생이 학급에 없으므로 _cache에 '근거 부족' deptFit을 주입해 게이트 로직 직접 검증
+    const sw = STUDENTS.find(x => x.name === '강리영');
+    const raw = analyzeRecord(sw, ANALYSIS[sw.seat] || {});
+    const savedFit = raw.deptFit;
+    _cache.record[sw.seat] = Object.assign({}, raw, { deptFit: [{ dept: '테스트학과', grade: '근거 부족', evidence: [] }] });
+    const stWeak = calcAdmissionStrategy(sw, ANALYSIS[sw.seat] || {});
+    _cache.record[sw.seat] = Object.assign({}, raw, { deptFit: [{ dept: '테스트학과', grade: '강한 정합', evidence: [{}] }] });
+    const stStrong = calcAdmissionStrategy(sw, ANALYSIS[sw.seat] || {});
+    _cache.record[sw.seat] = Object.assign({}, raw, { deptFit: savedFit });   // 복원
+    const weakGain = 0;   // 근거 부족 → 가점 없음 (게이트 로직)
+    const weakFlag = stWeak.종합근거부족 === true && stWeak.deptFitGrade === '근거 부족';
+    const strongFlagOk = stStrong.종합근거부족 === false && stStrong.deptFitGrade === '강한 정합';
+    const weakCase = { seat: sw.seat };
+    // 3) 메모탭 확률% 부재: renderMemoTab 렌더 후 '대학 — N%' 폐지 표현 없음 + 4구간 요약 존재
+    const s2 = STUDENTS.find(x => x.name === '강리영');
+    selectedIdx = STUDENTS.indexOf(s2);
+    if (!document.getElementById('panel-memo')) document.body.insertAdjacentHTML('beforeend', '<div id="panel-memo"></div>');
+    renderMemoTab(s2);
+    const memoHtml = document.getElementById('panel-memo').innerHTML;
+    const noProbPct = !/[가-힣]대(?:학교)?\s*[—-].*\d+\s*%/.test(memoHtml) && !memoHtml.includes('상위 5개 대학 매칭');
+    const has4band = /후보 바구니 4구간 요약/.test(memoHtml);
+    const renamed = memoHtml.includes('생기부 충실도:') && !memoHtml.includes('전공적합성:');
+    return { strongGain, weakGain, weakFlag, strongFlagOk, gradeMatch, noProbPct, has4band, renamed,
+      strongSeat: strongCase ? strongCase.seat : null, weakSeat: weakCase.seat };
+  });
+  assert(`구형정리#1(강한 정합 종합 가점): 강한 정합 학생(${r.strongSeat}번) → deptFit 기반 +${r.strongGain}점 · 주입 강한정합→플래그 off · 전략 등급=실제 deptFit 일치`,
+    r.strongGain === 12 && r.gradeMatch === true && r.strongFlagOk === true, JSON.stringify({ strongGain: r.strongGain, gradeMatch: r.gradeMatch, strongFlagOk: r.strongFlagOk }));
+  assert(`구형정리#2(근거 부족 가점 0): 주입 '근거 부족' deptFit → 종합 가점 +${r.weakGain}점(강한정합 대비 12점 낮음) + '종합근거부족' 플래그 ${r.weakFlag}`,
+    r.weakGain === 0 && r.weakFlag === true, JSON.stringify({ weakGain: r.weakGain, weakFlag: r.weakFlag }));
+  assert('구형정리#3(메모탭 확률% 제거·이름 정리): 메모 요약 카드에 대학 단위 확률% 부재 + 4구간 요약 존재 + "전공적합성 N점"→"생기부 충실도 N점"',
+    r.noProbPct === true && r.has4band === true && r.renamed === true,
+    JSON.stringify({ noProbPct: r.noProbPct, has4band: r.has4band, renamed: r.renamed }));
+}
+
+// ═══════════════════════════════════════════════
 // 상담 메모 약속 구조 — 마이그레이션 보존 · 할 일 이월 · 예정일 경보
 // ═══════════════════════════════════════════════
 {

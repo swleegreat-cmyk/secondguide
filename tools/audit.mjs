@@ -279,6 +279,31 @@ for (const [t, desc, list] of TYPES) {
     r.bad.length === 0 && r.rendered === 9, r.bad.join(' | ') || `rendered=${r.rendered}`);
 }
 
+// ═══════════════════════════════════════════════
+// 불변식 12: 폐지 표현 0건 — 메모 상담 요약 카드에 구형 '대학 단위 확률%' 부재
+// (전형 유형 추천·판정은 4구간/deptFit로 통일. 구형 comp.probability '○○대 — N%' 표시 폐지)
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    // 대학 단위 확률% 패턴: '○○대(학교) — … N%' 또는 폐지된 '상위 5개 대학 매칭' 목록
+    const PROB = /[가-힣A-Za-z]대(?:학교)?\s*[—-][^<]*\d+\s*%/;
+    const bad = [];
+    const seats = [STUDENTS[0], STUDENTS[Math.floor(STUDENTS.length / 2)], STUDENTS[STUDENTS.length - 1]];
+    for (const s of seats) {
+      selectedIdx = STUDENTS.indexOf(s);
+      if (!document.getElementById('panel-memo')) document.body.insertAdjacentHTML('beforeend', '<div id="panel-memo"></div>');
+      try { renderMemoTab(s); } catch (e) { bad.push(`${s.name}/메모 렌더 예외`); continue; }
+      const h = document.getElementById('panel-memo').innerHTML;
+      if (PROB.test(h)) bad.push(`${s.name}: 대학 단위 확률% 잔존`);
+      if (h.includes('상위 5개 대학 매칭')) bad.push(`${s.name}: 폐지된 '상위 5개 대학 매칭' 목록`);
+      if (/전공적합성:\s*\d+점/.test(h)) bad.push(`${s.name}: 구형 '전공적합성 N점' 표시명 잔존`);
+    }
+    return { bad };
+  });
+  check('불변식12: 폐지 표현 0건 — 메모 요약 카드 대학 단위 확률%·구형 표시명 부재',
+    r.bad.length === 0, r.bad.join(' | '));
+}
+
 if (pageErrors.length) check('불변식0: JS 런타임 오류 없음', false, pageErrors.join(' | '));
 
 let fail = 0;
