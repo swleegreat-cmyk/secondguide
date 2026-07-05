@@ -40,6 +40,7 @@
 | `computeScore(subjects, rule, achMap)` | 대학별 반영교과 환산등급. `NAESIN_RULES`는 100개 대학만 보유 |
 | `buildApplicationCards(student)` | 카드 14,265장 생성. `score`(환산)는 규칙 미보유 대학에서 stAvg 폴백 복사 — **표시용이며 판정에 미사용** |
 | `classifyBand(stAvg, g50, g70, cw)` | 4구간 판정: stAvg vs 학과·전형 등급50/70 (min/max 정규화) + 충원배수(cw≥1.0) 한 단계 완화 |
+| `cardVerdictLayers`/`cardSignals`/`verdictMiniDotsHtml` | 카드 3층 판정 요약(1층 결론·2층 신호등·3층 풀이). 판정에 쓰인 값(평균·50/70컷·충원·컷해석주의)만 해석, `classifyBand` 불변. 규칙은 `verdict_rules.js`(신호등 임계값·판단 구절·풀이 템플릿). 카드 행 미니 신호등 3개, 결과지 학부모용 ② 판정 풀이(●◐○) |
 | `getCards(student, filters)` | 카드 조회·필터(계열/전형/지역/구간)·정렬 공통 진입점 |
 | `calcCompositeScore` / `buildFactorBreakdown` | 종합 점수·기여도 (breakdown 합은 항상 100) |
 | `checkMinRequirement(student, minText, dept)` | 수능 최저 충족 판정 (verify.mjs 총 69건 중 최저 판정 케이스가 대부분) |

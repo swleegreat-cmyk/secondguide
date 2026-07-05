@@ -963,7 +963,8 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     return {
       // 학부모용: 6지원 표 + 용어 풀이(GLOSSARY) + 구성 논리
       pRows: (parent.match(/<tr><td>\d+<\/td>/g) || []).length, picks: pf.picks.length,
-      pGlossary: parent.includes('② 용어 풀이') && parent.includes(GLOSSARY[0].term) && parent.includes('충원(추가합격) 배수'),
+      pGlossary: parent.includes('③ 용어 풀이') && parent.includes(GLOSSARY[0].term) && parent.includes('충원(추가합격) 배수'),
+      pVerdict: parent.includes('② 지원별 판정 풀이') && parent.includes('그래서') && /[●◐○]/.test(parent),
       pLogic: parent.includes('AI 6지원안') && /안정 \d+장 · 적정 \d+장 · 도전/.test(parent),
       pKind: parent.includes('>학부모용<'), pBad: bad(parent), pFooter: footerOk(parent),
       // 학생용: 세특 기록 필요 전체 + 최저 병목/레버리지 + 할 일 체크리스트
@@ -977,8 +978,8 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
       pickYuboCount: pf.picks.filter(p => p.band === '유보').length
     };
   });
-  assert(`결과지#1(학부모용): 6지원 ${r.pRows}행(=${r.picks}) + 용어 풀이 박스 + 구성 논리 해설 + 배지·하단부(발행일·문서번호·서명란·고지) + 오염 없음 + 유보 사유 방어`,
-    r.pRows === r.picks && r.pGlossary && r.pLogic && r.pKind && r.pBad === false && r.pFooter
+  assert(`결과지#1(학부모용): 6지원 ${r.pRows}행(=${r.picks}) + 판정 풀이(●◐○)·용어 풀이·구성 논리 + 배지·하단부(발행일·문서번호·서명란·고지) + 오염 없음 + 유보 사유 방어`,
+    r.pRows === r.picks && r.pGlossary && r.pVerdict && r.pLogic && r.pKind && r.pBad === false && r.pFooter
       && r.yuboHasReason && r.pickYuboCount === 0,
     JSON.stringify(r));
   assert('결과지#2(학생용 2종 분리): 세특 기록 필요·최저 병목/레버리지·할 일 체크리스트 + 배지·하단부 + 문서번호 형식(번호-YYYYMMDD-일련) + 두 종 모두 undefined/NaN 없음',
@@ -1038,10 +1039,10 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
       delta: cmp.delta, prevName, toName: target.band, chBN: chB.length,
       flagOk: flag.includes('갱신 후 구간 변동') && flag.includes(prevName + '→' + target.band),
       resolved: cmp.needsResolved,
-      sheetHas: sheet.includes('③ 지난 상담 대비 변화') && sheet.includes('스냅샷 2026-06-01')
+      sheetHas: sheet.includes('④ 지난 상담 대비 변화') && sheet.includes('스냅샷 2026-06-01')
         && sheet.includes('-0.30 개선') && sheet.includes(prevName + '→' + target.band) && sheet.includes('1건 해소'),
       xComparable: cmpX.cardsComparable, xDelta: cmpX.delta, xChB: chBX.length, xFlag: flagX,
-      xSheet: sheetX.includes('교체되어 카드 구간 비교 생략') && sheetX.includes('③ 지난 상담 대비 변화'),
+      xSheet: sheetX.includes('교체되어 카드 구간 비교 생략') && sheetX.includes('④ 지난 상담 대비 변화'),
     };
   });
   assert(`스냅샷#1(정상 생략/표시 일관성): 스냅샷 ${r.snapNull ? '없음 → 비교 null + 결과지 블록 생략 (오류 아님)' : '있음 → 비교 생성 + 결과지 블록 표시'}`,
@@ -1295,6 +1296,61 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
     r.overdue === true && r.odDays >= 1 && r.riskWithNext === r.riskNoNext + 2 &&
     r.riskWithTags.some(t => /예정일.*경과/.test(t)) && r.alertHas === true,
     JSON.stringify({ overdue: r.overdue, odDays: r.odDays, riskWithNext: r.riskWithNext, riskNoNext: r.riskNoNext, alertHas: r.alertHas }));
+}
+
+// ═══════════════════════════════════════════════
+// 카드 3층 판정 요약 — 1줄 제한·비교 서술 미사용·구간명 회수·미사용 요인 비표시
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '강리영');
+    const cards = buildApplicationCards(s).filter(c => !c.noCut);
+    const pick = bd => cards.find(c => c.band === bd);
+    const four = ['안정', '적정', '소신'].map(pick).concat([cards.find(c => c.band === '유보')]).filter(Boolean);
+    // 1) 불릿 1줄 제한: 모든 카드 모든 신호 불릿 텍스트에 줄바꿈 없음 + 요인·판단구절·숫자 3요소 존재
+    let bulletOk = true, bulletBad = null;
+    four.forEach(c => cardSignals(c).forEach(sig => {
+      const line = `${sig.factor} · ${sig.phrase} · ${sig.num}`;
+      if (/[\n\r]/.test(line) || !sig.factor || !sig.phrase || !sig.num) { bulletOk = false; bulletBad = line; }
+    }));
+    // 2) 비교 서술 미사용: 신호 구절·풀이 전체에 '유리/불리/보다' 없음 + '안쪽|언저리|바깥' 표현 사용
+    let noCompare = true, hasCutVocab = false;
+    four.forEach(c => {
+      const v = cardVerdictLayers(c);
+      const all = v.signals.map(x => x.phrase).join(' ') + ' ' + v.narration.join(' ');
+      if (/유리|불리|보다/.test(all)) noCompare = false;
+      if (/안쪽|언저리|바깥/.test(all)) hasCutVocab = true;
+    });
+    // 3) 3층 구간명 회수: 마지막 문장이 '종합하면 … — 그래서 {구간}입니다'
+    const recap = four.map(c => {
+      const v = cardVerdictLayers(c);
+      const last = v.narration[v.narration.length - 1];
+      const label = c.band === '유보' ? '판정 유보' : c.band;
+      return /^종합하면 .+ — 그래서 .+입니다\.$/.test(last) && last.includes(`그래서 ${label}입니다`);
+    });
+    const recapOk = recap.every(Boolean);
+    // 유보 카드: ⚠️ 불릿 + 3층 컷해석주의 문장 + 종합전형이면 '서류·면접' 문장
+    const yc = cards.find(c => c.band === '유보');
+    const yubo = cardVerdictLayers(yc);
+    const yuboOk = yubo.signals.some(x => x.light === 'warn') &&
+      yubo.narration.some(t => t.includes('특목·자사고가 섞여 있어')) &&
+      (String(yc.jt).includes('종합') ? yubo.narration.some(t => t.includes('서류·면접 평가는 이 수치에 없습니다')) : true);
+    // 4) 미사용 요인 비표시: 합성 카드 — cw=null → 충원 신호 없음, g70=null → 70컷 신호 없음
+    const synth = { stAvg: 3.5, g50: 3.8, g70: null, cw: null, band: '안정', jt: '교과' };
+    const ss = cardSignals(synth);
+    const noUnused = !ss.some(x => x.id === 'churn') && !ss.some(x => x.id === 'cut70') && ss.some(x => x.id === 'cut50');
+    const lastFirst = cardVerdictLayers(four[0]).narration.slice(-1)[0];
+    return { bands: four.map(c => c.band), bulletOk, bulletBad, noCompare, hasCutVocab, recapOk, yuboOk,
+      synthIds: ss.map(x => x.id), noUnused, sample: lastFirst };
+  });
+  assert(`판정3층#1(불릿 1줄 제한): 4구간(${r.bands.join('/')}) 전 신호 불릿 줄바꿈 0 + 요인·판단구절·숫자 3요소 완비`,
+    r.bulletOk === true, JSON.stringify({ bulletBad: r.bulletBad }));
+  assert('판정3층#2(비교 서술 미사용): 신호·풀이 전체에 유리/불리/보다 0건 + 컷 안쪽/언저리/바깥 표현 사용',
+    r.noCompare === true && r.hasCutVocab === true, JSON.stringify({ noCompare: r.noCompare, hasCutVocab: r.hasCutVocab }));
+  assert(`판정3층#3(구간명 회수 + 유보 반영): 4장 모두 "종합하면 ~ — 그래서 [구간]입니다" (예: "${r.sample}") + 유보 ⚠️·컷해석주의·종합 문장`,
+    r.recapOk === true && r.yuboOk === true, JSON.stringify({ recapOk: r.recapOk, yuboOk: r.yuboOk }));
+  assert(`판정3층#4(미사용 요인 비표시): cw=null·70컷=null 합성 → 신호 [${r.synthIds.join(',')}] (충원·70컷 없음, 50컷만)`,
+    r.noUnused === true, JSON.stringify({ synthIds: r.synthIds }));
 }
 
 // ═══════════════════════════════════════════════

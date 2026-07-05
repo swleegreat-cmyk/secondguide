@@ -472,7 +472,7 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 </head>
 <body>
 <!-- 빌드 버전 표식 (build.py 자동 주입: 빌드 일시 · 커밋 7자리) — 화면 우하단 고정, 인쇄 시 숨김 -->
-<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 00:50 · 26e119e</div>
+<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 01:05 · aeb826c</div>
 <button class="menu-toggle" id="menuToggle">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app-layout">
@@ -3765,6 +3765,61 @@ function cardModalData(c) {
     : '일부 정보 결측 또는 모집 10명 미만';
   return { steps, naesin, relReason };
 }
+// ═══ 카드 3층 판정 요약 (1층 결론 · 2층 신호등 · 3층 풀이) — classifyBand 불변, 사용 값만 해석 ═══
+const SIG_EMOJI = { green: '🟢', yellow: '🟡', red: '🔴', warn: '⚠️' };
+const SIG_MONO = { green: '●', yellow: '◐', red: '○', warn: '⚠' };   // 결과지 인쇄용(이모지 → ●◐○ 변환)
+const SIG_COLOR = { green: 'var(--green)', yellow: 'var(--orange)', red: 'var(--red)', warn: 'var(--copper)' };
+// 판정에 실제 사용된 값(평균·50/70컷·충원배수·컷해석주의)만 신호등 요인으로 산출. 미사용 값은 비표시.
+function cardSignals(c) {
+  const s = c.stAvg, out = [];
+  const cutSig = (cv, name, id) => {
+    if (cv == null || s == null) return;
+    const diff = s - cv;   // 등급은 낮을수록 좋음 → diff<0 = 컷 안쪽
+    const light = diff < VERDICT_SIGNAL.cut.inside ? 'green' : diff <= VERDICT_SIGNAL.cut.edge ? 'yellow' : 'red';
+    out.push({ id, light, factor: name + ' 대비', phrase: VERDICT_CUT_PHRASE[light], num: `평균 ${s} / ${name} ${cv}`, cv });
+  };
+  cutSig(c.g50, '50컷', 'cut50');
+  cutSig(c.g70, '70컷', 'cut70');
+  if (c.cw != null && !isNaN(c.cw)) {   // 충원 결측(cw null)이면 미사용 → 비표시
+    const cw = c.cw, light = cw >= VERDICT_SIGNAL.churn.green ? 'green' : cw >= VERDICT_SIGNAL.churn.yellow ? 'yellow' : 'red';
+    out.push({ id: 'churn', light, factor: '충원 여력', phrase: VERDICT_CHURN_PHRASE[light], num: `${cw.toFixed(1)}배수` });
+  }
+  if (c.caution && c.band === '유보') {
+    out.push({ id: 'caution', light: 'warn', factor: '컷 해석주의', phrase: VERDICT_CAUTION_PHRASE, num: `50컷 ${c.g50 ?? '-'}` });
+  }
+  return out;
+}
+function _fillCv(t, cv) { return String(t).split('{cv}').join(cv); }
+// 3층 전체(결론·신호등·풀이) 조립 — verify가 직접 검사하는 순수 함수
+function cardVerdictLayers(c) {
+  const band = c.band;
+  const bandLabel = band === '유보' ? '판정 유보' : band;
+  const signals = cardSignals(c);
+  const narration = [VERDICT_NARRATION.opener];
+  signals.forEach(sig => {
+    if (sig.id === 'cut50') narration.push(_fillCv(VERDICT_NARRATION.cut50[sig.light], sig.cv));
+    else if (sig.id === 'cut70') narration.push(_fillCv(VERDICT_NARRATION.cut70[sig.light], sig.cv));
+    else if (sig.id === 'churn') narration.push(VERDICT_NARRATION.churn[sig.light]);
+    else if (sig.id === 'caution') narration.push(VERDICT_NARRATION.caution);
+  });
+  if (String(c.jt).includes('종합')) narration.push(VERDICT_NARRATION.jong);   // 종합전형 필수 문장
+  narration.push(`종합하면 ${VERDICT_FINAL[band] || '수치가 충분치 않아'} — 그래서 ${bandLabel}입니다.`);
+  return { band, bandLabel, conclusion: VERDICT_CONCLUSION[band] || '컷 정보 부족', signals, narration };
+}
+// 2층 신호등 불릿 (불릿당 1줄, mono=true면 ●◐○). 각 불릿: 신호 + 요인 + 판단구절 + 숫자
+function verdictSignalBulletsHtml(signals, mono) {
+  const sym = mono ? SIG_MONO : SIG_EMOJI;
+  return signals.map(sig =>
+    `<div style="font-size:11px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      <span style="color:${SIG_COLOR[sig.light]}">${sym[sig.light]}</span> <strong>${esc(sig.factor)}</strong> · ${esc(sig.phrase)} · <span class="mono" style="color:var(--muted)">${esc(sig.num)}</span></div>`).join('');
+}
+// 카드 행 미니 신호등 3개 (50컷·70컷·충원 고정 슬롯 — 미사용은 회색 점)
+function verdictMiniDotsHtml(c) {
+  const map = {}; cardSignals(c).forEach(s => { map[s.id] = s.light; });
+  const slot = id => { const l = map[id]; return `<span title="${id === 'cut50' ? '50컷 대비' : id === 'cut70' ? '70컷 대비' : '충원 여력'}" style="color:${l ? SIG_COLOR[l] : 'var(--border)'};font-size:10px">${l ? SIG_MONO[l] : '·'}</span>`; };
+  return `<span style="display:inline-flex;gap:2px;align-items:center" title="신호등: 50컷·70컷·충원">${slot('cut50')}${slot('cut70')}${slot('churn')}</span>`;
+}
+
 function openCardModalEnc(seat, enc) {
   const key = decodeURIComponent(enc);
   const s = STUDENTS.find(x => x.seat === seat);
@@ -3772,6 +3827,7 @@ function openCardModalEnc(seat, enc) {
   const c = buildApplicationCards(s).find(x => basketKeyOf(x) === key);
   if (!c) return;
   const d = cardModalData(c);
+  const v = cardVerdictLayers(c);
   let ov = document.getElementById('cardModalOverlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -3792,8 +3848,23 @@ function openCardModalEnc(seat, enc) {
     </div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:10px">${esc(c.jn || c.jt)} · <strong>${esc(c.dept)}</strong> ${judgeRelBadge(c.rel)}</div>
     ${c.caution ? `<div style="padding:8px 10px;background:var(--orange-light);border-radius:8px;font-size:11px;color:var(--orange);font-weight:600;margin-bottom:10px">⚠ 컷 해석주의: ${esc(c.cautionReason)}</div>` : ''}
-    <div style="font-size:12px;font-weight:700;color:var(--teal);margin-bottom:4px">판정 과정</div>
-    <div style="font-size:11px;line-height:1.7;margin-bottom:10px">${d.steps.map((t, i) => `<div>${i + 1}. ${esc(t)}</div>`).join('')}</div>
+    ${c.band ? `
+    <!-- 1층: 결론 -->
+    <div style="padding:10px 12px;background:${(BAND_STYLE[c.band]||{}).color || 'var(--muted)'};border-radius:10px;color:#fff;margin-bottom:8px">
+      <div style="font-size:15px;font-weight:800">${esc(v.bandLabel)} <span style="font-size:12px;font-weight:600;opacity:.92">— ${esc(v.conclusion)}</span></div>
+    </div>
+    <!-- 2층: 신호등 -->
+    <div style="font-size:12px;font-weight:700;color:var(--teal);margin-bottom:4px">신호등 근거 <span style="font-size:9px;color:var(--muted);font-weight:400">(판정에 쓰인 값만 · 🟢안쪽 🟡언저리 🔴바깥)</span></div>
+    <div style="margin-bottom:10px">${verdictSignalBulletsHtml(v.signals, false)}</div>
+    <!-- 3층: 풀이 (접이식, 기본 접힘) -->
+    <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:6px 10px">
+      <summary style="font-size:12px;font-weight:700;color:var(--teal);cursor:pointer">풀어서 설명하면 ▾</summary>
+      <div style="font-size:11px;line-height:1.7;margin-top:6px;color:var(--sub)">${v.narration.map(t => `<div>${esc(t)}</div>`).join('')}</div>
+    </details>` : ''}
+    <details style="margin-bottom:10px" ${c.band ? '' : 'open'}>
+      <summary style="font-size:12px;font-weight:700;color:var(--teal);cursor:pointer">계산 근거 ▾</summary>
+      <div style="font-size:11px;line-height:1.7;margin-top:6px">${d.steps.map((t, i) => `<div>${i + 1}. ${esc(t)}</div>`).join('')}</div>
+    </details>
     <div style="font-size:12px;font-weight:700;color:var(--teal);margin-bottom:4px">내신 계산 방식</div>
     <div style="font-size:11px;line-height:1.6;margin-bottom:10px">
       <div>${esc(d.naesin.basis)}</div>
@@ -4243,8 +4314,9 @@ function sheetMetaLine(student) {
   }
   return `<div class="meta"><strong>${esc(student.name)}</strong> (${student.seat}번) · 기준일 ${new Date().toLocaleDateString('ko-KR')} · 전과목 평균 <strong>${stAvg.toFixed(2)}등급</strong> · 수능최저: ${esc(minSummary)}</div>`;
 }
-// 상담 이력 블록 (직전 스냅샷 대비 변화) — 스냅샷 없으면 '' (정상 생략). 학부모용에서 사용.
-function sheetHistoryBlockHtml(student) {
+// 상담 이력 블록 (직전 스냅샷 대비 변화) — 스냅샷 없으면 '' (정상 생략). 학부모용에서 사용. num=섹션 번호.
+function sheetHistoryBlockHtml(student, num) {
+  num = num || '③';
   const cmp = comparePrevSnapshot(student);
   if (!cmp) return '';
   const chB = changedBasketCards(student);
@@ -4257,7 +4329,7 @@ function sheetHistoryBlockHtml(student) {
   const resTxt = cmp.needsResolved.length
     ? `${cmp.needsResolved.length}건 해소 (${cmp.needsResolved.slice(0, 3).map(esc).join(' / ')}${cmp.needsResolved.length > 3 ? ' 외' : ''})`
     : '해소된 항목 없음';
-  return `<h2>③ 지난 상담 대비 변화 <span class="small muted">(스냅샷 ${esc(cmp.prevDate)} 기준)</span></h2>
+  return `<h2>${num} 지난 상담 대비 변화 <span class="small muted">(스냅샷 ${esc(cmp.prevDate)} 기준)</span></h2>
 <ul>
 <li>평균등급: ${cmp.avgPrev.toFixed(2)} → ${cmp.avgNow.toFixed(2)} (${avgTxt})</li>
 <li>바구니 구간 변동: ${basketTxt}</li>
@@ -4344,14 +4416,25 @@ function counselSheetParentHtml(student, docNo) {
     + (dblUniv.length ? ` (2장 지원 대학: ${dblUniv.map(esc).join(', ')})` : '')
     + (basketN ? ` 교사·학생이 함께 담은 후보 바구니 ${basketN}장을 우선 반영했습니다.` : '');
   const glossaryHtml = GLOSSARY.map(g => `<dt>${esc(g.term)}</dt><dd>${esc(g.desc)}</dd>`).join('');
+  // ② 판정 풀이 — 6지원 각 카드의 3층(결론·신호등 ●◐○·풀이)을 인쇄용으로 (컷 보유 카드만)
+  const verdictHtml = pf.picks.filter(p => p.band).map((p, i) => {
+    const v = cardVerdictLayers(p);
+    const dots = v.signals.map(sig => `<span>${SIG_MONO[sig.light]} ${esc(sig.factor)} ${esc(sig.phrase)}</span>`).join(' · ');
+    return `<div style="margin:5px 0;padding:5px 8px;border:1px solid #ccc;border-radius:6px">
+      <div style="font-weight:700">${i + 1}. ${esc(p.univ)} ${esc(p.dept)} — <span>${esc(v.bandLabel)}</span> <span class="small muted">${esc(v.conclusion)}</span></div>
+      <div class="small" style="margin:2px 0;color:#555">${dots}</div>
+      <div class="small" style="line-height:1.6">${v.narration.map(esc).join(' ')}</div></div>`;
+  }).join('');
   const body = sheetMetaLine(student)
     + '<h2>① AI 6지원안 <span class="small muted">(기호: ●안정 ◐적정 ▲소신 △상향 ⚠유보)</span></h2>'
     + '<table><tr><th>순위</th><th>구간</th><th>대학</th><th>전형</th><th>학과</th><th>수능최저</th><th>충원</th></tr>'
     + pf.picks.map((p, i) => counselSheetPickRow(p, i)).join('') + '</table>'
     + `<div class="lead">${logic}</div>`
-    + '<h2>② 용어 풀이 <span class="small muted">(결과지 이해를 돕는 안내)</span></h2>'
+    + '<h2>② 지원별 판정 풀이 <span class="small muted">(신호등 ●안쪽 ◐언저리 ○바깥 · 발표 컷 기준, 서류·면접 미포함)</span></h2>'
+    + (verdictHtml || '<div class="small muted">컷 보유 카드가 없어 판정 풀이를 생략합니다.</div>')
+    + '<h2>③ 용어 풀이 <span class="small muted">(결과지 이해를 돕는 안내)</span></h2>'
     + `<dl class="glossary">${glossaryHtml}</dl>`
-    + (sheetHistoryBlockHtml(student) || '');
+    + (sheetHistoryBlockHtml(student, '④') || '');
   return sheetShell(student, '학부모용', '#8a5a2b', body, docNo);
 }
 
@@ -4500,6 +4583,7 @@ function cardRowHtml(c) {
     <span style="flex:1;min-width:180px"><strong>${esc(c.dept)}</strong> <span style="color:var(--muted)">${esc(c.jn || '')}(${esc(c.jt || '')})</span></span>
     <span class="mono" style="white-space:nowrap">${c.scoreSrc || '환산'} ${c.score}${c.scoreSrc === '환산' ? '<span style="font-size:8px;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:0 3px;margin-left:2px;vertical-align:1px">참고</span>' : ''} vs 50컷 ${c.g50 ?? '-'}·70컷 ${c.g70 ?? '-'}</span>
     ${bandCell}
+    ${c.band ? verdictMiniDotsHtml(c) : ''}
     ${c.seat != null && intakeInterviewBurden(c.seat) && isInterviewCard(c) ? '<span title="상담 전 확인: 면접 자신감 낮음 — 면접형 종합 카드 참고 태그" style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid var(--copper);color:var(--copper);font-weight:700;white-space:nowrap">면접 부담</span>' : ''}
     ${snapChangeFlagHtml(c)}
     <span class="mono" style="font-size:10px;color:var(--sub);white-space:nowrap">${c.cw != null ? '충원 ' + c.cw.toFixed(1) + '배수' : '충원 -'}</span>
@@ -5912,6 +5996,43 @@ const INTAKE_QUESTIONS = [
 
 // 면접 문항 은행 (interview_bank.csv → JSON 주입) — [{field계열, kw:[키워드], q문항}]
 const INTERVIEW_QBANK = [{"field":"공학","kw":["프로그래밍","알고리즘","코딩","소프트웨어"],"q":"관심 있는 알고리즘 문제를 하나 소개하고 어떤 방식으로 접근했는지 설명해 보세요."},{"field":"공학","kw":["로봇","자동화","설계","하드웨어"],"q":"직접 설계하거나 개선해 본 장치·프로그램이 있다면 그 원리와 한계를 말해 보세요."},{"field":"공학","kw":["인공지능","데이터","머신러닝","모델"],"q":"인공지능이 사회에 미칠 부정적 영향 한 가지와 공학도로서의 대응을 말해 보세요."},{"field":"공학","kw":["회로","전자","신호","반도체"],"q":"전공에서 배우고 싶은 핵심 개념 하나를 고르고 왜 흥미로운지 설명해 보세요."},{"field":"자연과학","kw":["실험","탐구","관찰","가설","변인"],"q":"가장 인상 깊었던 탐구 활동의 가설·변인·결론을 순서대로 설명해 보세요."},{"field":"자연과학","kw":["물리","역학","에너지","힘"],"q":"일상에서 관찰한 물리 현상을 하나 골라 원리로 설명해 보세요."},{"field":"자연과학","kw":["화학","반응","분자","실험"],"q":"실험 중 예상과 다른 결과가 나왔을 때 어떻게 원인을 찾았는지 말해 보세요."},{"field":"자연과학","kw":["생명","세포","유전","생태"],"q":"생명과학에서 최근 관심 있게 본 주제와 그 사회적 의미를 말해 보세요."},{"field":"수학","kw":["증명","논리","함수","수열","통계"],"q":"수학 개념 하나를 실생활 문제에 적용해 본 경험을 설명해 보세요."},{"field":"수학","kw":["모델링","확률","미적분","기하"],"q":"풀이가 막혔을 때 끝까지 시도해 해결한 문제의 과정을 말해 보세요."},{"field":"의료","kw":["간호","환자","돌봄","보건","생명"],"q":"의료인에게 가장 중요한 자질이 무엇이라고 생각하는지 근거와 함께 말해 보세요."},{"field":"의료","kw":["의학","질병","공중보건","윤리"],"q":"의료 자원이 부족한 상황에서의 우선순위 판단 기준을 설명해 보세요."},{"field":"교육","kw":["교육","수업","멘토링","학생","배움"],"q":"또래를 가르치거나 도운 경험에서 배운 교육의 의미를 말해 보세요."},{"field":"교육","kw":["진로","성장","공동체","협력"],"q":"좋은 교사가 갖춰야 할 역량 하나를 자신의 경험과 연결해 말해 보세요."},{"field":"경영","kw":["경영","경제","시장","소비자","창업"],"q":"관심 있는 기업·산업의 문제를 하나 짚고 개선 아이디어를 말해 보세요."},{"field":"경영","kw":["금융","회계","투자","데이터"],"q":"데이터를 근거로 의사결정을 내려 본 경험이 있다면 설명해 보세요."},{"field":"법률","kw":["법","정의","권리","규범","판례"],"q":"사회적으로 논쟁적인 규칙 하나를 골라 찬반 논거를 균형 있게 말해 보세요."},{"field":"법률","kw":["행정","정책","공공","시민"],"q":"공공 문제 해결을 위해 제안하고 싶은 정책과 그 근거를 말해 보세요."},{"field":"인문","kw":["문학","해석","서사","텍스트","비평"],"q":"감명 깊게 읽은 책 한 권을 골라 자신의 관점으로 재해석해 보세요."},{"field":"인문","kw":["역사","철학","사상","맥락"],"q":"역사·철학 개념 하나가 오늘의 문제에 주는 시사점을 말해 보세요."},{"field":"인문","kw":["언어","어학","소통","번역"],"q":"언어를 통해 다른 문화를 이해한 경험을 구체적으로 말해 보세요."},{"field":"사회","kw":["사회","공동체","불평등","미디어","여론"],"q":"관심 있는 사회 문제의 원인을 다각도로 분석해 말해 보세요."},{"field":"사회","kw":["심리","인간","행동","관계"],"q":"사람의 행동을 이해하려 관찰·조사해 본 경험을 설명해 보세요."},{"field":"예술","kw":["디자인","표현","창작","미술","영상"],"q":"자신의 창작물에 담은 메시지와 표현 의도를 설명해 보세요."},{"field":"체육","kw":["스포츠","운동","체육","훈련","협동"],"q":"팀 활동에서 갈등을 조정하거나 목표를 이룬 경험을 말해 보세요."},{"field":"공통","kw":["리더십","협력","갈등","소통","주도"],"q":"팀에서 의견이 갈렸을 때 어떻게 조율했는지 구체적으로 말해 보세요."},{"field":"공통","kw":["실패","극복","성장","도전"],"q":"실패했지만 배움이 컸던 경험과 그 이후의 변화를 말해 보세요."},{"field":"공통","kw":["독서","탐구","호기심","자기주도"],"q":"스스로 파고들어 알아낸 주제 하나를 소개하고 왜 끌렸는지 말해 보세요."}];
+// 카드 상세 3층 판정 요약 규칙 (verdict_rules.js에서 주입 — 신호등 기준·판단 구절·풀이 템플릿)
+// 카드 상세 3층 판정 요약 — 신호등 기준(임계값)·판단 구절·풀이 문장 템플릿 (교사가 파일 수정으로 변경).
+// ★ classifyBand는 건드리지 않는다. 여기 값들은 '판정에 실제 사용된 값'(전과목 평균 · 50/70컷 ·
+//   충원배수 · 컷 해석주의)만 해석한다. 비교 서술(유리/불리) 금지 — '컷 안쪽/언저리/바깥' 3단으로 통일.
+const VERDICT_SIGNAL = {
+  cut:   { inside: -0.10, edge: 0.20 },  // diff = 평균 - 컷 : < inside → 안쪽 / ≤ edge → 언저리 / 그 외 → 바깥
+  churn: { green: 1.0, yellow: 0.3 },    // 충원배수 : ≥ green 🟢 / ≥ yellow 🟡 / 그 외 🔴
+};
+const VERDICT_CUT_PHRASE   = { green: '컷 안쪽', yellow: '컷 언저리', red: '컷 바깥' };
+const VERDICT_CHURN_PHRASE = { green: '추가합격 1배수 이상 도는 학과', yellow: '추가합격 일부 도는 학과', red: '추가합격 거의 없는 학과' };
+const VERDICT_CAUTION_PHRASE = '특목·자사고 혼재 가능 발표 컷';
+// 1층 결론 핵심 구절 (구간별, 10자 내외)
+const VERDICT_CONCLUSION = { '안정': '평균이 컷 안쪽', '적정': '컷 언저리 통과', '소신': '컷 살짝 바깥', '상향': '컷 바깥 도전', '유보': '컷 해석주의' };
+// 3층 풀이 문장 (요인 × 신호) — 구어체, 학생에게 소리 내어 읽어줄 수 있게. {cv}=컷 값 치환
+const VERDICT_NARRATION = {
+  opener: '숫자를 하나씩 풀어 보겠습니다.',
+  cut50: { green: '평균이 50%컷({cv}) 안쪽에 있어 이 부분은 여유가 있습니다.',
+           yellow: '평균이 50%컷({cv}) 언저리라 이 부분은 아슬아슬합니다.',
+           red: '평균이 50%컷({cv}) 바깥에 있습니다.' },
+  cut70: { green: '평균이 70%컷({cv})도 안쪽이라 합격선 안에 들어와 있습니다.',
+           yellow: '평균이 70%컷({cv}) 언저리에 걸쳐 있습니다.',
+           red: '평균이 70%컷({cv}) 바깥이라 합격선을 벗어나 있습니다.' },
+  churn: { green: '이 학과는 추가합격이 잘 도는 편이라, 예비번호를 받아도 최종 합격까지 갈 여지가 있습니다.',
+           yellow: '추가합격이 어느 정도 도는 곳이라 예비번호를 기대해볼 수 있습니다.',
+           red: '이 학과는 추가합격이 거의 안 도는 곳이라, 최초 합격선 안에서 승부가 나야 합니다.' },
+  caution: '이 대학 발표 컷은 특목·자사고가 섞여 있어 액면 그대로 믿기 어렵습니다.',
+  jong: '서류·면접 평가는 이 수치에 없습니다.',   // 종합전형 카드에 반드시 포함
+};
+// 마지막 회수 문장 앞구절 (구간별). 최종 문장은 항상 "종합하면 {앞구절} — 그래서 [구간]입니다"
+const VERDICT_FINAL = {
+  '안정': '평균이 컷 안쪽이라 무리 없이 노려볼 수 있어',
+  '적정': '평균이 컷 언저리라 해볼 만하고',
+  '소신': '평균이 컷을 살짝 벗어나 도전이 필요하고',
+  '상향': '평균이 컷 바깥이라 상향 도전이고',
+  '유보': '발표 컷을 액면대로 믿기 어려워',
+};
+
 
 function assessCompetencies(student, analysis) {
   const scores = {
