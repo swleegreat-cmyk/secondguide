@@ -372,8 +372,19 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
   .dash-grid { grid-template-columns:1fr !important; }
   .tier-grid { grid-template-columns:repeat(2,1fr) !important; }
 }
+/* 빌드 버전 표식 — 우하단 고정, 반투명, 클릭 통과, 인쇄 시 숨김 */
+#buildStamp {
+  position:fixed; right:8px; bottom:6px; z-index:2147483000;
+  font-family:'Courier New',monospace; font-size:10px; line-height:1.2;
+  color:rgba(90,90,90,.7); background:rgba(255,255,255,.72);
+  border:1px solid rgba(0,0,0,.08); border-radius:6px; padding:2px 7px;
+  pointer-events:none; user-select:text; letter-spacing:.2px;
+}
+@media (prefers-color-scheme: dark) {
+  #buildStamp { color:rgba(200,200,200,.6); background:rgba(30,30,30,.6); border-color:rgba(255,255,255,.12); }
+}
 @media print {
-  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn { display:none !important; }
+  .sidebar, .menu-toggle, .sidebar-overlay, .tab-bar, .footer, .fav-btn, #buildStamp { display:none !important; }
   .main { margin-left:0; max-width:100%; padding:10px; }
   .tab-panel { display:block !important; page-break-before:always; }
   body { background:#fff; font-size:11px; }
@@ -460,6 +471,8 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 </style>
 </head>
 <body>
+<!-- 빌드 버전 표식 (build.py 자동 주입: 빌드 일시 · 커밋 7자리) — 화면 우하단 고정, 인쇄 시 숨김 -->
+<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 00:50 · 26e119e</div>
 <button class="menu-toggle" id="menuToggle">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app-layout">
