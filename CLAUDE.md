@@ -54,6 +54,7 @@
 | `tagSentence` / `tagStudentRecords` | 세특 문장 태깅 (신호 2종=상 / 1종=중 / 0종=하) |
 | `analyzeRecord` / `studentTopicThreads` | 생기부 질적 분석 · 주제 스레드(연속성·계열 정합) |
 | `threadNarrative`/`threadInterviewMatches`/`studentNarrativeThreads` | 계열 정합 스레드 → 서사 문장 틀(학년별 빈칸+지원 학과) + 예상 면접 질문(`INTERVIEW_QBANK`=interview_bank.csv, 키워드·계열 매칭, 근거 동반, 무매칭 시 '직접 대비 필요'). 결과지 학생용 ④블록·표시 전용 |
+| `genDeptQuestions`/`interviewMaterials`/`deptInterviewPanelHtml` | 학과별 맞춤 면접 질문 생성기(템플릿 슬롯 조합, `INTERVIEW_TEMPLATES`=interview_templates.js 5유형×8형). ○○=계열 정합 근거 문장의 고유 요소(도서·산출물), △△=학과 고유 키워드(DEPT_KEYWORDS2). 슬롯 재료 없으면 미생성, 각 질문에 근거 출처(학년·과목·활동) 병기. 화면 통합 패널=은행 문항+생기부 기반, 결과지 학생용 ⑤블록 상위 5 |
 
 ## 검증 절차
 

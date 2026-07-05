@@ -1248,6 +1248,44 @@ assert(`골든#무결성: 25건·필수필드(대학명/전형명/입력성적/�
 }
 
 // ═══════════════════════════════════════════════
+// 학과별 맞춤 면접 질문 생성기 — 슬롯 미충족 미생성 · 학과 차별화 · 근거 출처 병기
+// ═══════════════════════════════════════════════
+{
+  const r = await page.evaluate(() => {
+    const s = STUDENTS.find(x => x.name === '오연서');
+    const ra = analyzeRecord(s, ANALYSIS[s.seat] || {});
+    // 근거(evidence) 확보된 학과 2개
+    const evDepts = (ra.deptFit || []).filter(d => d.evidence && d.evidence.length).map(d => d.dept);
+    const d1 = evDepts[0], d2 = evDepts[1] || evDepts[0];
+    const q1 = genDeptQuestions(s, d1, 10), q2 = genDeptQuestions(s, d2, 10);
+    // 1) 슬롯 미충족 골격 미생성: 재료 없는 합성 학과 → [] + 생성 질문에 미치환 슬롯 없음
+    const noEv = genDeptQuestions(s, '존재하지않는가상학과xyz', 10);
+    const noLeftover = q1.every(q => !/\{[ab]\}/.test(q.q)) && q2.every(q => !/\{[ab]\}/.test(q.q));
+    // 빈 재료면 interviewMaterials도 []
+    const noMats = interviewMaterials(s, '존재하지않는가상학과xyz').length;
+    // 2) 학과 간 차별화: 두 학과 질문 집합이 완전 동일하지 않음 (겹치지 않는 질문 존재)
+    const set1 = new Set(q1.map(q => q.q)), set2 = new Set(q2.map(q => q.q));
+    const onlyIn1 = [...set1].filter(x => !set2.has(x)).length;
+    const distinct = d1 !== d2 ? onlyIn1 > 0 : true;   // 다른 학과면 차별화 질문 존재
+    // 3) 근거 출처 병기: 모든 질문에 'N학년 …세특 … 활동' 형태 출처
+    const srcOk = q1.length > 0 && q1.every(q => /\d학년 .+세특 '.+' 활동/.test(q.source));
+    // 화면 통합 패널: 은행 문항 + 생기부 기반 두 섹션 렌더 + 오염 없음
+    const panel = deptInterviewPanelHtml(s, d1, ra);
+    const panelOk = panel.includes('은행 문항') && panel.includes('내 생기부 기반 예상 질문') && !/undefined|NaN|>null</.test(panel);
+    return {
+      d1, d2, n1: q1.length, n2: q2.length, noEv: noEv.length, noMats, noLeftover,
+      onlyIn1, distinct, srcOk, srcSample: q1[0] ? q1[0].source : null, panelOk
+    };
+  });
+  assert(`맞춤질문#1(슬롯 미충족 미생성): 재료 없는 학과 → 생성 ${r.noEv}건·재료 ${r.noMats}건 + 실제 질문에 미치환 슬롯 {a}/{b} 0`,
+    r.noEv === 0 && r.noMats === 0 && r.noLeftover === true, JSON.stringify({ noEv: r.noEv, noMats: r.noMats, noLeftover: r.noLeftover }));
+  assert(`맞춤질문#2(학과 간 차별화): ${r.d1}(${r.n1}) vs ${r.d2}(${r.n2}) — ${r.d1 !== r.d2 ? r.onlyIn1 + '개 질문이 학과 고유' : '동일 학과'} + 통합 패널(은행+생기부) 렌더`,
+    r.distinct === true && r.panelOk === true && r.n1 >= 1 && r.n1 <= 12, JSON.stringify({ onlyIn1: r.onlyIn1, panelOk: r.panelOk }));
+  assert(`맞춤질문#3(근거 출처 병기): 전 질문에 '학년·과목·활동' 출처 (예: "${r.srcSample}")`,
+    r.srcOk === true, JSON.stringify({ srcOk: r.srcOk, srcSample: r.srcSample }));
+}
+
+// ═══════════════════════════════════════════════
 // 상담 메모 약속 구조 — 마이그레이션 보존 · 할 일 이월 · 예정일 경보
 // ═══════════════════════════════════════════════
 {

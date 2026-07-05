@@ -472,7 +472,7 @@ mark.hl-career { background:linear-gradient(transparent 55%, #B8DCF6 55%); font-
 </head>
 <body>
 <!-- 빌드 버전 표식 (build.py 자동 주입: 빌드 일시 · 커밋 7자리) — 화면 우하단 고정, 인쇄 시 숨김 -->
-<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 01:05 · aeb826c</div>
+<div id="buildStamp" title="빌드 일시 · 소스 커밋 해시(빌드 시점 HEAD)">build 2026-07-05 01:20 · e80499c</div>
 <button class="menu-toggle" id="menuToggle">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app-layout">
@@ -4389,13 +4389,21 @@ function counselSheetStudentHtml(student, docNo) {
   } else {
     narrBlock = '<div class="small muted">희망 계열과 정합하는 연속(2개 학기 이상) 활동 스레드가 아직 없습니다 — 진로 연계 탐구 활동을 만든 뒤 서사를 구성합니다.</div>';
   }
+  // ⑤ 학과별 맞춤 예상 면접 질문 상위 5개 (근거 정합 상위 학과)
+  const ivDept = (ra.deptFit || []).find(df => df.evidence && df.evidence.length);
+  const custom5 = ivDept ? genDeptQuestions(student, ivDept.dept, 5) : [];
+  const ivBlock = custom5.length
+    ? `<div class="small muted" style="margin-bottom:3px">${esc(ivDept.dept)} 기준 · 활동 근거 병기</div><ol style="margin:0 0 0 16px">`
+      + custom5.map(q => `<li style="margin:2px 0">${esc(q.q)} <span class="small muted">(${q.source})</span></li>`).join('') + '</ol>'
+    : '<div class="small muted">생기부에서 지원 학과 고유 활동 근거를 찾지 못해 맞춤 질문을 생성하지 않았습니다.</div>';
   const body = sheetMetaLine(student)
     + `<h2>① 세특 기록 필요 항목 <span class="small muted">(생기부 보완 — 전체 ${needs.length}건)</span></h2>`
     + (needs.length ? '<ul>' + needs.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '<div>현재 중대 보완 항목 없음 — 강점을 심화·유지하세요.</div>')
     + '<h2>② 수능최저 병목 & 1등급 레버리지</h2>' + minBlock
     + '<h2>③ 다음 상담까지 할 일</h2>'
     + '<ul class="todo">' + todos.map(t => `<li>☐ ${esc(t)}</li>`).join('') + '</ul>'
-    + '<h2>④ 나의 서사 틀 + 예상 질문 <span class="small muted">(빈칸을 내 언어로 채워 오기 — 면접 준비 숙제)</span></h2>' + narrBlock;
+    + '<h2>④ 나의 서사 틀 + 예상 질문 <span class="small muted">(빈칸을 내 언어로 채워 오기 — 면접 준비 숙제)</span></h2>' + narrBlock
+    + '<h2>⑤ 학과별 맞춤 예상 질문 (상위 5) <span class="small muted">(내 생기부 활동 기반)</span></h2>' + ivBlock;
   return sheetShell(student, '학생용', '#1C5A60', body, docNo);
 }
 
@@ -5329,6 +5337,93 @@ function studentNarrativeThreads(student, ra, maxThreads) {
   }));
 }
 
+// ═══ 학과별 맞춤 면접 질문 생성기 (템플릿 슬롯 조합) ═══
+// 문장에서 ○○ 슬롯 재료(고유 요소) 추출: 도서·작품명 → 산출물 활동구 → 없으면 null
+function extractElement(text) {
+  const q = String(text).match(/[『「《][^』」》]{2,20}[』」》]/);
+  if (q) return q[0].replace(/[『「《』」》]/g, '').trim();
+  const p = String(text).match(/([가-힣A-Za-z0-9][가-힣A-Za-z0-9 ]{1,16}?\s*(?:실험|탐구|프로젝트|보고서|발표|토론|캠페인|제작|설계|모의|시뮬레이션|포트폴리오|대회|공모전))/);
+  if (p) return p[1].trim().replace(/\s+/g, ' ');
+  return null;
+}
+// (학생, 학과) → ○○ 슬롯 재료 목록: computeDeptFit의 계열 정합 근거 문장(구체성 태그·과목·학년 포함)
+// 각 재료에 근거 출처(year·subject)를 담는다. 재료 없으면 [] (질문 미생성).
+function interviewMaterials(student, dept) {
+  const ra = analyzeRecord(student, ANALYSIS[student.seat] || {});
+  const fit = (ra.deptFit || []).find(d => d.dept === dept);
+  const mats = [], seen = new Set();
+  if (fit && fit.evidence) {
+    fit.evidence.forEach(ev => {
+      const el = extractElement(ev.text) || (ev.kw && ev.kw.length >= 2 ? ev.kw : null);
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      mats.push({ a: el, year: ev.year, subject: ev.subj || '(과목미상)', grade: ev.tagGrade, kw: ev.kw });
+    });
+  }
+  return mats;
+}
+// (학생, 학과) → 생기부 기반 맞춤 질문 ~limit개. 슬롯 미충족 골격은 미생성. 각 질문에 근거 출처 병기.
+function genDeptQuestions(student, dept, limit) {
+  limit = limit || 10;
+  const mats = interviewMaterials(student, dept);
+  if (!mats.length) return [];   // ○○ 재료 없음 → 미생성 (빈 템플릿 출력 금지)
+  const bkws = ((DEPT_KEYWORDS2[dept] || {}).unique || []).filter(k => k && k.length >= 2);
+  const rank = { '상': 2, '중': 1, '하': 0 };
+  mats.sort((x, y) => (rank[y.grade] ?? 0) - (rank[x.grade] ?? 0));
+  const types = Object.keys(INTERVIEW_TEMPLATES);
+  const out = [], seenQ = new Set();
+  for (let round = 0; round < 8 && out.length < limit; round++) {
+    for (let mi = 0; mi < mats.length && out.length < limit; mi++) {
+      const m = mats[mi];
+      for (const type of types) {
+        if (out.length >= limit) break;
+        const def = INTERVIEW_TEMPLATES[type];
+        if (def.needB && !bkws.length) continue;   // △△ 재료 없으면 이 골격 미생성
+        const b = def.needB ? bkws[(round + mi) % bkws.length] : null;
+        if (def.needB && !b) continue;
+        let q = def.forms[round % def.forms.length].split('{a}').join(m.a);
+        if (def.needB) q = q.split('{b}').join(b);
+        if (/\{[ab]\}/.test(q) || seenQ.has(q)) continue;   // 미치환 슬롯 남으면 폐기
+        seenQ.add(q);
+        out.push({ type, q, source: `${m.year}학년 ${esc(m.subject)} 세특 '${esc(m.a)}' 활동`, element: m.a, kw: b });
+      }
+    }
+  }
+  return out;
+}
+// (학생, 학과) → 은행 문항(기출·공통) + 생기부 기반 맞춤 질문 통합 데이터
+function deptInterviewData(student, dept, ra) {
+  ra = ra || analyzeRecord(student, ANALYSIS[student.seat] || {});
+  const threads = studentTopicThreads(student, ra).filter(t => t.aligned && t.continuity !== '단발');
+  const bankSeen = new Set(), bank = [];
+  (threads.length ? threads : [{ topic: (dept || '').replace(/(학과|학부|과|전공|계열)$/, '') }]).forEach(t => {
+    threadInterviewMatches(t, dept, ra.concept, 3).forEach(q => { if (!bankSeen.has(q.q)) { bankSeen.add(q.q); bank.push(q); } });
+  });
+  return { dept, bank: bank.slice(0, 5), custom: genDeptQuestions(student, dept, 10) };
+}
+// 화면 통합 패널 — "은행 문항(기출·공통)" + "내 생기부 기반 예상 질문" 두 섹션 구분 표시
+const QTYPE_COLOR = { '활동 심화형': 'var(--teal)', '연결형': 'var(--blue)', '전공 적용형': 'var(--copper)', '가치관형': 'var(--green)', '압박형': 'var(--red)' };
+function deptInterviewPanelHtml(student, dept, ra) {
+  const d = deptInterviewData(student, dept, ra);
+  if (!d.bank.length && !d.custom.length) return '';
+  let h = `<div style="margin:10px 0;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card)">
+    <div style="font-size:13px;font-weight:800;color:var(--teal);margin-bottom:6px">🎤 ${esc(dept)} 예상 면접 질문</div>`;
+  // 은행 문항 (기출·공통)
+  h += '<div style="font-size:11px;font-weight:700;color:var(--copper);margin:6px 0 3px">은행 문항 <span style="font-size:9px;color:var(--muted);font-weight:400">(기출·공통 문항 은행 매칭)</span></div>';
+  h += d.bank.length
+    ? '<ol style="margin:0 0 4px 16px;padding:0">' + d.bank.map(q => `<li style="font-size:11px;line-height:1.6;margin:2px 0">${esc(q.q)} <span style="font-size:9px;color:var(--muted)">(${esc(q.reason)})</span></li>`).join('') + '</ol>'
+    : '<div style="font-size:11px;color:var(--muted)">매칭된 은행 문항 없음 — 직접 대비 필요</div>';
+  // 생기부 기반 맞춤 질문
+  h += '<div style="font-size:11px;font-weight:700;color:var(--teal);margin:8px 0 3px">내 생기부 기반 예상 질문 <span style="font-size:9px;color:var(--muted);font-weight:400">(활동×학과 키워드 조합 · 근거 출처 병기)</span></div>';
+  h += d.custom.length
+    ? '<div>' + d.custom.map(q => `<div style="font-size:11px;line-height:1.55;margin:3px 0;padding:4px 8px;background:var(--cream);border-radius:6px">
+        <span style="font-size:8px;padding:0 5px;border-radius:6px;background:${QTYPE_COLOR[q.type] || 'var(--muted)'};color:#fff;font-weight:700">${esc(q.type)}</span>
+        ${esc(q.q)}<div style="font-size:9px;color:var(--copper);margin-top:1px">↳ ${q.source}</div></div>`).join('') + '</div>'
+    : '<div style="font-size:11px;color:var(--muted)">생기부에서 이 학과 고유 활동 근거를 찾지 못해 맞춤 질문을 생성하지 않았습니다 (재료 부족).</div>';
+  h += '</div>';
+  return h;
+}
+
 // ═══════════════════════════════════════════════
 // 생기부 ANALYSIS ENGINE
 // ═══════════════════════════════════════════════
@@ -6031,6 +6126,64 @@ const VERDICT_FINAL = {
   '소신': '평균이 컷을 살짝 벗어나 도전이 필요하고',
   '상향': '평균이 컷 바깥이라 상향 도전이고',
   '유보': '발표 컷을 액면대로 믿기 어려워',
+};
+
+// 학과별 맞춤 면접 질문 골격 사전 (interview_templates.js에서 주입)
+// 학과별 맞춤 면접 질문 골격 사전 — 템플릿 슬롯 조합 방식 (교사가 파일 수정으로 문항 추가·변경).
+// {a} = 학생 활동/고유 요소(계열 정합 스레드·구체성 상 문장의 도서·실험·산출물),
+// {b} = 지원 학과 고유 키워드. needB:true 골격은 {b} 재료가 없으면 생성하지 않는다.
+// (build.py가 __INTERVIEW_TEMPLATES__ 토큰에 주입) — 유형별 최소 8개 형태 보유.
+const INTERVIEW_TEMPLATES = {
+  '활동 심화형': { needB: true, forms: [
+    '{a} 활동에서 {b}을(를) 다뤘는데, 가장 어려웠던 점과 그것을 해결한 과정을 말해 보세요.',
+    '{a}을(를) 하면서 {b} 개념을 어떻게 적용했는지 구체적으로 설명해 보세요.',
+    '{a} 활동 중 {b}와(과) 관련해 예상과 달랐던 결과가 있었다면 원인을 어떻게 찾았나요?',
+    '{a}에서 {b}을(를) 더 깊이 파고들었다면 무엇을 추가로 해보고 싶었나요?',
+    '{a} 활동에서 {b}을(를) 다룰 때 참고한 자료나 방법은 무엇이었나요?',
+    '{a}을(를) 진행하며 {b}에 대해 새롭게 알게 된 점은 무엇이었나요?',
+    '{a} 활동에서 {b}을(를) 스스로 정한 이유와 그 과정에서 맡은 역할을 말해 보세요.',
+    '{a}에서 {b}을(를) 다루며 협업이 필요했다면 의견 차이를 어떻게 조율했나요?',
+  ] },
+  '연결형': { needB: true, forms: [
+    '{a}와(과) {b}을(를) 연결해 설명한다면 어떻게 이야기하겠어요?',
+    '{a} 경험이 {b}을(를) 이해하는 데 어떤 도움이 됐나요?',
+    '{a}와(과) {b} 사이의 공통점과 차이점을 짚어 보세요.',
+    '{a}을(를) {b}의 관점에서 다시 본다면 무엇이 달라지나요?',
+    '{a}와(과) {b}을(를) 하나의 주제로 묶는다면 어떤 제목을 붙이겠어요?',
+    '{a} 활동이 {b}에 대한 관심으로 이어진 계기는 무엇이었나요?',
+    '{a}에서 배운 것을 {b}에 접목한다면 어떤 시도를 해보고 싶나요?',
+    '{a}와(과) {b}을(를) 함께 설명할 때 가장 강조하고 싶은 부분은 무엇인가요?',
+  ] },
+  '전공 적용형': { needB: true, forms: [
+    '{a} 경험을 이 학과의 {b} 분야에 적용한다면 어떤 문제를 다뤄보고 싶나요?',
+    '{a}을(를) 통해 얻은 역량을 {b} 공부에 어떻게 살릴 수 있을까요?',
+    '이 학과에서 {b}을(를) 배운 뒤 {a} 활동을 발전시킨다면 무엇을 해보겠어요?',
+    '{a}에서 출발해 {b} 분야의 어떤 진로로 나아가고 싶나요?',
+    '{b} 분야에서 {a} 같은 경험이 왜 중요하다고 생각하나요?',
+    '{a}을(를) 대학의 {b} 관련 활동으로 이어간다면 어떤 계획을 세우겠어요?',
+    '{b}을(를) 공부하며 {a}에서 느낀 궁금증을 풀어본다면 무엇부터 시작하겠어요?',
+    '{a} 경험이 {b} 분야의 실제 문제 해결에 어떻게 쓰일 수 있을까요?',
+  ] },
+  '가치관형': { needB: false, forms: [
+    '{a}을(를) 통해 형성된 관점이 진로 선택에 어떤 영향을 미쳤나요?',
+    '{a} 활동에서 가장 중요하게 여긴 가치는 무엇이었나요?',
+    '{a}을(를) 하며 생각이 바뀐 부분이 있었다면 무엇인가요?',
+    '{a} 경험이 다른 사람이나 사회에 대한 태도에 어떤 변화를 줬나요?',
+    '{a}을(를) 통해 스스로에 대해 새롭게 알게 된 점은 무엇인가요?',
+    '{a} 활동에서 옳고 그름을 고민한 순간이 있었다면 말해 보세요.',
+    '{a}을(를) 지속하게 만든 내면의 동기는 무엇이었나요?',
+    '{a} 경험을 후배에게 권한다면 어떤 이유로 권하겠어요?',
+  ] },
+  '압박형': { needB: false, forms: [
+    '{a} 활동의 한계나 아쉬웠던 점은 무엇이었나요?',
+    '{a}을(를) 다시 한다면 어떤 부분을 바꾸고 싶나요?',
+    '{a}에서 막히거나 실패했던 순간과 그때의 대응을 말해 보세요.',
+    '{a} 활동의 결과를 비판적으로 평가한다면 어떤 점이 부족했나요?',
+    '{a}을(를) 두고 누군가 의문을 제기한다면 어떻게 설명하겠어요?',
+    '{a} 경험이 과대평가됐다는 지적이 있다면 어떻게 답하겠어요?',
+    '{a}에서 본인의 기여가 정확히 무엇이었는지 구체적으로 말해 보세요.',
+    '{a} 활동에 시간을 더 쓸 수 있었다면 무엇을 보완했겠어요?',
+  ] },
 };
 
 
@@ -10227,6 +10380,12 @@ function renderRecordTab(student, analysis) {
         }
         html += '</div>';
       });
+      // 학과별 맞춤 면접 질문 (은행 문항 + 생기부 기반) — 근거 확보된 상위 2개 학과
+      const ivDepts = deptFit.filter(df => df.evidence && df.evidence.length).slice(0, 2).map(df => df.dept);
+      if (ivDepts.length) {
+        html += '<h4 style="font-size:12px;color:var(--teal);margin:12px 0 4px">학과별 맞춤 면접 질문 <span style="font-size:9px;color:var(--muted);font-weight:400">(은행 문항 + 내 생기부 기반)</span></h4>';
+        ivDepts.forEach(dp => { html += deptInterviewPanelHtml(student, dp, ra); });
+      }
     } else {
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">';
       ra.deptMatch.forEach(d => {
