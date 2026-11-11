@@ -1,3 +1,5 @@
 
 __pycache__/
 *.pyc
+video/*/out/still-*.png
+video/*/out/sheet*.jpg

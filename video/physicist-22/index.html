@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>22번 글의 요지 — 과학은 함께</title>
+<style>
+@font-face { font-family: "EN"; font-weight: 500; src: url(fonts/en500.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: "EN"; font-weight: 700; src: url(fonts/en700.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: "KR"; font-weight: 400; src: url(fonts/kr400.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: "KR"; font-weight: 700; src: url(fonts/kr700.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: "KR"; font-weight: 900; src: url(fonts/kr900.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: "HAND"; font-weight: 700; src: url(fonts/hand.woff2) format("woff2"); font-display: block; }
+html, body { margin: 0; height: 100%; background: #0c1512; color: #ddd; font-family: system-ui, sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+#stage { width: min(100vw, calc((100vh - 64px) * 16 / 9)); aspect-ratio: 16 / 9; display: block; background: #000; }
+#bar { display: flex; align-items: center; gap: 10px; width: min(100vw - 32px, 960px); }
+#bar button { background: #24443a; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
+#bar input { flex: 1; }
+#bar span { font-variant-numeric: tabular-nums; font-size: 13px; min-width: 96px; text-align: right; }
+body.capture #bar { display: none; }
+body.capture #stage { width: 1920px; height: 1080px; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1920" height="1080"></canvas>
+<div id="bar">
+  <button id="play">▶ 재생</button>
+  <input id="seek" type="range" min="0" max="92" step="0.0333" value="0">
+  <span id="clock">0.00 / 92.00</span>
+</div>
+<script>
+/* ------------------------------------------------------------------
+   22번 글의 요지 — 수업용 해설 영상. 92초, 1920×1080, 30fps.
+   모든 프레임은 render(t)의 순수 함수다 (같은 t → 같은 그림).
+   기법: T14 OX 퀴즈 카운트다운 · T17 용어 팝업 카드 · T10 개념 도해 자동 그리기 · B03 효과 도장
+------------------------------------------------------------------- */
+const W = 1920, H = 1080, DUR = 92;
+window.__meta = { duration: DUR, fps: 30, width: W, height: H };
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+
+// ---------- 도구 ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeIn = k => k * k * k;
+const expoOut = k => k >= 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const minJerk = u => { u = clamp(u); return u * u * u * (10 - 15 * u + 6 * u * u); };
+const spring = s => s <= 0 ? 0 : 1 - Math.exp(-6 * s) * Math.cos(12 * s);
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+const C = { chalk: '#F3F0E4', dim: 'rgba(243,240,228,0.72)', yellow: '#FFD866', cyan: '#8EE3D2', pink: '#FF9C8A', red: '#FF6B5E' };
+const F = {
+  en: (s, w = 500) => `${w} ${s}px EN, serif`,
+  kr: (s, w = 700) => `${w} ${s}px KR, sans-serif`,
+  hand: s => `700 ${s}px HAND, KR, sans-serif`,
+};
+
+// ---------- 칠판 배경 (고정 시드로 한 번 굽는다) ----------
+const rnd = mulberry32(22053);
+const BOARD = (() => {
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#24483B'); gr.addColorStop(0.5, '#1D3B30'); gr.addColorStop(1, '#173027');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  // 지우개 자국
+  for (let i = 0; i < 46; i++) {
+    const x = rnd() * W, y = rnd() * H, w = 260 + rnd() * 620, h = 40 + rnd() * 110, a = (rnd() - 0.5) * 0.5;
+    g.save(); g.translate(x, y); g.rotate(a);
+    const sg = g.createRadialGradient(0, 0, 0, 0, 0, w / 2); sg.addColorStop(0, `rgba(255,255,255,${0.012 + rnd() * 0.022})`); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.scale(1, h / w); g.fillStyle = sg; g.beginPath(); g.arc(0, 0, w / 2, 0, 6.283); g.fill(); g.restore();
+  }
+  // 분필 가루 점
+  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * 0.05})`; g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 2, 1 + rnd() * 2); }
+  // 가장자리 어둡게
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 1.05); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,10,6,0.5)');
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+  return c;
+})();
+const DUST = Array.from({ length: 42 }, () => ({ x: rnd() * W, y: rnd() * H, r: 1.2 + rnd() * 3.2, v: 5 + rnd() * 14, ph: rnd() * 6.28, sway: 14 + rnd() * 34, layer: rnd() }));
+const INK = Array.from({ length: 22 }, () => ({ a: rnd() * 6.283, v: 320 + rnd() * 620, r: 5 + rnd() * 11, life: 0.45 + rnd() * 0.45 }));
+
+function drawBoard(t) {
+  ctx.drawImage(BOARD, 0, 0);
+  for (const d of DUST) {
+    const y = ((d.y - d.v * t) % (H + 40) + (H + 40)) % (H + 40) - 20;
+    const x = d.x + Math.sin(d.ph + t * 0.35) * d.sway;
+    ctx.globalAlpha = 0.06 + 0.10 * d.layer * (0.6 + 0.4 * Math.sin(d.ph + t));
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, d.r * (0.6 + d.layer), 0, 6.283); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 선 그리기 (SVG 경로 → 진행률만큼) ----------
+const lenCache = new Map();
+function plen(d) {
+  if (!lenCache.has(d)) { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); lenCache.set(d, p.getTotalLength()); }
+  return lenCache.get(d);
+}
+function stroke(d, k, color = C.chalk, w = 5) {
+  if (k <= 0) return; const L = plen(d);
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.setLineDash([L * clamp(k) + 0.01, L + 20]); ctx.stroke(new Path2D(d)); ctx.restore();
+}
+function text(str, x, y, font, color, align = 'left', alpha = 1) {
+  if (alpha <= 0) return; ctx.save(); ctx.globalAlpha *= alpha; ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(str, x, y); ctx.restore();
+}
+function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+// ---------- 영어 문장: {키|구절} 표시로 강조할 곳을 적는다 ----------
+const layCache = new Map();
+function layoutRich(id, str, x, y, maxW, size, lh) {
+  if (layCache.has(id)) return layCache.get(id);
+  const toks = [];
+  str.replace(/\{(\w+)\|([^}]*)\}|([^{]+)/g, (m, key, phrase, plain) => {
+    (phrase !== undefined ? phrase : plain).split(/\s+/).filter(Boolean).forEach(w => toks.push({ w, key: phrase !== undefined ? key : null }));
+  });
+  ctx.font = F.en(size); const sp = ctx.measureText(' ').width;
+  let cx = x, cy = y; const words = [];
+  const width = tk => { ctx.font = F.en(size, tk.key ? 700 : 500); return ctx.measureText(tk.w).width; };
+  let openQ = false;
+  toks.forEach((tk, n) => {
+    const glue = (/^[,.:;!?”’)]/.test(tk.w) && words.length) || openQ;   // 문장부호는 앞말에, 여는 따옴표는 뒷말에 붙인다
+    const wd = width(tk), isOpen = /^[“‘(]$/.test(tk.w);
+    const need = wd + (isOpen && toks[n + 1] ? width(toks[n + 1]) : 0);
+    if (!glue && cx + need > x + maxW && cx > x) { cx = x; cy += lh; }
+    if (glue && !openQ) cx -= sp;
+    words.push({ w: tk.w, key: tk.key, x: cx, y: cy, wd, i: words.length });
+    cx += wd + (isOpen ? 0 : sp); openQ = isOpen;
+  });
+  // 키별·줄별 묶음 (밑줄과 연결선의 기준)
+  const groups = {};
+  for (const w of words) if (w.key) {
+    const g = (groups[w.key] = groups[w.key] || []); const last = g[g.length - 1];
+    if (last && last.y === w.y) last.x1 = w.x + w.wd; else g.push({ x0: w.x, x1: w.x + w.wd, y: w.y });
+  }
+  const L = { words, groups, bottom: cy, size };
+  layCache.set(id, L); return L;
+}
+function drawRich(L, s, t0, colors = {}) {
+  for (const w of L.words) {
+    const k = prog(s, t0 + w.i * 0.06, t0 + w.i * 0.06 + 0.35); if (k <= 0) continue;
+    ctx.save(); ctx.globalAlpha *= k; ctx.font = F.en(L.size, w.key ? 700 : 500);
+    ctx.fillStyle = w.key ? (colors[w.key] || C.yellow) : C.chalk; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(w.w, w.x, w.y + (1 - easeOut(k)) * 14); ctx.restore();
+  }
+}
+function underline(L, key, s, t0, color = C.yellow) {
+  const k = minJerk(prog(s, t0, t0 + 0.5)); if (k <= 0 || !L.groups[key]) return;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.globalAlpha *= 0.9;
+  for (const g of L.groups[key]) { ctx.beginPath(); ctx.moveTo(g.x0, g.y + 13); ctx.lineTo(lerp(g.x0, g.x1, k), g.y + 11); ctx.stroke(); }
+  ctx.restore();
+}
+
+// ---------- 용어 팝업 카드 (T17): 단어에서 점선이 내려와 카드가 톡 튀어나온다 ----------
+function cardRow(id, defs, x, y, maxW) {
+  const key = 'cards:' + id; if (layCache.has(key)) return layCache.get(key);
+  let f = 1, boxes;
+  for (let pass = 0; pass < 2; pass++) {
+    boxes = defs.map(d => {
+      ctx.font = F.en(40 * f, 700); let w = ctx.measureText(d.word).width;
+      ctx.font = F.kr(33 * f, 700); w = Math.max(w, ctx.measureText(d.mean).width);
+      if (d.note) { ctx.font = F.kr(24 * f, 400); w = Math.max(w, ctx.measureText(d.note).width); }
+      return { ...d, w: w + 56 * f };
+    });
+    const total = boxes.reduce((a, b) => a + b.w, 0) + 22 * (boxes.length - 1);
+    if (total <= maxW) break; f = maxW / total * 0.985;
+  }
+  let cx = x; const h = (defs.some(d => d.note) ? 176 : 144) * f;
+  boxes.forEach(b => { b.x = cx; b.y = y; b.h = h; b.f = f; cx += b.w + 22; });
+  layCache.set(key, boxes); return boxes;
+}
+function drawCards(boxes, L, s, t0, gap = 0.85) {
+  boxes.forEach((b, i) => {
+    const tc = t0 + i * gap, g = b.key && L.groups[b.key];
+    if (g) {
+      underline(L, b.key, s, tc);
+      const a = g[g.length - 1], x0 = (a.x0 + a.x1) / 2, y0 = L.bottom + 26, x1 = b.x + b.w / 2, y1 = b.y - 6;
+      const k = minJerk(prog(s, tc + 0.1, tc + 0.5));
+      if (a.y < L.bottom && k > 0) { ctx.save(); ctx.strokeStyle = C.yellow; ctx.globalAlpha *= 0.28 * k; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x0, a.y + 20); ctx.lineTo(x0, y0); ctx.stroke(); ctx.restore(); }
+      ctx.fillStyle = C.yellow;
+      for (let j = 0; j <= 22; j++) {
+        const u = j / 22; if (u > k) break; const v = 1 - u;
+        const px = v * v * v * x0 + 3 * v * v * u * x0 + 3 * v * u * u * x1 + u * u * u * x1;
+        const py = v * v * v * y0 + 3 * v * v * u * (y0 + 26) + 3 * v * u * u * (y1 - 26) + u * u * u * y1;
+        ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.arc(px, py, 2.6, 0, 6.283); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    const sp = spring(s - tc - 0.4); if (sp <= 0) return;
+    const al = clamp((s - tc - 0.4) / 0.15), f = b.f;
+    ctx.save(); ctx.globalAlpha *= al;
+    ctx.translate(b.x + b.w / 2, b.y + b.h / 2); ctx.scale(sp, sp); ctx.translate(-b.w / 2, -b.h / 2);
+    rrect(0, 0, b.w, b.h, 18 * f); ctx.fillStyle = 'rgba(248,245,232,0.96)'; ctx.fill();
+    ctx.fillStyle = C.yellow; rrect(0, 0, b.w, 10 * f, [18 * f, 18 * f, 0, 0]); ctx.fill();
+    text(b.word, 28 * f, 62 * f, F.en(40 * f, 700), '#1E3A30');
+    text(b.mean, 28 * f, 112 * f, F.kr(33 * f, 700), '#B4441F');
+    if (b.note) text(b.note, 28 * f, 150 * f, F.kr(24 * f, 400), '#3F5B50');
+    ctx.restore();
+  });
+}
+
+// ---------- 한글 해석 ----------
+function wrapKR(id, str, maxW, font) {
+  const key = 'kr:' + id; if (layCache.has(key)) return layCache.get(key);
+  ctx.font = font; const lines = []; let cur = '';
+  for (const w of str.split(' ')) { const nx = cur ? cur + ' ' + w : w; if (ctx.measureText(nx).width > maxW && cur) { lines.push(cur); cur = w; } else cur = nx; }
+  if (cur) lines.push(cur); layCache.set(key, lines); return lines;
+}
+function drawKR(id, str, x, y, maxW, s, t0, size = 40) {
+  const k = easeOut(prog(s, t0, t0 + 0.6)); if (k <= 0) return;
+  const lines = wrapKR(id, str, maxW - 34, F.kr(size, 700)), lh = size * 1.42;
+  ctx.save(); ctx.globalAlpha *= k; ctx.translate(0, (1 - k) * 18);
+  ctx.fillStyle = C.cyan; rrect(x, y - size * 0.9, 8, lh * lines.length - size * 0.2, 4); ctx.fill();
+  text('해석', x + 28, y - size * 1.25, F.hand(30), C.cyan);
+  lines.forEach((ln, i) => text(ln, x + 30, y + i * lh, F.kr(size, 700), C.chalk));
+  ctx.restore();
+}
+
+// ---------- 공통: 머리 꼬리표, 장면 틀 ----------
+function chip(label, s, color = C.yellow) {
+  const k = spring(s - 0.1); if (k <= 0) return;
+  ctx.save(); ctx.font = F.hand(44); const w = ctx.measureText(label).width + 52;
+  ctx.translate(110, 62); ctx.scale(k, k);
+  rrect(0, 0, w, 64, 32); ctx.strokeStyle = color; ctx.lineWidth = 3.5; ctx.stroke();
+  text(label, 26, 46, F.hand(44), color); ctx.restore();
+}
+const SC = [
+  { id: 'quiz', a: 0, b: 9 }, { id: 's1', a: 9, b: 22 }, { id: 's2', a: 22, b: 35 }, { id: 's3', a: 35, b: 45 },
+  { id: 's4', a: 45, b: 58 }, { id: 's5', a: 58, b: 74 }, { id: 's6', a: 74, b: 84 }, { id: 'end', a: 84, b: 92.5 },
+];
+const NAV = ['퀴즈', '통념', '왜?', '반전', '주제문', '과정', '정리', '요지'];
+function drawNav(t) {
+  const cur = SC.findIndex(sc => t >= sc.a && t < sc.b), x0 = W / 2 - (NAV.length - 1) * 70;
+  NAV.forEach((n, i) => {
+    const on = i === cur, x = x0 + i * 140;
+    ctx.globalAlpha = on ? 1 : 0.38; ctx.fillStyle = on ? C.yellow : C.chalk;
+    ctx.beginPath(); ctx.arc(x - 34, 1036, on ? 7 : 5, 0, 6.283); ctx.fill();
+    text(n, x - 20, 1046, F.hand(28), on ? C.yellow : C.chalk);
+  });
+  ctx.globalAlpha = 1;
+  text('22번 · 글의 요지', W - 110, 106, F.hand(34), C.dim, 'right');
+}
+
+// ---------- 그림: 혼자 있는 물리학자 (선으로 그린다) ----------
+const P = {
+  board: 'M40 20 H560 V290 H40 Z', ledge: 'M30 300 H570',
+  sq1: 'M80 90 q20 -40 40 0 t40 0 t40 0', sq2: 'M90 200 q15 30 30 0 t30 0 t30 0 t30 0', sq3: 'M400 80 l40 60 m0 -60 l-40 60', sq4: 'M360 190 h120 m-60 -40 v80',
+  head: 'M262 372 a38 38 0 1 0 76 0 a38 38 0 1 0 -76 0', body: 'M300 410 V492', armL: 'M300 432 L252 470', armR: 'M300 432 L346 404 L362 318',
+  legL: 'M300 492 L274 548', legR: 'M300 492 L328 548', slipL: 'M250 554 h34', slipR: 'M322 554 h34', desk: 'M120 520 H230 M370 520 H500',
+};
+function loner(ox, oy, s, t0, t) {
+  ctx.save(); ctx.translate(ox, oy);
+  const k = (i, d = 0.5) => easeOut(prog(s, t0 + i * 0.22, t0 + i * 0.22 + d));
+  stroke(P.board, k(0, 0.9)); stroke(P.ledge, k(1));
+  stroke(P.sq1, k(2), C.cyan, 4); stroke(P.sq3, k(3), C.pink, 4); stroke(P.sq2, k(4), C.cyan, 4); stroke(P.sq4, k(5), C.pink, 4);
+  text('E = mc²', 190, 160, F.en(40, 500), C.chalk, 'left', k(4));
+  const bob = Math.sin(t * 1.6) * 3;
+  ctx.translate(0, bob);
+  stroke(P.head, k(6)); stroke(P.body, k(7)); stroke(P.armL, k(7)); stroke(P.armR, k(8)); stroke(P.legL, k(8)); stroke(P.legR, k(8));
+  ctx.translate(0, -bob);
+  stroke(P.slipL, k(9), C.yellow, 10); stroke(P.slipR, k(9), C.yellow, 10); stroke(P.desk, k(9));
+  ctx.restore();
+}
+
+// ---------- 장면 0: OX 퀴즈 (T14) ----------
+function sceneQuiz(s, t) {
+  chip('Q. 맞으면 O, 틀리면 X', s);
+  const q = [['이론물리학자는', 330, 0.5], ['혼자서 연구한다?', 460, 0.9]];
+  q.forEach(([str, y, t0]) => { const k = easeOut(prog(s, t0, t0 + 0.6)); ctx.save(); ctx.translate(0, (1 - k) * 30); text(str, W / 2, y, F.kr(104, 900), C.chalk, 'center', k); ctx.restore(); });
+  const rev = s - 5.6, O = { x: 650, y: 730 }, X = { x: 1270, y: 730 };
+  // O
+  ctx.save(); ctx.globalAlpha *= rev > 0 ? lerp(1, 0.22, clamp(rev / 0.3)) : 1; ctx.translate(O.x, O.y);
+  stroke('M-105 0 a105 105 0 1 0 210 0 a105 105 0 1 0 -210 0', easeOut(prog(s, 1.5, 2.1)), C.cyan, 22); ctx.restore();
+  // X
+  ctx.save(); ctx.translate(X.x, X.y); const xs = rev > 0 ? 1 + 0.28 * spring(rev) : 1; ctx.scale(xs, xs);
+  stroke('M-92 -92 L92 92', easeOut(prog(s, 1.8, 2.1)), C.pink, 24); stroke('M92 -92 L-92 92', easeOut(prog(s, 2.05, 2.35)), C.pink, 24);
+  if (rev > 0) { const rk = expoOut(clamp(rev / 0.7)); ctx.globalAlpha *= 1 - clamp(rev / 0.9); ctx.strokeStyle = C.pink; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 0, 130 + rk * 150, 0, 6.283); ctx.stroke(); }
+  ctx.restore();
+  // 원형 타이머 3-2-1
+  const cs = s - 2.6;
+  if (cs > 0 && rev < 0) {
+    const n = 3 - Math.floor(cs), fr = cs - Math.floor(cs);
+    ctx.save(); ctx.translate(W / 2, 730);
+    ctx.strokeStyle = 'rgba(243,240,228,0.2)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0, 0, 84, 0, 6.283); ctx.stroke();
+    ctx.strokeStyle = C.yellow; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 84, -Math.PI / 2, -Math.PI / 2 + 6.283 * (1 - cs / 3)); ctx.stroke();
+    const p = 1 + 0.25 * (1 - easeOut(clamp(fr / 0.3))); ctx.scale(p, p);
+    text(String(n), 0, 34, F.kr(96, 900), C.yellow, 'center'); ctx.restore();
+  }
+  if (rev > 0) {
+    const k = spring(rev - 0.15);
+    ctx.save(); ctx.translate(W / 2, 730); ctx.scale(k, k); text('정답은 X', 0, 28, F.hand(88), C.yellow, 'center', clamp((rev - 0.15) / 0.15)); ctx.restore();
+    text('왜 X일까? 지문에서 확인해 보자', W / 2, 950, F.kr(44, 700), C.chalk, 'center', easeOut(prog(rev, 1.0, 1.6)));
+  }
+}
+
+// ---------- 장면 1~3, 6: 문장 장면 ----------
+const TX = 110, TW = 1090;   // 글 기둥
+const S1 = {
+  en: 'The research work of a theoretical physicist is often {a|portrayed as} {b|a lone adventure}: sitting at our desk in slippers, … to draw {c|incomprehensible} symbols on our blackboards.',
+  cards: [{ key: 'a', word: 'portray A as B', mean: 'A를 B로 묘사하다' }, { key: 'b', word: 'lone', mean: '혼자의, 외로운', note: '= alone, solitary' }, { key: 'c', word: 'incomprehensible', mean: '이해할 수 없는', note: 'in(부정) + comprehend(이해하다)' }],
+  kr: '이론물리학자의 연구는 흔히 ‘혼자 하는 모험’으로 그려진다. 슬리퍼를 신고 책상에 앉아 있다가, 가끔 칠판에 알 수 없는 기호를 적는 모습으로.',
+};
+const S2 = {
+  en: '… an image that we, as physicists, have … {a|promoted} in order to {b|scare away} any potential “{c|perturbations}” that might disturb the {d|equilibrium} …',
+  cards: [{ key: 'a', word: 'promote', mean: '퍼뜨리다, 조장하다' }, { key: 'b', word: 'scare away', mean: '겁주어 쫓아내다' }, { key: 'c', word: 'perturbation', mean: '(마음의) 동요, 방해' }, { key: 'd', word: 'equilibrium', mean: '균형, 평형' }],
+  kr: '익숙한 평온(균형)을 깨뜨릴 ‘방해’를 쫓아내려고 물리학자들이 스스로 퍼뜨린 이미지일까? 아니면 사람들이 정말로 오해한 걸까?',
+};
+const S3 = {
+  en: '{a|In either case}, the {b|portrait} {c|couldn’t be farther from} reality.',
+  cards: [{ key: 'a', word: 'in either case', mean: '어느 쪽이든' }, { key: 'b', word: 'portrait', mean: '묘사, 모습', note: '= image (앞 문장)' }, { key: 'c', word: 'couldn’t be farther from', mean: '~와 전혀 다르다', note: '더 멀 수 없다 → 가장 멀다' }],
+  kr: '어느 쪽이든, 그 모습은 현실과 전혀 다르다.',
+};
+const S4 = {
+  en: '{x|Communication}, {y|brainstorming}, and the {z|exchange of ideas} are {a|critical} to creative work and {b|thus} to scientific success.',
+  cards: [{ key: 'z', word: 'exchange', mean: '교환, 주고받기' }, { key: 'a', word: 'critical', mean: '매우 중요한', note: '= essential, crucial' }, { key: 'b', word: 'thus', mean: '따라서', note: '= therefore' }],
+  kr: '소통, 브레인스토밍, 아이디어 교환은 창의적인 일에, 따라서 과학의 성공에 꼭 필요하다.',
+};
+const S6 = {
+  en: 'True advances in science are almost always {a|hard-won}, and the {b|rough-and-tumble} process is not for {c|the faint of heart}.',
+  cards: [{ key: 'a', word: 'hard-won', mean: '힘들게 얻은' }, { key: 'b', word: 'rough-and-tumble', mean: '거칠고 험난한' }, { key: 'c', word: 'the faint of heart', mean: '마음 약한 사람들', note: 'the + 형용사 = ~한 사람들' }],
+  kr: '과학의 진정한 발전은 거의 언제나 힘들게 얻어진다. 이 거칠고 험난한 과정은 마음 약한 사람에게는 맞지 않는다.',
+};
+function sentence(id, D, s, opt = {}) {
+  const size = opt.size || 48, lh = size * 1.42, y0 = opt.y0 || 215;
+  const L = layoutRich(id, D.en, TX, y0, TW, size, lh);
+  drawRich(L, s, 0.5, opt.colors);
+  (opt.pre || []).forEach((k, i) => underline(L, k, s, 2.0 + i * 0.3, opt.colors[k]));
+  const cy = L.bottom + 92, boxes = cardRow(id, D.cards, TX, cy, TW);
+  const t0 = opt.cardT || 2.6; drawCards(boxes, L, s, t0);
+  drawKR(id, D.kr, TX, cy + boxes[0].h + 118, TW, s, t0 + D.cards.length * 0.85 + 0.5, opt.kr || 40);
+}
+
+function scene1(s, t) {
+  chip('① 흔한 생각 (통념)', s);
+  sentence('s1', S1, s);
+  loner(1270, 250, s, 0.8, t);
+  text('“과학자는 혼자 연구한다”', 1570, 900, F.hand(50), C.yellow, 'center', easeOut(prog(s, 3.6, 4.2)));
+}
+function scene2(s, t) {
+  chip('② 왜 이런 이미지가 생겼을까?', s);
+  sentence('s2', S2, s);
+  // 평온(균형)의 원 안에 있는 사람과, 튕겨 나가는 방해
+  ctx.save(); ctx.translate(1270, 250);
+  const k = (a, b) => easeOut(prog(s, a, b)), bob = Math.sin(t * 1.6) * 3;
+  ctx.save(); ctx.translate(0, bob - 40); stroke(P.head, k(0.8, 1.3)); stroke(P.body, k(1.0, 1.5)); stroke(P.armL, k(1.2, 1.7)); stroke('M300 432 L348 470', k(1.2, 1.7)); stroke(P.legL, k(1.4, 1.9)); stroke(P.legR, k(1.4, 1.9)); ctx.restore();
+  const ck = k(4.4, 5.3);
+  if (ck > 0) { ctx.save(); ctx.strokeStyle = C.cyan; ctx.lineWidth = 5; ctx.setLineDash([16, 14]); ctx.lineDashOffset = -t * 14; ctx.globalAlpha *= ck; ctx.beginPath(); ctx.arc(300, 410, 190 + 4 * Math.sin(t * 2), 0, 6.283); ctx.stroke(); ctx.restore(); }
+  text('equilibrium (평온한 균형)', 300, 668, F.hand(40), C.cyan, 'center', ck);
+  // 방해 화살표: 다가오다 튕겨 나간다
+  [[-0.5, 0], [Math.PI + 0.45, 0.7]].forEach(([ang, off]) => {
+    const a = k(3.6, 4.2); if (a <= 0) return;
+    const ph = ((t + off) % 2.2) / 2.2, d = ph < 0.5 ? lerp(330, 215, easeIn(ph * 2)) : lerp(215, 330, easeOut((ph - 0.5) * 2));
+    const x = 300 + Math.cos(ang) * d, y = 410 + Math.sin(ang) * d;
+    ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(ang + Math.PI);
+    ctx.strokeStyle = C.pink; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-70, 0); ctx.lineTo(0, 0); ctx.moveTo(-26, -20); ctx.lineTo(0, 0); ctx.lineTo(-26, 20); ctx.stroke(); ctx.restore();
+  });
+  text('perturbation (방해)', 300, 120, F.hand(40), C.pink, 'center', k(3.6, 4.2));
+  ctx.restore();
+}
+function scene3(s, t) {
+  chip('③ 반전', s, C.pink);
+  sentence('s3', S3, s, { size: 62, y0: 240, kr: 50 });
+  ctx.save(); ctx.globalAlpha *= 0.55; loner(1270, 250, 99, 0, t); ctx.restore();
+  ctx.save(); ctx.translate(1270, 250);
+  stroke('M70 40 L530 570', easeOut(prog(s, 1.6, 2.0)), C.red, 18); stroke('M530 40 L70 570', easeOut(prog(s, 1.95, 2.35)), C.red, 18);
+  const k = spring(s - 2.5);
+  if (k > 0) { ctx.translate(300, 690); ctx.rotate(-0.06); ctx.scale(k, k); text('현실과 정반대!', 0, 0, F.hand(70), C.red, 'center'); }
+  ctx.restore();
+}
+function scene4(s, t) {
+  chip('④ ★ 주제문', s);
+  sentence('s4', S4, s, { colors: { x: C.cyan, y: C.cyan, z: C.cyan }, pre: ['x', 'y'] });
+  // 세 사람이 말을 주고받는다
+  ctx.save(); ctx.translate(1270, 250);
+  const pts = [[300, 110], [110, 440], [490, 440]], k = (a, b) => easeOut(prog(s, a, b));
+  pts.forEach(([x, y], i) => {
+    const a = k(0.9 + i * 0.35, 1.5 + i * 0.35), bob = Math.sin(t * 1.7 + i * 2) * 4;
+    ctx.save(); ctx.translate(x, y + bob);
+    stroke('M-36 0 a36 36 0 1 0 72 0 a36 36 0 1 0 -72 0', a); stroke('M-62 110 q0 -68 62 -68 q62 0 62 68', a);
+    ctx.restore();
+  });
+  [[0, 1], [1, 2], [2, 0]].forEach(([i, j], n) => {
+    const a = k(2.2 + n * 0.3, 2.8 + n * 0.3); if (a <= 0) return;
+    const [x0, y0] = pts[i], [x1, y1] = pts[j], mx = (x0 + x1) / 2, my = (y0 + y1) / 2 + 40;
+    ctx.save(); ctx.strokeStyle = C.yellow; ctx.lineWidth = 5; ctx.setLineDash([4, 16]); ctx.lineCap = 'round'; ctx.lineDashOffset = -t * 30; ctx.globalAlpha *= a;
+    ctx.beginPath(); ctx.moveTo(lerp(x0, x1, 0.22), lerp(y0, y1, 0.22) + 40); ctx.lineTo(lerp(x0, mx, a), lerp(y0 + 40, my, a)); ctx.lineTo(lerp(x0, x1, 0.22 + 0.56 * a), lerp(y0, y1, 0.22 + 0.56 * a) + 40); ctx.stroke(); ctx.restore();
+  });
+  [['?', 390, 60, C.pink], ['!', 20, 380, C.cyan], ['…', 560, 380, C.yellow]].forEach(([ch, x, y, col], i) => {
+    const sp = spring(s - 3.1 - i * 0.3); if (sp <= 0) return;
+    ctx.save(); ctx.translate(x, y + Math.sin(t * 2 + i) * 4); ctx.scale(sp, sp);
+    rrect(-40, -44, 80, 76, 22); ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke(); text(ch, 0, 18, F.kr(52, 900), col, 'center'); ctx.restore();
+  });
+  text('함께 이야기한다', 300, 668, F.hand(50), C.yellow, 'center', k(4.0, 4.6));
+  ctx.restore();
+}
+
+// ---------- 장면 5: 개념 도해 (T10) ----------
+const NODES = [
+  { x: 150, y: 250, n: '1', en: 'share my ideas', kr: '내 생각을 동료들과 나눈다', col: C.cyan },
+  { x: 1060, y: 250, n: '2', en: 'consider · challenge · ridicule', kr: '따져 보고, 반박하고, 때론 비웃는다', col: C.pink },
+  { x: 1060, y: 660, n: '3', en: 'revise · refine · reconsider', kr: '고치고, 다듬고, 다시 생각한다', col: C.yellow },
+  { x: 150, y: 660, n: '4', en: 'discard → start again', kr: '버리고, 더 나은 깨달음으로 다시 시작', col: C.cyan },
+];
+const NW = 710, NH = 210;
+function scene5(s, t) {
+  chip('⑤ 과학자의 진짜 모습', s);
+  text('I travel the world to share my research ideas with colleagues …', W / 2, 196, F.en(34, 500), C.dim, 'center', easeOut(prog(s, 0.5, 1.1)));
+  const arrows = [
+    [`M${150 + NW + 14} ${250 + NH / 2} H${1060 - 26}`, 0], [`M${1060 + NW / 2} ${250 + NH + 14} V${660 - 26}`, Math.PI / 2],
+    [`M${1060 - 14} ${660 + NH / 2} H${150 + NW + 26}`, Math.PI], [`M${150 + NW / 2} ${660 - 14} V${250 + NH + 26}`, -Math.PI / 2],
+  ];
+  NODES.forEach((nd, i) => {
+    const t0 = 1.0 + i * 2.6, sp = spring(s - t0);
+    if (sp > 0) {
+      ctx.save(); ctx.globalAlpha *= clamp((s - t0) / 0.15);
+      ctx.translate(nd.x + NW / 2, nd.y + NH / 2); ctx.scale(lerp(0.7, 1, sp), lerp(0.7, 1, sp)); ctx.translate(-NW / 2, -NH / 2);
+      rrect(0, 0, NW, NH, 26); ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill(); ctx.strokeStyle = nd.col; ctx.lineWidth = 5; ctx.stroke();
+      ctx.fillStyle = nd.col; ctx.beginPath(); ctx.arc(58, 62, 34, 0, 6.283); ctx.fill(); text(nd.n, 58, 80, F.kr(46, 900), '#1D3B30', 'center');
+      ctx.font = F.en(42, 700); const es = Math.min(42, 42 * (NW - 150) / ctx.measureText(nd.en).width);
+      text(nd.en, 112, 80, F.en(es, 700), nd.col);
+      text(nd.kr, 40, 160, F.kr(38, 700), C.chalk, 'left', easeOut(prog(s, t0 + 0.6, t0 + 1.1)));
+      ctx.restore();
+    }
+    const [d, ang] = arrows[i], ak = easeOut(prog(s, t0 + 1.5, t0 + 2.2));
+    stroke(d, ak, C.chalk, 7);
+    if (ak > 0.97) {
+      const m = /([\d.]+)$/.exec(d), isH = /H[\d.]+$/.test(d), mm = /^M([\d.]+) ([\d.]+)/.exec(d);
+      const ex = isH ? +m[1] : +mm[1], ey = isH ? +mm[2] : +m[1];
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(ang); ctx.strokeStyle = C.chalk; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(-22, -18); ctx.lineTo(4, 0); ctx.lineTo(-22, 18); ctx.stroke(); ctx.restore();
+    }
+  });
+  // 가운데: 반복과 낱말 풀이
+  const ck = easeOut(prog(s, 11.6, 12.3));
+  if (ck > 0) {
+    ctx.save(); ctx.globalAlpha *= ck; ctx.translate(W / 2, 565);
+    text('re- = ‘다시’', 0, -22, F.hand(54), C.yellow, 'center');
+    text('고치고 또 고치며 나아간다', 0, 30, F.kr(30, 700), C.chalk, 'center');
+    ctx.restore();
+  }
+  const hk = spring(s - 13.0);
+  if (hk > 0) {
+    ctx.save(); ctx.translate(505, 920); ctx.scale(hk, hk);
+    ctx.font = F.kr(30, 700); const w = ctx.measureText('hindsight  뒤늦은 깨달음 (hind 뒤 + sight 봄)').width + 60;
+    rrect(-w / 2, -34, w, 62, 31); ctx.fillStyle = 'rgba(248,245,232,0.96)'; ctx.fill();
+    text('hindsight  뒤늦은 깨달음 (hind 뒤 + sight 봄)', 0, 8, F.kr(30, 700), '#B4441F', 'center'); ctx.restore();
+  }
+}
+
+function scene6(s, t) {
+  chip('⑥ 그래서 쉽지 않다', s);
+  sentence('s6', S6, s);
+  // 험한 산길을 올라 깃발까지
+  ctx.save(); ctx.translate(1270, 250);
+  const k = (a, b) => easeOut(prog(s, a, b));
+  stroke('M20 600 L250 170 L330 300 L420 120 L590 600', k(0.8, 1.9), C.chalk, 6);
+  const trail = 'M70 590 L170 500 L130 450 L250 380 L215 330 L330 300 L375 230 L350 190 L420 120';
+  ctx.save(); ctx.setLineDash([]); stroke(trail, k(2.0, 4.6), C.yellow, 6); ctx.restore();
+  const fk = k(4.5, 5.0);
+  stroke('M420 120 V30', fk, C.chalk, 6);
+  if (fk > 0.9) { const wv = Math.sin(t * 5) * 6; ctx.fillStyle = C.red; ctx.beginPath(); ctx.moveTo(420, 32); ctx.quadraticCurveTo(460, 40 + wv, 500, 52); ctx.quadraticCurveTo(460, 64 - wv, 420, 76); ctx.closePath(); ctx.fill(); }
+  // 오르는 사람 점
+  const tk = k(2.0, 4.6);
+  if (tk > 0) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', trail);
+    const pt = p.getPointAtLength(plen(trail) * tk); ctx.fillStyle = C.yellow; ctx.beginPath(); ctx.arc(pt.x, pt.y - 16, 13, 0, 6.283); ctx.fill();
+  }
+  text('hard-won : 힘들게 얻은', 300, 668, F.hand(46), C.yellow, 'center', k(5.0, 5.6));
+  ctx.restore();
+}
+
+// ---------- 장면 7: 요지 + 효과 도장 (B03) ----------
+const HIT = 3.4;
+function sceneEnd(s, t) {
+  chip('이 글의 요지', s);
+  const k1 = easeOut(prog(s, 0.6, 1.2)), k2 = easeOut(prog(s, 1.2, 1.8));
+  ctx.save(); ctx.translate(0, (1 - k1) * 30); text('과학의 발전은', W / 2, 380, F.kr(96, 900), C.chalk, 'center', k1); ctx.restore();
+  ctx.save(); ctx.translate(0, (1 - k2) * 30);
+  ctx.font = F.kr(96, 900); const parts = [['소통', C.yellow], ['과 ', C.chalk], ['아이디어 교환', C.yellow], ['으로 이루어진다', C.chalk]];
+  let x = W / 2 - parts.reduce((a, p) => a + ctx.measureText(p[0]).width, 0) / 2;
+  parts.forEach(([p, col]) => { text(p, x, 520, F.kr(96, 900), col, 'left', k2); ctx.font = F.kr(96, 900); x += ctx.measureText(p).width; });
+  ctx.restore();
+  text('Communication, brainstorming, and the exchange of ideas', W / 2, 640, F.en(40, 500), C.cyan, 'center', easeOut(prog(s, 2.0, 2.6)));
+  text('are critical … to scientific success.', W / 2, 698, F.en(40, 500), C.cyan, 'center', easeOut(prog(s, 2.2, 2.8)));
+  // 도장
+  const rel = s - HIT, cx = 1540, cy = 860;
+  if (s > HIT - 0.35) {
+    const sc = rel < 0 ? lerp(2.6, 1, Math.pow(prog(s, HIT - 0.35, HIT), 4)) : 1 - 0.08 * Math.exp(-9 * rel) * Math.cos(26 * rel);
+    ctx.save(); ctx.globalAlpha *= clamp((s - (HIT - 0.35)) / 0.15); ctx.translate(cx, cy); ctx.rotate(-0.2); ctx.scale(sc, sc);
+    ctx.strokeStyle = C.red; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(0, 0, 128, 0, 6.283); ctx.stroke();
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 108, 0, 6.283); ctx.stroke();
+    text('함께!', 0, 30, F.hand(92), C.red, 'center'); ctx.restore();
+  }
+  if (rel > 0) {
+    for (const p of INK) {
+      const k = rel / p.life; if (k >= 1) continue; const d = p.v * (1 - Math.exp(-6 * rel)) / 6;
+      ctx.globalAlpha = (1 - k) * 0.9; ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(cx + Math.cos(p.a) * d, cy + Math.sin(p.a) * d, p.r * (1 - k * 0.6), 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  text('혼자가 아니라, 묻고 따지고 고치면서', W / 2 - 180, 880, F.hand(54), C.chalk, 'center', easeOut(prog(s, 4.4, 5.0)));
+}
+
+// ---------- 합성 ----------
+const DRAW = { quiz: sceneQuiz, s1: scene1, s2: scene2, s3: scene3, s4: scene4, s5: scene5, s6: scene6, end: sceneEnd };
+function render(t) {
+  t = clamp(t, 0, DUR);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.setLineDash([]);
+  // 도장이 찍힐 때 화면 흔들림 0.3초
+  const rel = t - (84 + HIT); let sx = 0, sy = 0;
+  if (rel > 0 && rel < 0.3) { const e = Math.pow(1 - rel / 0.3, 2); sx = Math.sin(rel * 90) * 16 * e; sy = Math.sin(rel * 101 + 1.3) * 12 * e; }
+  ctx.save(); ctx.translate(sx, sy);
+  drawBoard(t);
+  for (const sc of SC) {
+    if (t < sc.a - 0.01 || t > sc.b) continue;
+    const s = t - sc.a, out = sc.id === 'end' ? 0 : easeIn(prog(t, sc.b - 0.45, sc.b));
+    ctx.save(); ctx.globalAlpha = clamp(s / 0.4) * (1 - out); ctx.translate(-out * 40, 0);
+    DRAW[sc.id](s, t); ctx.restore();
+  }
+  drawNav(t);
+  ctx.restore();
+  const end = prog(t, DUR - 0.6, DUR);
+  if (end > 0) { ctx.fillStyle = `rgba(0,0,0,${end * 0.8})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- 플레이어 ----------
+const params = new URLSearchParams(location.search);
+if (params.has('capture')) document.body.classList.add('capture');
+window.__render = render;
+window.__ready = Promise.all(['500 40px EN', '700 40px EN', '400 40px KR', '700 40px KR', '900 40px KR', '700 40px HAND'].map(f => document.fonts.load(f, 'A가’…²·'))).then(() => document.fonts.ready);
+const playBtn = document.getElementById('play'), seek = document.getElementById('seek'), clock = document.getElementById('clock');
+let cur = parseFloat(params.get('t') || '0') || 0, playing = false, last = 0;
+function show(t) { cur = t; render(t); seek.value = t; clock.textContent = `${t.toFixed(2)} / ${DUR.toFixed(2)}`; }
+function loop(now) { if (!playing) return; cur += (now - last) / 1000; last = now; if (cur >= DUR) { cur = DUR; playing = false; playBtn.textContent = '▶ 재생'; } show(cur); if (playing) requestAnimationFrame(loop); }
+function toggle() { if (playing) { playing = false; playBtn.textContent = '▶ 재생'; return; } if (cur >= DUR) cur = 0; playing = true; playBtn.textContent = '❚❚ 일시정지'; last = performance.now(); requestAnimationFrame(loop); }
+playBtn.onclick = toggle;
+seek.oninput = () => { playing = false; playBtn.textContent = '▶ 재생'; show(parseFloat(seek.value)); };
+document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); toggle(); } });
+window.__ready.then(() => show(cur));
+</script>
+</body>
+</html>
