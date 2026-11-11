@@ -2,7 +2,7 @@
 //
 //   node render.mjs <장면폴더>                       → <장면폴더>/out/video.mp4
 //   node render.mjs <장면폴더> --stills 1.0,5.5,12   → <장면폴더>/out/still-*.png
-//   옵션: --dur 20 --fps 30 --width 1920 --height 1080 --name video
+//   옵션: --dur 20 --fps 30 --width 1920 --height 1080 --name video --workers 4(동시에 그리는 창 수)
 //
 // 장면 HTML(index.html)이 지켜야 할 약속:
 //   - <canvas id="stage"> 하나에 그린다.
@@ -38,14 +38,20 @@ try {
   const width = Number(opt('width') || meta.width || 1920), height = Number(opt('height') || meta.height || 1080);
   const fps = Number(opt('fps') || meta.fps || 30), dur = Number(opt('dur') || meta.duration || 0);
 
-  const page = await browser.newPage({ viewport: { width, height } });
-  page.on('pageerror', (e) => { console.error('페이지 오류:', e.message); failed = true; });
-  await page.goto(pathToFileURL(path.join(dir, 'index.html')).href + '?capture=1');
-  await page.evaluate(() => window.__ready);
-  const grab = async (t) => Buffer.from(await page.evaluate((t) => {
+  const open = async () => {
+    const page = await browser.newPage({ viewport: { width, height } });
+    page.on('pageerror', (e) => { console.error('페이지 오류:', e.message); failed = true; });
+    await page.goto(pathToFileURL(path.join(dir, 'index.html')).href + '?capture=1');
+    await page.evaluate(() => window.__ready);
+    return page;
+  };
+  const grabOn = async (page, t) => Buffer.from(await page.evaluate((t) => {
     window.__render(t);
     return document.getElementById('stage').toDataURL('image/png').split(',')[1];
   }, t), 'base64');
+  const workers = Math.max(1, Number(opt('workers') || 4));
+  const pages = [await open()];
+  const grab = (t) => grabOn(pages[0], t);
 
   const stills = opt('stills');
   if (stills) {
@@ -59,10 +65,12 @@ try {
       { stdio: ['pipe', 'inherit', 'inherit'] });
     const closed = new Promise((res) => ff.on('close', res));
     const total = Math.round(fps * dur);
-    for (let i = 0; i < total; i++) {
-      const buf = await grab(i / fps);
-      if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
-      if (i % 60 === 0) console.log(`프레임 ${i}/${total}`);
+    while (pages.length < workers) pages.push(await open());
+    // 여러 창이 나눠 그리고, 프레임은 순서대로 이어 붙인다 (그림은 t만의 함수라 결과는 같다)
+    for (let i = 0; i < total; i += pages.length) {
+      const bufs = await Promise.all(pages.map((pg, j) => (i + j < total ? grabOn(pg, (i + j) / fps) : null)));
+      for (const buf of bufs) if (buf && !ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
+      if (i % (pages.length * 30) === 0) console.log(`프레임 ${i}/${total}`);
     }
     ff.stdin.end();
     const code = await closed;
